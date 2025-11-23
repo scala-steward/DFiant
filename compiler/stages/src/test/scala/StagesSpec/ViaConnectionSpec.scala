@@ -302,7 +302,7 @@ class ViaConnectionSpec extends StageSpec(stageCreatesUnrefAnons = true):
     )
   }
 
-  test("Hierarchical design with parameters") {
+  test("Hierarchical design with parameters 1") {
     class ID(
         val width: Int <> CONST,
         val length: Int <> CONST
@@ -353,6 +353,10 @@ class ViaConnectionSpec extends StageSpec(stageCreatesUnrefAnons = true):
          |) extends EDDesign:
          |  val x1 = Bits(widthTop) X lengthTop <> IN
          |  val y1 = Bits(widthTop) X lengthTop <> OUT
+         |  val x2 = Bits(widthTop) X (lengthTop + 1) <> IN
+         |  val y2 = Bits(widthTop) X (lengthTop + 1) <> OUT
+         |  val x3 = Bits(widthTop) X 7 <> IN
+         |  val y3 = Bits(widthTop) X 7 <> OUT
          |  val id1_x = Bits(widthTop) X lengthTop <> VAR
          |  val id1_y = Bits(widthTop) X lengthTop <> VAR
          |  val id1 = new ID(
@@ -362,10 +366,6 @@ class ViaConnectionSpec extends StageSpec(stageCreatesUnrefAnons = true):
          |    this.x <>/*<--*/ id1_x
          |    this.y <>/*-->*/ id1_y
          |  end id1
-         |  id1_x <> x1
-         |  y1 <> id1_y
-         |  val x2 = Bits(widthTop) X (lengthTop + 1) <> IN
-         |  val y2 = Bits(widthTop) X (lengthTop + 1) <> OUT
          |  val id2_x = Bits(widthTop) X (lengthTop + 1) <> VAR
          |  val id2_y = Bits(widthTop) X (lengthTop + 1) <> VAR
          |  val id2 = new ID(
@@ -375,10 +375,6 @@ class ViaConnectionSpec extends StageSpec(stageCreatesUnrefAnons = true):
          |    this.x <>/*<--*/ id2_x
          |    this.y <>/*-->*/ id2_y
          |  end id2
-         |  id2_x <> x2
-         |  y2 <> id2_y
-         |  val x3 = Bits(widthTop) X 7 <> IN
-         |  val y3 = Bits(widthTop) X 7 <> OUT
          |  val id3_x = Bits(widthTop) X 7 <> VAR
          |  val id3_y = Bits(widthTop) X 7 <> VAR
          |  val id3 = new ID(
@@ -388,9 +384,53 @@ class ViaConnectionSpec extends StageSpec(stageCreatesUnrefAnons = true):
          |    this.x <>/*<--*/ id3_x
          |    this.y <>/*-->*/ id3_y
          |  end id3
+         |  id1_x <> x1
+         |  y1 <> id1_y
+         |  id2_x <> x2
+         |  y2 <> id2_y
          |  id3_x <> x3
          |  y3 <> id3_y
          |end IDTop""".stripMargin
+    )
+  }
+
+  test("Hierarchical design with parameters 2") {
+    class Inner(val width: Int <> CONST) extends RTDesign:
+      val depth: Int <> CONST = width + 1
+      val x                   = Bits(width) <> IN
+      val y                   = Bits(depth) <> OUT
+      y <> x.resize(depth)
+    end Inner
+    class Outer(val baseWidth: Int <> CONST = 8) extends RTDesign:
+      val inner = Inner(baseWidth)
+      val x     = Bits(baseWidth) <> IN
+      val y     = Bits(baseWidth) <> OUT
+      inner.x <> x
+      y       <> inner.y.resize(baseWidth)
+    end Outer
+    val outer = (new Outer).viaConnection
+    assertCodeString(
+      outer,
+      """|class Inner(val width: Int <> CONST) extends RTDesign:
+         |  val depth: Int <> CONST = width + 1
+         |  val x = Bits(width) <> IN
+         |  val y = Bits(depth) <> OUT
+         |  y <> x.resize(depth)
+         |end Inner
+         |
+         |class Outer(val baseWidth: Int <> CONST = 8) extends RTDesign:
+         |  val inner_depth: Int <> CONST = baseWidth + 1
+         |  val x = Bits(baseWidth) <> IN
+         |  val y = Bits(baseWidth) <> OUT
+         |  val inner_x = Bits(baseWidth) <> VAR
+         |  val inner_y = Bits(inner_depth) <> VAR
+         |  val inner = new Inner(width = baseWidth):
+         |    this.x <>/*<--*/ inner_x
+         |    this.y <>/*-->*/ inner_y
+         |  end inner
+         |  inner_x <> x
+         |  y <> inner_y.resize(baseWidth)
+         |end Outer""".stripMargin
     )
   }
 end ViaConnectionSpec

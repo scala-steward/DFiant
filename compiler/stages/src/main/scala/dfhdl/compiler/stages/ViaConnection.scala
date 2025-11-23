@@ -7,7 +7,7 @@ import dfhdl.options.CompilerOptions
 import dfhdl.internals.*
 
 case object ViaConnection extends Stage:
-  def dependencies: List[Stage] = List(DropDesignDefs, ExplicitNamedVars)
+  def dependencies: List[Stage] = List(DropDesignDefs, ExplicitNamedVars, SimpleOrderMembers)
   def nullifies: Set[Stage] = Set(DropUnreferencedAnons)
   def transform(designDB: DB)(using MemberGetSet, CompilerOptions): DB =
     given RefGen = RefGen.fromGetSet
@@ -43,9 +43,32 @@ case object ViaConnection extends Stage:
                 case _ => (p :: ports, nets)
             case (_, x) => x
           }
+
+        extension (port: DFVal.Dcl)
+          // set reachable type parameters for the selected ports by setting the MetaDesign context's
+          // `getReachableNamedValue` cache.
+          def setReachableTypes()(using dfc: dfhdl.core.DFC, getSet: MemberGetSet): Unit =
+            port.getPortsByNameSelectors.headOption.foreach { pbns =>
+              def recur(
+                  pbnsDepRefs: List[DFRef.TwoWayAny],
+                  portDepRefs: List[DFRef.TwoWayAny]
+              ): Unit =
+                pbnsDepRefs.lazyZip(portDepRefs).foreach { (pbnsDepRef, portDepRef) =>
+                  (pbnsDepRef.get, portDepRef.get) match
+                    case (pbnsDep: DFVal, portDep: DFVal) =>
+                      if (!pbnsDep.isAnonymous)
+                        dfc.mutableDB.DesignContext.getReachableNamedValue(portDep, pbnsDep)
+                      else recur(pbnsDep.getRefs, portDep.getRefs)
+                    case _ => // do nothing
+                }
+              recur(pbns.dfType.getRefs, port.dfType.getRefs)
+            }
+        end extension
+
         // Meta design to construct the variables to be connected to the ports
         val addVarsDsn = new MetaDesign(ib, Patch.Add.Config.Before):
           val portsToVars: List[(DFVal.Dcl, DFVal)] = ports.map { p =>
+            p.setReachableTypes()
             p -> p.asValAny.genNewVar(using dfc.setName(s"${ib.getName}_${p.getName}")).asIR
           }
         // Meta design for connections between ports and the added variables
@@ -53,6 +76,7 @@ case object ViaConnection extends Stage:
           dfc.mutableDB.injectMetaGetSet(addVarsDsn.getDB.getSet)
           dfc.enterLate()
           val refPatches: List[(DFMember, Patch)] = addVarsDsn.portsToVars.flatMap { case (p, v) =>
+            p.setReachableTypes()
             val pbns = p.getPortsByNameSelectors
             if (pbns.nonEmpty)
               val portMeta = pbns.head.meta
