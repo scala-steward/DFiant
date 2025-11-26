@@ -213,14 +213,14 @@ trait Printer
     designDB.copy(srcFiles = srcFiles)
   end printedDB
 
-  val printQsysBlackbox: Boolean = false
+  val printVendorIPBlackbox: Boolean = false
 
   final def csDB: String =
     val designDB = getSet.designDB
     val csFileList = designDB.uniqueDesignMemberList.collect {
       case (block: DFDesignBlock, _)
           if printerOptions.designPrintFilter(block) &&
-            (!block.isQsysIPBlackbox || printQsysBlackbox) =>
+            (!block.isVendorIPBlackbox || printVendorIPBlackbox) =>
         formatCode(csFile(block))
     }
     val globals = formatCode(
@@ -290,7 +290,7 @@ class DFPrinter(using val getSet: MemberGetSet, val printerOptions: PrinterOptio
       DFOwnerPrinter:
   type TPrinter = DFPrinter
   given printer: TPrinter = this
-  override val printQsysBlackbox: Boolean = true
+  override val printVendorIPBlackbox: Boolean = true
   val tupleSupportEnable: Boolean = true
   def csViaConnectionSep: String = ""
   def csAssignment(lhsStr: String, rhsStr: String, shared: Boolean): String =

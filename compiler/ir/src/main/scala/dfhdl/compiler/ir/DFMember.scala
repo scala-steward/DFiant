@@ -1488,19 +1488,20 @@ object DFDesignBlock:
     case Normal, Def, Simulation
     case BlackBox(source: Source)
   object InstMode:
+    import constraints.DeviceID.Vendor
     object BlackBox:
       enum Source derives CanEqual, ReadWriter:
         case NA
         case Files(path: List[String])
         case Library(libName: String, nameSpace: String)
-        case Qsys(typeName: String)
+        case VendorIP(vendor: Vendor, typeName: String)
 
   extension (dsn: DFDesignBlock)
     def isDuplicate: Boolean = dsn.hasTagOf[DuplicateTag]
     def isBlackBox: Boolean = dsn.instMode.isInstanceOf[InstMode.BlackBox]
-    def isQsysIPBlackbox: Boolean = dsn.instMode match
-      case InstMode.BlackBox(_: InstMode.BlackBox.Source.Qsys) => true
-      case _                                                   => false
+    def isVendorIPBlackbox: Boolean = dsn.instMode match
+      case InstMode.BlackBox(_: InstMode.BlackBox.Source.VendorIP) => true
+      case _                                                       => false
     def inSimulation: Boolean = dsn.instMode == InstMode.Simulation
     def getCommonDesignWith(dsn2: DFDesignBlock)(using MemberGetSet): DFDesignBlock =
       def getOwnerDesignChain(dsn: DFDesignBlock): List[DFDesignBlock] =

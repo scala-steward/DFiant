@@ -239,10 +239,10 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
       case _ =>
         design.instMode match
           case InstMode.BlackBox(source) => source match
-              case InstMode.BlackBox.Source.Qsys("") =>
-                "EDBlackBox.QsysIP"
-              case InstMode.BlackBox.Source.Qsys(typeName) =>
-                s"dfhdl.platforms.ips.alteraintel.$typeName"
+              case InstMode.BlackBox.Source.VendorIP(_, "") =>
+                "EDBlackBox.VendorIP"
+              case InstMode.BlackBox.Source.VendorIP(vendor, typeName) =>
+                s"dfhdl.platforms.ips.${vendor.toString.toLowerCase}.$typeName"
               case _ => s"EDBlackBox(EDBlackBox.Source.${source})"
           case _ => "EDDesign"
     val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
@@ -254,23 +254,23 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
             case _              => s" = ${param.defaultRef.refCodeString}"
       s"val ${param.getName}${printer.csDFValConstType(param.dfType)}$defaultValue"
     }
-    val designIsQsysIPBlackbox = design.isQsysIPBlackbox
+    val designIsVendorIPBlackbox = design.isVendorIPBlackbox
     val designParamDclCS =
-      // for qsys blackbox, we extend the base IP class with its parameters and declare no new parameters
-      if (designIsQsysIPBlackbox) ""
+      // for vendor IP blackbox, we extend the base IP class with its parameters and declare no new parameters
+      if (designIsVendorIPBlackbox) ""
       else
         if (designParamList.length == 0) ""
         else if (designParamList.length == 1) designParamList.mkString("(", ", ", ")")
         else "(" + designParamList.mkString("\n", ",\n", "\n").hindent(2) + ")"
     val designParamInstCS =
-      // for qsys blackbox, we define the parameters in the class extension instead of the
+      // for vendor IP blackbox, we define the parameters in the class extension instead of the
       // blackbox instantiation
-      if (designIsQsysIPBlackbox) csDFDesignBlockParamInst(design)
+      if (designIsVendorIPBlackbox) csDFDesignBlockParamInst(design)
       else ""
     val dcl =
       s"class ${design.dclName}$designParamDclCS extends $dsnCls$designParamInstCS"
     val dclWithBody =
-      if (bodyWithDcls.isEmpty || designIsQsysIPBlackbox) dcl
+      if (bodyWithDcls.isEmpty || designIsVendorIPBlackbox) dcl
       else s"$dcl:\n${bodyWithDcls.hindent}\nend ${design.dclName}"
     val annotations =
       if (design.isTop) design.dclMeta.annotations ++ design.meta.annotations
@@ -282,11 +282,11 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
     val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
       s"${param.getName} = ${param.dfValRef.refCodeString}"
     }
-    val designParamCS = design.instMode match
-      // for qsys blackbox, we define the parameters in the class extension instead of the
+    val designParamCS =
+      // for vendor IP blackbox, we define the parameters in the class extension instead of the
       // blackbox instantiation
-      case InstMode.BlackBox(_: InstMode.BlackBox.Source.Qsys) => "()"
-      case _                                                   => csDFDesignBlockParamInst(design)
+      if (design.isVendorIPBlackbox) "()"
+      else csDFDesignBlockParamInst(design)
     val inst =
       if (body.isEmpty) s"${design.dclName}$designParamCS"
       else s"new ${design.dclName}$designParamCS:\n${body.hindent}"
