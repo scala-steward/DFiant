@@ -124,6 +124,10 @@ lazy val platforms = project
   .settings(
     name := s"$projectName-platforms",
     settings,
+    // Override global license: platforms module is published under Apache 2.0
+    licenses := List(
+      "Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0.txt")
+    ),
     pluginUseSettings,
     libraryDependencies ++= commonDependencies
   )
