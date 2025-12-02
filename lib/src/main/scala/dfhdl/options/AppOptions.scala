@@ -19,6 +19,7 @@ object AppOptions:
         cacheEnable: CacheEnable
     ): Defaults[Design] =
       AppOptions(appMode = appMode, clearConsole = clearConsole, cacheEnable = cacheEnable)
+  given (using defaults: Defaults[Design]): AppOptions = defaults
 
   opaque type AppMode <: ConfigN[dfhdl.app.AppMode] = ConfigN[dfhdl.app.AppMode]
   object AppMode:

@@ -4,7 +4,7 @@ import core.DFCG
 import dfhdl.compiler.ir
 import wvlet.log.{Logger, LogFormatter}
 import scala.collection.mutable
-import dfhdl.options.CompilerOptions
+import dfhdl.options.*
 import org.rogach.scallop.*
 import dfhdl.internals.sbtShellIsRunning
 import scala.util.chaining.scalaUtilChainingOps
@@ -42,22 +42,22 @@ trait DFApp:
   given dfc: DFCG = DFCG()
 
   private var designArgs: DesignArgs = DesignArgs.empty
-  private var elaborationOptions: options.ElaborationOptions = compiletime.uninitialized
-  private var compilerOptions: options.CompilerOptions = compiletime.uninitialized
-  private var printerOptions: options.PrinterOptions = compiletime.uninitialized
-  private var linterOptions: options.LinterOptions = compiletime.uninitialized
-  private var simulatorOptions: options.SimulatorOptions = compiletime.uninitialized
-  private var appOptions: options.AppOptions = compiletime.uninitialized
-  private var builderOptions: options.BuilderOptions = compiletime.uninitialized
-  private var programmerOptions: options.ProgrammerOptions = compiletime.uninitialized
-  inline given options.ElaborationOptions = elaborationOptions
-  inline given options.CompilerOptions = compilerOptions
-  inline given options.PrinterOptions = printerOptions
-  inline given options.LinterOptions = linterOptions
-  inline given options.SimulatorOptions = simulatorOptions
-  inline given options.AppOptions = appOptions
-  inline given options.BuilderOptions = builderOptions
-  inline given options.ProgrammerOptions = programmerOptions
+  private var elaborationOptions: ElaborationOptions = compiletime.uninitialized
+  private var compilerOptions: CompilerOptions = compiletime.uninitialized
+  private var printerOptions: PrinterOptions = compiletime.uninitialized
+  private var linterOptions: LinterOptions = compiletime.uninitialized
+  private var simulatorOptions: SimulatorOptions = compiletime.uninitialized
+  private var appOptions: AppOptions = compiletime.uninitialized
+  private var builderOptions: BuilderOptions = compiletime.uninitialized
+  private var programmerOptions: ProgrammerOptions = compiletime.uninitialized
+  inline given ElaborationOptions = elaborationOptions
+  inline given CompilerOptions = compilerOptions
+  inline given PrinterOptions = printerOptions
+  inline given LinterOptions = linterOptions
+  inline given SimulatorOptions = simulatorOptions
+  inline given AppOptions = appOptions
+  inline given BuilderOptions = builderOptions
+  inline given ProgrammerOptions = programmerOptions
   private var dsn: () => core.Design = compiletime.uninitialized
   // used by the plugin to get the updated design arguments that could be changed by the
   // command-line options
@@ -355,6 +355,40 @@ trait DFApp:
     )
   end listSimulateTools
 
+  private def execute(mode: AppMode): Unit =
+    mode match
+      case AppMode.help      => ???
+      case AppMode.elaborate => elaborate()
+      case AppMode.compile   => compile()
+      case AppMode.commit    => commit()
+      case AppMode.lint      => lint(uncached = true)
+      case AppMode.simulate  => simRun(uncached = true)
+      case AppMode.build     => build()
+      case AppMode.program   => program(uncached = true)
+    end match
+  end execute
+
+  def runManual(appMode: AppMode)(using
+      pto: PrinterOptions,
+      eo: ElaborationOptions,
+      co: CompilerOptions,
+      lo: LinterOptions,
+      so: SimulatorOptions,
+      bo: BuilderOptions,
+      po: ProgrammerOptions,
+      ao: AppOptions
+  ): Unit =
+    printerOptions = pto
+    elaborationOptions = eo.copy(onError = OnError.Exception)
+    compilerOptions = co
+    linterOptions = lo.copy(onError = OnError.Exception)
+    simulatorOptions = so.copy(onError = OnError.Exception)
+    builderOptions = bo.copy(onError = OnError.Exception)
+    programmerOptions = po.copy(onError = OnError.Exception)
+    appOptions = ao.copy(appMode = appMode)
+    execute(appMode)
+  end runManual
+
   def main(commandArgs: Array[String]): Unit =
     if (appOptions.clearConsole) print("\u001bc")
     logger.info(s"Welcome to DFiant HDL (DFHDL) v$dfhdlVersion !!!")
@@ -428,7 +462,7 @@ trait DFApp:
               builderOptions = builderOptions.copy(flash = true)
           case _ =>
         end match
-        // execute command
+        // print help string or execute command
         parsedCommandLine.mode match
           case help @ Mode.help =>
             help.subcommand match
@@ -438,13 +472,7 @@ trait DFApp:
               case Some(simulateTool: HelpMode.`simulate-tool`.type) =>
                 listSimulateTools(simulateTool.scan.toOption.get)
               case _ => println(parsedCommandLine.getFullHelpString())
-          case Mode.elaborate => elaborate()
-          case Mode.compile   => compile()
-          case Mode.commit    => commit()
-          case Mode.lint      => lint(uncached = true)
-          case Mode.simulate  => simRun(uncached = true)
-          case Mode.build     => build()
-          case Mode.program   => program(uncached = true)
+          case _ => execute(parsedCommandLine.mode.modeOption)
         end match
     end match
   end main

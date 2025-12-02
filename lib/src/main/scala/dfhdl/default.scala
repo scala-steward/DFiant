@@ -1,7 +1,7 @@
 package dfhdl
 
 import dfhdl.core.Design
-import dfhdl.compiler.stages.CompiledDesign
+import dfhdl.compiler.stages.{CompiledDesign, StagedDesign}
 import dfhdl.tools.toolsCore.{Builder, Programmer}
 import dfhdl.options.*
 import dfhdl.backends
@@ -9,6 +9,30 @@ import dfhdl.compiler.ir
 import dfhdl.tools.{builders, programmers}
 import ir.constraints.DeviceID.Vendor
 import dfhdl.tools.toolsCore.*
+import dfhdl.app.AppMode
+export compiler.stages.printCodeString
+
+extension (dsn: Design)
+  def compile(using CompilerOptions, PrinterOptions): CompiledDesign =
+    StagedDesign(dsn).compile
+  private def runApp(appMode: AppMode)(using
+      ElaborationOptions,
+      CompilerOptions,
+      LinterOptions,
+      SimulatorOptions,
+      BuilderOptions,
+      ProgrammerOptions,
+      AppOptions
+  ): Unit =
+    val app = new dfhdl.app.DFApp:
+      setDsn(dsn)
+    app.runManual(appMode)
+  end runApp
+  def lint(using CompilerOptions, LinterOptions, AppOptions): Unit = runApp(AppMode.lint)
+  def simulate(using CompilerOptions, SimulatorOptions, AppOptions): Unit = runApp(AppMode.simulate)
+  def build(using CompilerOptions, BuilderOptions, AppOptions): Unit = runApp(AppMode.build)
+  def program(using CompilerOptions, ProgrammerOptions, AppOptions): Unit = runApp(AppMode.program)
+end extension
 
 extension (cd: CompiledDesign)
   def lint(using
