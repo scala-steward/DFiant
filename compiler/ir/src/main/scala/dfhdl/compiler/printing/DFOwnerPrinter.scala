@@ -242,7 +242,7 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
               case InstMode.BlackBox.Source.VendorIP(_, "") =>
                 "EDBlackBox.VendorIP"
               case InstMode.BlackBox.Source.VendorIP(vendor, typeName) =>
-                s"dfhdl.platforms.ips.${vendor.toString.toLowerCase}.$typeName"
+                s"dfhdl.platforms.ips.${vendor.libName}.$typeName"
               case _ => s"EDBlackBox(EDBlackBox.Source.${source})"
           case _ => "EDDesign"
     val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>

@@ -113,6 +113,9 @@ object constraints:
       case AlteraIntel(pro: Boolean)
       case TinyTapeout
       def codeString(using Printer): String = "deviceID.Vendor." + this.toString
+      def libName: String = this match
+        case AlteraIntel(_) => "alteraintel"
+        case _              => this.toString.toLowerCase
   final case class ToolOptions(options: Map[String, String]) extends GlobalConstraint
       derives ReadWriter:
     protected def `prot_=~`(that: HWAnnotation)(using MemberGetSet): Boolean = this == that
