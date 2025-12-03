@@ -32,8 +32,32 @@ extension (list: List[String])
     val rowCnt = (list.length - 1) / colCnt + 1
     if (rowCnt == 1) list.mkString(open, sep + " ", close)
     else
-      val csVecData = list.grouped(colCnt).map(_.mkString(sep + " ")).mkString(sep + "\n").hindent
+      // Create a grid: rows x columns
+      val grid = list.grouped(colCnt).toList
+      // Calculate max width for each column
+      val colWidths = (0 until colCnt).map { colIdx =>
+        grid.view
+          .flatMap(row => row.lift(colIdx))
+          .map(_.length)
+          .maxOption
+          .getOrElse(0)
+      }
+      // Format each row with aligned columns
+      val csVecData = grid
+        .map { row =>
+          row.zipWithIndex
+            .map { case (elem, colIdx) =>
+              if (colIdx < row.length - 1)
+                (elem + sep).padTo(colWidths(colIdx) + sep.length, ' ')
+              else
+                elem
+            }
+            .mkString(" ")
+        }
+        .mkString(sep + "\n")
+        .hindent
       s"$open\n${csVecData}\n$close"
+    end if
 end extension
 
 extension (intParamRef: IntParamRef)

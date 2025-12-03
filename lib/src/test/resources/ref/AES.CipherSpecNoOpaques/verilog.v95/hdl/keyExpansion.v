@@ -301,8 +301,8 @@ module keyExpansion(
   assign subWord_inst_7_lhs = rotWord_inst_7_o;
   assign subWord_inst_8_lhs = rotWord_inst_8_o;
   assign o = {
-    w_0, w_1,
-    w_2, w_3,
+    w_0,                                              w_1,
+    w_2,                                              w_3,
     {o_part_000, o_part_001, o_part_002, o_part_003}, {o_part_004, o_part_005, o_part_006, o_part_007},
     {o_part_008, o_part_009, o_part_010, o_part_011}, lhs_part_04,
     {o_part_012, o_part_013, o_part_014, o_part_015}, {o_part_016, o_part_017, o_part_018, o_part_019},
