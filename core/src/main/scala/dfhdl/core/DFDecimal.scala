@@ -425,12 +425,14 @@ object DFDecimal:
         *
         * Syntax: {{{d"width'dec"}}}
         *   - `dec` is a sequence of decimal characters ('0'-'9') with an optional prefix `-` for
-        *     negative values.
+        *     negative values. `dec` can also be a single interpolated expression of type `String`,
+        *     `Int`, or `BigInt`.
         *   - Separators `_` (underscore) and `,` (comma) within `dec` are ignored.
         *   - `width`, followed by a `'`, is optional and specifies the exact width of the integer's
         *     bit representation. If omitted, the width is inferred from the value's size. If
         *     specified, the output is padded with zeros or extended for signed numbers using two's
-        *     complement representation to match the `width`.
+        *     complement representation to match the `width`. `width` can also be an interpolated
+        *     single expression of type `Int` or a DFHDL `Int` parameter.
         *   - The output type is unsigned `UInt[W]` for natural numbers and signed `SInt[W]` for
         *     negative numbers, where `W` is the width in bits.
         *   - If the specified `width` is less than the required number of bits to represent the
@@ -438,11 +440,17 @@ object DFDecimal:
         *
         * @example
         *   {{{
-        *   d"0"      // UInt[1], value = 0
-        *   d"-1"     // SInt[2], value = -1
-        *   d"8'-1"   // SInt[8], value = -1
-        *   d"255"    // UInt[8], value = 255
-        *   d"1,023"  // UInt[10], value = 1023
+        *   d"0"             // UInt[1], value = 0
+        *   d"-1"            // SInt[2], value = -1
+        *   d"8'-1"          // SInt[8], value = -1
+        *   d"255"           // UInt[8], value = 255
+        *   d"1,023"         // UInt[10], value = 1023
+        *   val str42 = "42"
+        *   d"${str42}"      // UInt[6], value = 42
+        *   val w = 8
+        *   d"${w}'${str42}" // UInt[8], value = 42
+        *   val p: Int <> CONST = 8
+        *   d"${p}'${str42}" // UInt[p.type], value = 42
         *   }}}
         *
         * @note
@@ -458,10 +466,13 @@ object DFDecimal:
         *
         * Syntax: {{{sd"width'dec"}}}
         *   - `dec` is a sequence of decimal characters ('0'-'9') with an optional prefix `-` for
-        *     negative values.
+        *     negative values. `dec` can also be a single interpolated expression of type `String`,
+        *     `Int`, or `BigInt`.
         *   - Separators `_` (underscore) and `,` (comma) within `dec` are ignored.
         *   - `width`, followed by a `'`, is optional and specifies the exact width of the integer's
         *     bit representation, which is always at least 2 bits to accommodate the sign bit.
+        *     `width` can also be a single interpolated expression of type `Int` or a DFHDL `Int`
+        *     parameter.
         *   - The output is always a signed integer type `SInt[W]`, regardless of whether the `dec`
         *     value is negative or natural, where `W` is the width in bits.
         *   - If the specified `width` is less than the required number of bits to represent the
@@ -469,10 +480,16 @@ object DFDecimal:
         *
         * @example
         *   {{{
-        *   sd"0"     // SInt[2], value = 0 (natural number represented as a signed type)
-        *   sd"-1"    // SInt[2], value = -1
-        *   sd"255"   // SInt[9], value = 255 (natural number represented as a signed type)
-        *   sd"8'255" // Error: width is too small to represent the value including the sign bit
+        *   sd"0"             // SInt[2], value = 0 (natural number represented as a signed type)
+        *   sd"-1"            // SInt[2], value = -1
+        *   sd"255"           // SInt[9], value = 255 (natural number represented as a signed type)
+        *   sd"8'255"         // Error: width is too small to represent the value including the sign bit
+        *   val str42 = "42"
+        *   sd"${str42}"      // SInt[7], value = 42
+        *   val w = 8
+        *   sd"${w}'${str42}" // SInt[8], value = 42
+        *   val p: Int <> CONST = 8
+        *   sd"${p}'${str42}" // SInt[p.type], value = 42
         *   }}}
         *
         * @note
@@ -485,6 +502,17 @@ object DFDecimal:
         */
       def sd: DecStrCtx = sc
     end extension
+
+    private def uintConst(value: BigInt)(using DFC): DFConstOf[DFUInt[Int]] =
+      if (value < 0) throw new IllegalArgumentException(
+        sn"""|Unexpected negative value found for unsigned decimal string interpolation: $value
+             |To Fix: Use the signed decimal string interpolator `sd` instead."""
+      )
+      DFVal.Const(DFUInt.forced[Int](value.bitsWidth(false)), Some(value), named = true)
+    end uintConst
+    private def sintConst(value: BigInt)(using DFC): DFConstOf[DFSInt[Int]] =
+      DFVal.Const(DFSInt.forced[Int](value.bitsWidth(true)), Some(value), named = true)
+    end sintConst
 
     private def applyMacro(
         sc: Expr[DecStrCtx],
@@ -504,19 +532,27 @@ object DFDecimal:
                 arg.asTerm.pos
               )
       object ValueExpr:
-        def unapply(arg: Expr[Any]): Option[Expr[DFConstInt32]] =
+        def unapply(arg: Expr[Any]): Option[Expr[DFConstAny]] =
           val tpe = arg.asTerm.tpe
           tpe.asTypeOf[Any] match
             case '[DFConstInt32] => Some(arg.asExprOf[DFConstInt32])
             case '[Int]          => Some(ConstIntExpr(arg.asExprOf[Int]))
+            case '[BigInt]       => Some(ConstBigIntExpr(arg.asExprOf[BigInt]))
+            case '[String]       => Some(ConstStringExpr(arg.asExprOf[String]))
             case _               =>
               report.errorAndAbort(
                 s"Expecting a constant DFHDL Int value but found: `${tpe.showType}`",
                 arg.asTerm.pos
               )
-      def ConstIntExpr(valueExpr: Expr[Int]): Expr[DFConstInt32] =
-        '{ DFVal.Const(DFInt32, Some(BigInt($valueExpr)))(using $dfc) }
-      def AsIsExpr(widthExpr: Expr[IntP], valueExpr: Expr[DFConstInt32]): Expr[DFConstAny] =
+      def ConstIntExpr(valueExpr: Expr[Int]): Expr[DFConstAny] =
+        ConstBigIntExpr('{ BigInt($valueExpr) })
+      def ConstStringExpr(valueExpr: Expr[String]): Expr[DFConstAny] =
+        ConstBigIntExpr('{ BigInt($valueExpr) })
+      def ConstBigIntExpr(valueExpr: Expr[BigInt]): Expr[DFConstAny] =
+        if (sc.funcName == "sd") '{ sintConst($valueExpr)(using $dfc) }
+        else '{ uintConst($valueExpr)(using $dfc) }
+      end ConstBigIntExpr
+      def AsIsExpr(widthExpr: Expr[IntP], valueExpr: Expr[DFConstAny]): Expr[DFConstAny] =
         val widthType = widthExpr.asTerm.tpe.asTypeOf[IntP]
         sc.funcName match
           case "d" =>
@@ -535,11 +571,14 @@ object DFDecimal:
             }
         end match
       end AsIsExpr
-      parts match
+      val result = parts match
+        // $value
+        case "" :: "" :: Nil =>
+          val (ValueExpr(valueExpr) :: Nil) = argsExprs.toList: @unchecked
+          valueExpr
         // $width'$value
         case "" :: "'" :: "" :: Nil =>
-          val (WidthExpr(widthExpr) :: ValueExpr(valueExpr) :: Nil) =
-            argsExprs.toList: @unchecked
+          val (WidthExpr(widthExpr) :: ValueExpr(valueExpr) :: Nil) = argsExprs.toList: @unchecked
           AsIsExpr(widthExpr, valueExpr)
         // 16'$value
         case widthNoValuePattern(widthStr) :: "" :: Nil =>
@@ -561,7 +600,10 @@ object DFDecimal:
           report.errorAndAbort(
             s"Unsupported decimal string interpolation pattern"
           )
-      end match
+      end result
+      val ctName = '{ CTName(${ Expr(sc.funcName + " decimal string interpolation") }) }
+      val resultType = result.asTerm.tpe.asTypeOf[DFConstAny]
+      '{ trydf[resultType.Underlying]($result)(using $dfc, $ctName) }
     end applyMacro
 
     private def unapplySeqMacro[T <: DFTypeAny](

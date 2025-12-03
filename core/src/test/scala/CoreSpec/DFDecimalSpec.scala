@@ -119,6 +119,9 @@ class DFDecimalSpec extends DFSpec:
          |val ubit = u6(1)
          |val s4 = s6(3, 0)
          |val sbit = s6(1)
+         |val uint42: UInt[6] <> CONST = d"6'42"
+         |val sint42: SInt[7] <> CONST = sd"7'42"
+         |val sintNeg42: SInt[7] <> CONST = sd"7'-42"
          |""".stripMargin
     } {
       val c: UInt[8] <> CONST = 1
@@ -252,6 +255,17 @@ class DFDecimalSpec extends DFSpec:
       val ubit = u6(1)
       val s4 = s6(3, 0)
       val sbit = s6(1)
+      val str42 = "42"
+      val strNeg42 = "-42"
+      val uint42 = d"${str42}"
+      val sint42 = sd"${str42}"
+      val sintNeg42 = sd"${strNeg42}"
+      assertRuntimeErrorLog(
+        """|Unexpected negative value found for unsigned decimal string interpolation: -42
+           |To Fix: Use the signed decimal string interpolator `sd` instead.""".stripMargin
+      ) {
+        d"${strNeg42}"
+      }
     }
     assertDSLErrorLog(
       """|Cannot apply this operation between an unsigned value (LHS) and a signed value (RHS).
