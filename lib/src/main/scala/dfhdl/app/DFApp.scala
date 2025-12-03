@@ -477,3 +477,7 @@ trait DFApp:
     end match
   end main
 end DFApp
+
+class ManualDFApp(dsn: => core.Design) extends DFApp:
+  setDsn(dsn)
+end ManualDFApp
