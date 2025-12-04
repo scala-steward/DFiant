@@ -242,6 +242,9 @@ protected trait DFValPrinter extends AbstractValPrinter:
           case Func.Op.clog2 =>
             if (typeCS) s"CLog2[$csArg]"
             else s"clog2($csArg)"
+          case Func.Op.abs =>
+            if (typeCS) s"Abs[$csArg]"
+            else s"abs($csArg)"
           case _ => s"${csArg.applyBrackets()}.${opStr}"
       // multiarg func
       case args =>

@@ -109,11 +109,19 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
     printer.dialect match
       case VerilogDialect.v95 => false
       case _                  => true
+  val allowNativeMathFunctions: Boolean =
+    printer.dialect match
+      case VerilogDialect.v95 | VerilogDialect.v2001 => false
+      case _                                         => true
   def csDFValFuncExpr(dfVal: Func, typeCS: Boolean): String =
     def commonOpStr: String =
       dfVal.op match
-        case Func.Op.max                               => "`MAX"
-        case Func.Op.min                               => "`MIN"
+        case Func.Op.max =>
+          if (allowNativeMathFunctions) "$max"
+          else "`MAX"
+        case Func.Op.min =>
+          if (allowNativeMathFunctions) "$min"
+          else "`MIN"
         case Func.Op.** if !allowDoubleStarPowerSyntax => "power"
         case op                                        => op.toString()
     dfVal.args match
@@ -177,7 +185,10 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
           case Func.Op.&       => s"&$argStrB"
           case Func.Op.|       => s"|$argStrB"
           case Func.Op.^       => s"^$argStrB"
-          case Func.Op.clog2   =>
+          case Func.Op.abs     =>
+            if (allowNativeMathFunctions) s"$$abs($argStr)"
+            else s"`ABS($argStr)"
+          case Func.Op.clog2 =>
             val internalLog = printer.dialect match
               case VerilogDialect.v95 | VerilogDialect.v2001 => ""
               case _                                         => "$"

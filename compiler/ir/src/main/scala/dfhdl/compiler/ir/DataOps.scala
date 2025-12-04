@@ -271,14 +271,16 @@ def calcFuncData[OT <: DFType](
               case FuncOp.| => valueBits.toIndexedSeq.exists(identity)
               case FuncOp.^ => valueBits.populationCount % 2L != 0
             Some(data)
-          // Arithmetic Negation
+          // Arithmetic Negation and Absolute Value
           case (
                 _: DFDecimal,
-                FuncOp.unary_-,
+                op @ (FuncOp.unary_- | FuncOp.abs),
                 (_: DFDecimal) :: Nil,
                 Some(data: BigInt) :: Nil
               ) =>
-            Some(-data)
+            op match
+              case FuncOp.unary_- => Some(-data)
+              case FuncOp.abs     => Some(data.abs)
           // Arithmetic CLog2
           case (
                 DFXInt(_),

@@ -103,8 +103,10 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
           case Func.Op.&       => s"and reduce $argStrB"
           case Func.Op.|       => s"or reduce $argStrB"
           case Func.Op.^       => s"xor reduce $argStrB"
+          case Func.Op.abs     => s"abs($argStr)"
           case Func.Op.clog2   => s"clog2($argStr)"
           case _               => printer.unsupported
+        end match
       // multiarg func
       case args =>
         dfVal.op match

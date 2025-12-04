@@ -599,7 +599,7 @@ object DFVal:
       case >>, <<, **, ror, rol, reverse, repeat
       case unary_-, unary_~, unary_!
       case rising, falling
-      case clog2, max, min, sel
+      case clog2, max, min, abs, sel
       // special-case of initFile construct for vectors of bits
       case InitFile(format: InitFileFormat, path: String)
     object Op:

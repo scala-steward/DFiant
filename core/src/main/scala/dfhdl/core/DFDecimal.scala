@@ -934,6 +934,12 @@ object DFXInt:
           DFVal.ConstCheck[P]
       ): DFValTP[DFXInt[S, W, N], P] =
         DFVal.Func(dfVal.dfType, FuncOp.clog2, List(dfVal))
+      def abs[P, S <: Boolean, W <: IntP, N <: NativeType](
+          dfVal: DFValTP[DFXInt[S, W, N], P]
+      )(using
+          DFCG
+      ): DFValTP[DFXInt[S, W, N], P] =
+        DFVal.Func(dfVal.dfType, FuncOp.abs, List(dfVal))
       extension [P, S <: Boolean, W <: IntP, N <: NativeType](lhs: DFValTP[DFXInt[S, W, N], P])
         protected[core] def toDFXIntOf[RS <: Boolean, RW <: IntP, RN <: NativeType](
             dfType: DFXInt[RS, RW, RN]

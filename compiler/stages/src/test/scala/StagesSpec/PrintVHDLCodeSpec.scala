@@ -1503,4 +1503,33 @@ class PrintVHDLCodeSpec extends StageSpec:
          |end Foo_arch;""".stripMargin
     )
   }
+
+  test("abs function") {
+    class Foo extends RTDesign:
+      val x = SInt(8) <> IN
+      val y = SInt(8) <> OUT
+      y := abs(x)
+    end Foo
+    val top = (new Foo).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|library ieee;
+         |use ieee.std_logic_1164.all;
+         |use ieee.numeric_std.all;
+         |use work.dfhdl_pkg.all;
+         |use work.Foo_pkg.all;
+         |
+         |entity Foo is
+         |port (
+         |  x : in signed(7 downto 0);
+         |  y : out signed(7 downto 0)
+         |);
+         |end Foo;
+         |
+         |architecture Foo_arch of Foo is
+         |begin
+         |  y <= abs(x);
+         |end Foo_arch;""".stripMargin
+    )
+  }
 end PrintVHDLCodeSpec

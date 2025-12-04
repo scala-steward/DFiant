@@ -1470,4 +1470,54 @@ class PrintVerilogCodeSpec extends StageSpec:
          |endmodule""".stripMargin
     )
   }
+
+  test("abs function") {
+    class Foo extends RTDesign:
+      val x = SInt(8) <> IN
+      val y = SInt(8) <> OUT
+      y := abs(x)
+    end Foo
+    val top = (new Foo).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|`default_nettype none
+         |`timescale 1ns/1ps
+         |`include "Foo_defs.svh"
+         |
+         |module Foo(
+         |  input  wire logic signed [7:0] x,
+         |  output logic signed [7:0] y
+         |);
+         |  `include "dfhdl_defs.svh"
+         |  assign y = $abs(x);
+         |endmodule""".stripMargin
+    )
+  }
+
+  test("abs function under verilog.v95") {
+    given options.CompilerOptions.Backend = backends.verilog.v95
+    class Foo extends RTDesign:
+      val x = SInt(8) <> IN
+      val y = SInt(8) <> OUT
+      y := abs(x)
+    end Foo
+    val top = (new Foo).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|`default_nettype none
+         |`timescale 1ns/1ps
+         |`include "Foo_defs.vh"
+         |
+         |module Foo(
+         |  x,
+         |  y
+         |);
+         |  `include "dfhdl_defs.vh"
+         |  `include "Foo_defs.vh"
+         |  input  wire [7:0] x;
+         |  output wire [7:0] y;
+         |  assign y = `ABS(x);
+         |endmodule""".stripMargin
+    )
+  }
 end PrintVerilogCodeSpec
