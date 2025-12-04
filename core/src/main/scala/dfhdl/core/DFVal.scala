@@ -748,16 +748,30 @@ object DFVal extends DFValLP:
         dfType: T,
         op: FuncOp,
         args: List[ir.DFVal]
-    )(using DFC): DFValTP[T, P] =
-      val func: ir.DFVal = ir.DFVal.Func(
-        dfType.asIR.dropUnreachableRefs,
-        op,
-        args.map(_.refTW[ir.DFVal]),
-        dfc.ownerOrEmptyRef,
-        dfc.getMeta,
-        dfc.tags
-      )
-      func.addMember.asValTP[T, P]
+    )(using dfc: DFC): DFValTP[T, P] =
+      (op, args) match
+        // special case to handle unary negation of anonymous decimal constants
+        case (
+              FuncOp.unary_-,
+              List(const @ ir.DFVal.Const(dfType = _: ir.DFDecimal, data = Some(data: BigInt)))
+            ) if (const.isAnonymous || const.asValAny.inDFCPosition) =>
+          dfc.mutableDB.setMember(
+            const,
+            _.copy(
+              data = Some(-data),
+              meta = dfc.getMeta
+            )
+          ).asValTP[T, P]
+        case _ =>
+          val func: ir.DFVal = ir.DFVal.Func(
+            dfType.asIR.dropUnreachableRefs,
+            op,
+            args.map(_.refTW[ir.DFVal]),
+            dfc.ownerOrEmptyRef,
+            dfc.getMeta,
+            dfc.tags
+          )
+          func.addMember.asValTP[T, P]
     end apply
   end Func
 
