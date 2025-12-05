@@ -1550,4 +1550,22 @@ class PrintCodeStringSpec extends StageSpec:
          |end Foo""".stripMargin
     )
   }
+
+  test("reachable member regression") {
+    val ParamA: Int <> CONST = 1000
+    val ParamB: Int <> CONST = ParamA + 1
+    class Foo extends RTDesign:
+      val x = UInt(ParamB) <> IN
+    end Foo
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|val ParamA: Int <> CONST = 1000
+         |val ParamB: Int <> CONST = ParamA + 1
+         |
+         |class Foo extends RTDesign:
+         |  val x = UInt(ParamB) <> IN
+         |end Foo""".stripMargin
+    )
+  }
 end PrintCodeStringSpec

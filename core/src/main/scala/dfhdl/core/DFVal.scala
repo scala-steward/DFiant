@@ -373,9 +373,11 @@ object DFVal extends DFValLP:
               |Hierarchy: ${lhsIR.getOwnerDesign.getFullName}
               |Message:   ${errMsg}""".stripMargin
         )
+      lhsIR.injectGlobalCtx()
       lhsIR.getConstData.asInstanceOf[Option[Option[D]]]
         .getOrElse(error("Cannot fetch a Scala value from a non-constant DFHDL value."))
         .getOrElse(error("Cannot fetch a Scala value from a bubble (invalid) DFHDL value."))
+  end extension
 
   trait InitCheck[I]
   given [I](using
