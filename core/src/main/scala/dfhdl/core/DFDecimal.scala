@@ -934,6 +934,7 @@ object DFXInt:
           DFVal.ConstCheck[P]
       ): DFValTP[DFXInt[S, W, N], P] =
         DFVal.Func(dfVal.dfType, FuncOp.clog2, List(dfVal))
+      // TODO: generate error for unsigned values
       def abs[P, S <: Boolean, W <: IntP, N <: NativeType](
           dfVal: DFValTP[DFXInt[S, W, N], P]
       )(using
@@ -1434,6 +1435,12 @@ object DFSInt:
         def unary_-(using DFCG): DFValTP[DFSInt[W], P] = trydf {
           DFVal.Func(lhs.dfType, FuncOp.unary_-, List(lhs))
         }
+        def signbit(using dfc: DFCG): DFValTP[DFBit, P] =
+          val idx = locally {
+            given DFCG = dfc.anonymize
+            (lhs.widthIntParam - 1).toDFConst
+          }
+          DFVal.Alias.ApplyIdx(DFBit, lhs, idx).asValTP[DFBit, P]
       extension [P](lhs: DFValTP[DFInt32, P])
         @targetName("negateDFInt32")
         def unary_-(using DFCG): DFValTP[DFInt32, P] = trydf {

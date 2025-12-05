@@ -125,6 +125,8 @@ class DFDecimalSpec extends DFSpec:
          |val negSintNeg42: SInt[7] <> CONST = sd"7'42"
          |val absTest = abs(s4)
          |val absTest2: SInt[7] <> CONST = abs(sintNeg42)
+         |val numSignedBit: Bit <> CONST = sint42(6)
+         |val numSignedBitP = s8p(param - 1)
          |""".stripMargin
     } {
       val c: UInt[8] <> CONST = 1
@@ -266,6 +268,8 @@ class DFDecimalSpec extends DFSpec:
       val negSintNeg42 = -sd"${strNeg42}"
       val absTest = abs(s4)
       val absTest2: SInt[7] <> CONST = abs(sintNeg42)
+      val numSignedBit = sint42.signbit
+      val numSignedBitP = s8p.signbit
       assertRuntimeErrorLog(
         """|Unexpected negative value found for unsigned decimal string interpolation: -42
            |To Fix: Use the signed decimal string interpolator `sd` instead.""".stripMargin
