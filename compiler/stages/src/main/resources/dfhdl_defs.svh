@@ -24,6 +24,9 @@
 //  
 //  For more information, please refer to <http://unlicense.org/>
 
+`define MAX(a, b) ((a) > (b) ? (a) : (b))
+`define MIN(a, b) ((a) < (b) ? (a) : (b))
+`define ABS(a) ((a) < 0 ? -a : a)
 `define TO_VEC_HEX(hex, hw, vw) \
     /* verilator lint_off WIDTH */ \
     (vw == hw ? hw'h``hex : {{(vw - hw){1'b0}}, hw'h``hex}) \

@@ -117,10 +117,10 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
     def commonOpStr: String =
       dfVal.op match
         case Func.Op.max =>
-          if (allowNativeMathFunctions) "$max"
+          if (allowNativeMathFunctions && !dfVal.isConst) "$max"
           else "`MAX"
         case Func.Op.min =>
-          if (allowNativeMathFunctions) "$min"
+          if (allowNativeMathFunctions && !dfVal.isConst) "$min"
           else "`MIN"
         case Func.Op.** if !allowDoubleStarPowerSyntax => "power"
         case op                                        => op.toString()
@@ -186,7 +186,7 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
           case Func.Op.|       => s"|$argStrB"
           case Func.Op.^       => s"^$argStrB"
           case Func.Op.abs     =>
-            if (allowNativeMathFunctions) s"$$abs($argStr)"
+            if (allowNativeMathFunctions && !dfVal.isConst) s"$$abs($argStr)"
             else s"`ABS($argStr)"
           case Func.Op.clog2 =>
             val internalLog = printer.dialect match

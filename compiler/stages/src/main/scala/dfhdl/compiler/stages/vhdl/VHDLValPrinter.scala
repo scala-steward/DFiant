@@ -55,10 +55,13 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
       case argL :: argR :: Nil if dfVal.op != Func.Op.++ =>
         var infix = true
         val opStr = dfVal.op match
-          case Func.Op.=== => "="
-          case Func.Op.=!= => "/="
-          case Func.Op.>=  => "=>"
-          case Func.Op.<<  =>
+          case Func.Op.===               => "="
+          case Func.Op.=!=               => "/="
+          case Func.Op.>=                => "=>"
+          case Func.Op.max | Func.Op.min =>
+            infix = false
+            dfVal.op.toString
+          case Func.Op.<< =>
             argL.get.dfType match
               case DFSInt(_) => "sla"
               case DFUInt(_) => "sll"

@@ -69,6 +69,8 @@ function to_string(A : integer) return string;
 function to_string(A : boolean) return string;
 function to_string(A : std_logic) return string;
 function to_string(A : std_logic_vector) return string;
+function max(A, B : integer) return integer;
+function min(A, B : integer) return integer;
 end package dfhdl_pkg;
 
 package body dfhdl_pkg is
@@ -360,5 +362,21 @@ begin
   end loop;
   
   return result;
+end;
+function max(A, B : integer) return integer is
+begin
+    if A > B then
+        return A;
+    else
+        return B;
+    end if;
+end;
+function min(A, B : integer) return integer is
+begin
+    if A < B then
+        return A;
+    else
+        return B;
+    end if;
 end;
 end package body dfhdl_pkg;
