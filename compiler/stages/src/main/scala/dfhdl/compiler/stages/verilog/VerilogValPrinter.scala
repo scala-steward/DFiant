@@ -244,17 +244,23 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
         if (printer.allowSignedKeywordAndOps) s"$$signed($relValStr)"
         else relValStr
       case (DFBits(tr @ Int(tWidth)), DFBits(fr @ Int(fWidth))) =>
-        if (tWidth == fWidth) relValStr
-        else if (tWidth < fWidth) s"${relValStr.applyBrackets()}[${tr.uboundCS}:0]"
-        else s"{{(${tr.refCodeString}-${fr.refCodeString}){1'b0}}, $relValStr}"
+        if (printer.allowWidthCastSyntax)
+          s"${tr.refCodeString.applyBrackets()}'($relValStr)"
+        else
+          if (tWidth < fWidth) s"`TRUNCATE($relValStr, ${tr.refCodeString})"
+          else
+            s"`EXTEND_U($relValStr, ${fr.refCodeString}, ${tr.refCodeString})"
       case (t, DFOpaque(actualType = ot)) if ot =~ t =>
         relValStr
       case (DFOpaque(_, _, _, _), _) =>
         relValStr
       case (DFUInt(tr @ Int(tWidth)), DFUInt(fr @ Int(fWidth))) =>
-        if (tWidth == fWidth) relValStr
-        else if (tWidth < fWidth) s"${relValStr.applyBrackets()}[${tr.uboundCS}:0]"
-        else s"{{(${tr.refCodeString}-${fr.refCodeString}){1'b0}}, $relValStr}"
+        if (printer.allowWidthCastSyntax)
+          s"${tr.refCodeString.applyBrackets()}'($relValStr)"
+        else
+          if (tWidth < fWidth) s"`TRUNCATE($relValStr, ${tr.refCodeString})"
+          else
+            s"`EXTEND_U($relValStr, ${fr.refCodeString}, ${tr.refCodeString})"
       case (DFUInt(tWidthParamRef), DFInt32) =>
         if (printer.allowWidthCastSyntax)
           s"${tWidthParamRef.refCodeString.applyBrackets()}'($relValStr)"
@@ -263,10 +269,16 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
         if (printer.allowWidthCastSyntax)
           s"${tWidthParamRef.refCodeString.applyBrackets()}'($relValStr)"
         else relValStr
-      case (DFSInt(tWidthParamRef), DFSInt(_)) =>
+      case (DFSInt(tr @ Int(tWidth)), DFSInt(fr @ Int(fWidth))) =>
         if (printer.allowWidthCastSyntax)
-          s"${tWidthParamRef.refCodeString.applyBrackets()}'($relValStr)"
-        else s"{$relValStr}[${tWidthParamRef.refCodeString.applyBrackets()} - 1:0]"
+          s"${tr.refCodeString.applyBrackets()}'($relValStr)"
+        else
+          if (tWidth < fWidth) s"`TRUNCATE($relValStr, ${tr.refCodeString})"
+          else
+            if (printer.allowSignedKeywordAndOps)
+              s"`EXTEND_S($relValStr, ${fr.refCodeString}, ${tr.refCodeString})"
+            else
+              s"`EXTEND_S_V95($relValStr, ${fr.refCodeString}, ${tr.refCodeString})"
       case (DFInt32, DFUInt(_) | DFSInt(_))               => relValStr
       case (DFBit, DFBool | DFEnum(widthParam = 1))       => relValStr
       case (DFBool, DFBit | DFEnum(widthParam = 1))       => relValStr

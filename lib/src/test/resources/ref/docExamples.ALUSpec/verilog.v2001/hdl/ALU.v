@@ -19,8 +19,8 @@ module ALU(
       `ALUSel_AND: aluOut = op1 & op2;
       `ALUSel_OR: aluOut = op1 | op2;
       `ALUSel_XOR: aluOut = op1 ^ op2;
-      `ALUSel_SLT: aluOut = {{(32-1){1'b0}}, {$signed(op1) < $signed(op2)}};
-      `ALUSel_SLTU: aluOut = {{(32-1){1'b0}}, {op1 < op2}};
+      `ALUSel_SLT: aluOut = `EXTEND_U({$signed(op1) < $signed(op2)}, 1, 32);
+      `ALUSel_SLTU: aluOut = `EXTEND_U({op1 < op2}, 1, 32);
       `ALUSel_SLL: aluOut = op1 << shamt;
       `ALUSel_SRL: aluOut = op1 >> shamt;
       `ALUSel_SRA: aluOut = {$signed(op1) >>> shamt};

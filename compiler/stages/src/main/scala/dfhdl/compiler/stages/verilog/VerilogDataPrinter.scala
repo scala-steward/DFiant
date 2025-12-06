@@ -45,15 +45,23 @@ protected trait VerilogDataPrinter extends AbstractDataPrinter:
       if (value.isValidInt && allowWidthCastSyntax) s"""${csWidth}'($value)"""
       else
         val actualWidth = value.bitsWidth(true)
-        if (allowWidthCastSyntax)
+        if (allowWidthCastSyntax && printer.allowSignedKeywordAndOps)
           if (value >= 0) s"""${csWidth}'($actualWidth'sd$value)"""
           else s"""${csWidth}'(-$actualWidth'sd${-value})"""
-        else if (value >= 0)
-          s"`dPW($value, $actualWidth, $csWidth)"
+        else if (printer.allowSignedKeywordAndOps)
+          if (value >= 0) s"`sdPPW($value, $actualWidth, $csWidth)"
+          else s"`sdNPW(${-value}, $actualWidth, $csWidth)"
         else
-          s"`sdPW(${-value}, $actualWidth, $csWidth)"
-    else if (value >= 0) s"""$csWidth'sd$value"""
-    else s"""-$csWidth'sd${-value}"""
+          if (value >= 0) s"`dPW($value, $actualWidth, $csWidth)"
+          else s"`sdNPW_V95(${-value}, $actualWidth, $csWidth)"
+    else
+      if (printer.allowSignedKeywordAndOps)
+        if (value >= 0) s"""$csWidth'sd$value"""
+        else s"""-$csWidth'sd${-value}"""
+      else
+        if (value >= 0) s"""$csWidth'd$value"""
+        else s"""-$csWidth'd${-value}"""
+    end if
   end csDFSIntFormatBig
   def csDFUIntFormatSmall(value: BigInt, width: Int): String =
     csDFUIntFormatBig(value, IntParamRef(width))

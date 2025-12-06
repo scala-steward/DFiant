@@ -1176,7 +1176,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |  parameter [4:0] param4 = 5'd22;
          |  parameter [23:0] param5 = 24'habc123;
          |  parameter [5:0] param6 = 6'h2a;
-         |  parameter [4:0] param7 = -5'sd11;
+         |  parameter [4:0] param7 = -5'd11;
          |  parameter param8 = 1'b1;
          |  parameter param9 = 0;
          |  parameter [1:0] param10 = `MyEnum_A;
