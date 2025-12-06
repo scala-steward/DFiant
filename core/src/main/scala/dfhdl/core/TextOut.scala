@@ -2,6 +2,8 @@ package dfhdl.core
 import dfhdl.compiler.ir
 import ir.TextOut.Severity
 import scala.quoted.*
+import dfhdl.internals.*
+
 object TextOut:
   def apply(
       op: ir.TextOut.Op,
@@ -160,7 +162,12 @@ object TextOut:
             case _ =>
               msgPartsExpr = '{ List(${ msg }.toString) }
       end match
-      '{ TextOut($op, $msgPartsExpr, $msgArgsExpr)(using $dfc) }
+      '{
+        trydf { TextOut($op, $msgPartsExpr, $msgArgsExpr)(using $dfc) }(using
+          $dfc,
+          CTName(${ Expr(op.toString) })
+        )
+      }
     end textOutMacro
   end Ops
 end TextOut
