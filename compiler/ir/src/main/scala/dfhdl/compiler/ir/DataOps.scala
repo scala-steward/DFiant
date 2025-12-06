@@ -12,6 +12,10 @@ def dataConversion[TT <: DFType, FT <: DFType](toType: TT, fromType: FT)(
     case (DFSInt(Int(tWidth)), DFUInt(Int(fWidth))) =>
       assert(tWidth == fWidth + 1)
       fromData
+    // signed to unsigned conversion
+    case (DFUInt(Int(tWidth)), DFSInt(Int(fWidth))) =>
+      assert(tWidth == fWidth - 1)
+      fromData
     // Double to Bits conversion
     case (DFBits(Int(tWidth)), DFDouble) =>
       assert(tWidth == 64)

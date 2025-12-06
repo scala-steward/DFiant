@@ -296,6 +296,9 @@ protected trait DFValPrinter extends AbstractValPrinter:
       case (DFSInt(Int(tWidth)), DFUInt(Int(fWidth))) =>
         assert(tWidth == fWidth + 1)
         s"${relValStr}.signed"
+      case (DFUInt(Int(tWidth)), DFSInt(Int(fWidth))) =>
+        assert(tWidth == fWidth - 1)
+        s"${relValStr}.unsigned"
       case (DFUInt(Int(tWidth)), DFBits(Int(fWidth))) =>
         assert(tWidth == fWidth)
         s"${relValStr}.uint"

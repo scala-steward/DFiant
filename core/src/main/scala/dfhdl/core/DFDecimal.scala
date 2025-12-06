@@ -1441,6 +1441,9 @@ object DFSInt:
             (lhs.widthIntParam - 1).toDFConst
           }
           DFVal.Alias.ApplyIdx(DFBit, lhs, idx).asValTP[DFBit, P]
+        def unsigned(using DFCG): DFValTP[DFUInt[IntP.-[W, 1]], P] = trydf {
+          DFVal.Alias.AsIs(DFUInt(lhs.widthIntParam - 1), lhs)
+        }
       extension [P](lhs: DFValTP[DFInt32, P])
         @targetName("negateDFInt32")
         def unary_-(using DFCG): DFValTP[DFInt32, P] = trydf {

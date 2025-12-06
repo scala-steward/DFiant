@@ -188,10 +188,13 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
     val fromType = relVal.dfType
     val toType = dfVal.dfType
     (toType, fromType) match
-      case (t, f) if t == f                           => relValStr
-      case (DFSInt(Int(tWidth)), DFUInt(Int(fWidth))) =>
+      case (t, f) if t == f                                => relValStr
+      case (DFSInt(tr @ Int(tWidth)), DFUInt(Int(fWidth))) =>
         assert(tWidth == fWidth + 1)
-        s"signed($relValStr)"
+        s"signed(resize($relValStr, ${tr.refCodeString}))"
+      case (DFUInt(tr @ Int(tWidth)), DFSInt(Int(fWidth))) =>
+        assert(tWidth == fWidth - 1)
+        s"unsigned(resize($relValStr, ${tr.refCodeString}))"
       case (DFBits(tWidthParamRef), DFBits(_)) =>
         s"resize($relValStr, ${tWidthParamRef.refCodeString})"
       case (toType: DFType, fromType: DFBits) =>
