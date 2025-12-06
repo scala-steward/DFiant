@@ -27,17 +27,17 @@
 `define MAX(a, b) ((a) > (b) ? (a) : (b))
 `define MIN(a, b) ((a) < (b) ? (a) : (b))
 `define ABS(a) ((a) < 0 ? -a : a)
-`define TO_VEC_HEX(hex, hw, vw) \
+`define hPW(hex, hw, vw) \
     /* verilator lint_off WIDTH */ \
     (vw == hw ? hw'h``hex : {{(vw - hw){1'b0}}, hw'h``hex}) \
     /* verilator lint_on WIDTH */
-`define TO_UNSIGNED(n, nw, vw) \
+`define dPW(dec, dw, vw) \
     /* verilator lint_off WIDTH */ \
-    (vw == nw ? nw'd``n : {{(vw - nw){1'b0}}, nw'd``n}) \
+    (vw == dw ? dw'd``dec : {{(vw - dw){1'b0}}, dw'd``dec}) \
     /* verilator lint_on WIDTH */
-`define TO_SIGNED_NEG(n, nw, vw) \
+`define sdPW(dec, dw, vw) \
     /* verilator lint_off WIDTH */ \
-    (vw == nw ? -nw'd``n : {{(vw - nw){1'b1}}, -nw'd``n}) \
+    (vw == dw ? -dw'd``dec : {{(vw - dw){1'b1}}, -dw'd``dec}) \
     /* verilator lint_on WIDTH */
 `define SIGNED_GREATER_THAN(a, b, width)  \
     ((a[width-1] && !b[width-1]) ? 1'b0 : /* a is negative, b is positive */ \

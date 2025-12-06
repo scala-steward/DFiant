@@ -21,7 +21,10 @@ protected trait VerilogDataPrinter extends AbstractDataPrinter:
   def csDFBitsHexFormat(hexRep: String, actualWidth: Int, width: IntParamRef): String =
     val csWidth = width.refCodeString.applyBrackets()
     if (width.isRef)
-      s"`TO_VEC_HEX($hexRep, $actualWidth, $csWidth)"
+      if (allowWidthCastSyntax)
+        s"""${csWidth}'(${actualWidth}'h$hexRep)"""
+      else
+        s"`hPW($hexRep, $actualWidth, $csWidth)"
     else s"""${csWidth}'h$hexRep"""
   def csDFBoolFormat(value: Boolean): String = if (value) "1" else "0"
   def csDFBitFormat(bitRep: String): String = csDFBitsBinFormat(bitRep)
@@ -34,7 +37,7 @@ protected trait VerilogDataPrinter extends AbstractDataPrinter:
         if (allowWidthCastSyntax)
           s"""${csWidth}'(${actualWidth}'d$value)"""
         else
-          s"`TO_UNSIGNED($value, $actualWidth, $csWidth)"
+          s"`dPW($value, $actualWidth, $csWidth)"
     else s"""${csWidth}'d$value"""
   def csDFSIntFormatBig(value: BigInt, width: IntParamRef): String =
     val csWidth = width.refCodeString.applyBrackets()
@@ -46,9 +49,9 @@ protected trait VerilogDataPrinter extends AbstractDataPrinter:
           if (value >= 0) s"""${csWidth}'($actualWidth'sd$value)"""
           else s"""${csWidth}'(-$actualWidth'sd${-value})"""
         else if (value >= 0)
-          s"`TO_UNSIGNED($value, $actualWidth, $csWidth)"
+          s"`dPW($value, $actualWidth, $csWidth)"
         else
-          s"`TO_SIGNED_NEG(${-value}, $actualWidth, $csWidth)"
+          s"`sdPW(${-value}, $actualWidth, $csWidth)"
     else if (value >= 0) s"""$csWidth'sd$value"""
     else s"""-$csWidth'sd${-value}"""
   end csDFSIntFormatBig
