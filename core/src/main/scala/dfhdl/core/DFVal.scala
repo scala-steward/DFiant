@@ -784,6 +784,8 @@ object DFVal extends DFValLP:
           relVal: DFVal[VT, M],
           forceNewAlias: Boolean = false
       )(using dfc: DFC): DFVal[AT, M] =
+        import dfc.getSet
+        import ir.unapply
         relVal.asIR match
           // anonymous constant are replaced by a different constant
           // after its data value was converted according to the alias
@@ -791,7 +793,7 @@ object DFVal extends DFValLP:
               if (const.isAnonymous || relVal.inDFCPosition) && !forceNewAlias =>
             val updatedData = ir.dataConversion(aliasType.asIR, const.dfType)(
               const.data.asInstanceOf[const.dfType.Data]
-            )(using dfc.getSet)
+            )
             dfc.mutableDB.setMember(
               const,
               _.copy(
@@ -804,12 +806,24 @@ object DFVal extends DFValLP:
           case asIs: ir.DFVal.Alias.AsIs
               if aliasType.asIR.isInstanceOf[ir.DFBits] && asIs.isAnonymous &&
                 dfc.isAnonymous && !forceNewAlias && asIs.tags.isEmpty =>
-            import dfc.getSet
             asIs.relValRef.get.asVal[AT, M]
+          // remove redundant intermediate casting converting from BoolOrBit to Bits to UInt/SInt + resize
+          case asIs @ ir.DFVal.Alias.AsIs(
+                dfType = ir.DFBits(Int(1)) | ir.DFUInt(_) | ir.DFSInt(_),
+                relValRef = ir.DFRef(ir.DFBoolOrBit.Val(deepRelVal))
+              ) if asIs.isAnonymous && !forceNewAlias =>
+            dfc.mutableDB.setMember(
+              asIs,
+              _.copy(
+                dfType = aliasType.asIR.dropUnreachableRefs,
+                meta = dfc.getMeta
+              )
+            ).asVal[AT, M]
           // named constants or other non-constant values are referenced
           // in a new alias construct
           case _ =>
             forced(aliasType.asIR, relVal.anonymizeInDFCPosition.asIR).asVal[AT, M]
+        end match
       end apply
       def forced(aliasType: ir.DFType, relVal: ir.DFVal)(using DFC): ir.DFVal =
         val alias: ir.DFVal.Alias.AsIs =

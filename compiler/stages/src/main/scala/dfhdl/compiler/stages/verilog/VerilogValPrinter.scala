@@ -279,6 +279,20 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
               s"`EXTEND_S($relValStr, ${fr.refCodeString}, ${tr.refCodeString})"
             else
               s"`EXTEND_S_V95($relValStr, ${fr.refCodeString}, ${tr.refCodeString})"
+      case (DFUInt(tWidthParamRef), DFBit | DFBool) =>
+        if (printer.allowWidthCastSyntax)
+          s"${tWidthParamRef.refCodeString.applyBrackets()}'($relValStr)"
+        else
+          s"`EXTEND_U($relValStr, 1, ${tWidthParamRef.refCodeString})"
+      case (DFSInt(tWidthParamRef), DFBit | DFBool) =>
+        val extended =
+          if (printer.allowWidthCastSyntax)
+            s"${tWidthParamRef.refCodeString.applyBrackets()}'($relValStr)"
+          else
+            s"`EXTEND_U($relValStr, 1, ${tWidthParamRef.refCodeString})"
+        if (printer.allowSignedKeywordAndOps)
+          s"$$signed($extended)"
+        else extended
       case (DFInt32, DFUInt(_) | DFSInt(_))               => relValStr
       case (DFBit, DFBool | DFEnum(widthParam = 1))       => relValStr
       case (DFBool, DFBit | DFEnum(widthParam = 1))       => relValStr

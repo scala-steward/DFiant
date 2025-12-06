@@ -332,6 +332,10 @@ protected trait DFValPrinter extends AbstractValPrinter:
         s"""sd"${printer.csWidthInterp(tWidthParamRef)}'$${${relValStr}}""""
       case (DFInt32, DFUInt(_) | DFSInt(_)) =>
         s"${relValStr}.toInt"
+      case (DFUInt(tWidthParamRef), DFBit | DFBool) =>
+        s"${relValStr}.toUInt(${tWidthParamRef.refCodeString})"
+      case (DFSInt(tWidthParamRef), DFBit | DFBool) =>
+        s"${relValStr}.toSInt(${tWidthParamRef.refCodeString})"
       case (DFNumber, DFInt32 | DFDouble) =>
         s"${relValStr}.toNumber"
       case (DFInt32, DFNumber) =>

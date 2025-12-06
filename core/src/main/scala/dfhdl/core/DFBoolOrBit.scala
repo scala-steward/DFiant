@@ -77,11 +77,25 @@ object DFBoolOrBit:
           b2b(dfType, arg)
 
     object Ops:
+      import DFDecimal.Constraints
       extension [P](lhs: DFValTP[DFBoolOrBit, P])
         def toScalaBoolean(using DFC, DFVal.ConstCheck[P]): Boolean =
           lhs.toScalaValue
         def toScalaBitNum(using DFC, DFVal.ConstCheck[P]): BitNum =
           if (lhs.toScalaBoolean) 1 else 0
+        def toUInt[W <: IntP](width: IntParam[W])(using
+            DFCG,
+            Constraints.Width.CheckNUB[false, W]
+        ): DFValTP[DFUInt[W], P] = trydf {
+          DFVal.Alias.AsIs(DFUInt(width), lhs)
+        }
+        def toSInt[W <: IntP](width: IntParam[W])(using
+            DFCG,
+            Constraints.Width.CheckNUB[true, W]
+        ): DFValTP[DFSInt[W], P] = trydf {
+          DFVal.Alias.AsIs(DFSInt(width), lhs)
+        }
+      end extension
       extension [P](lhs: DFValTP[DFBit, P])
         def rising(using DFC): DFValOf[DFBool] = trydf {
           DFVal.Func(DFBool, FuncOp.rising, List(lhs))

@@ -71,6 +71,10 @@ function to_string(A : std_logic) return string;
 function to_string(A : std_logic_vector) return string;
 function max(A, B : integer) return integer;
 function min(A, B : integer) return integer;
+function to_unsigned(A : boolean; length : integer) return unsigned;
+function to_signed(A : boolean; length : integer) return signed;
+function to_unsigned(A : std_logic; length : integer) return unsigned;
+function to_signed(A : std_logic; length : integer) return signed;
 end package dfhdl_pkg;
 
 package body dfhdl_pkg is
@@ -378,5 +382,21 @@ begin
     else
         return B;
     end if;
+end;
+function to_unsigned(A : boolean; length : integer) return unsigned is
+begin
+  return unsigned(resize(to_slv(A), length));
+end;
+function to_signed(A : boolean; length : integer) return signed is
+begin
+  return signed(resize(to_slv(A), length));
+end;
+function to_unsigned(A : std_logic; length : integer) return unsigned is
+begin
+  return unsigned(resize(to_slv(A), length));
+end;
+function to_signed(A : std_logic; length : integer) return signed is
+begin
+  return signed(resize(to_slv(A), length));
 end;
 end package body dfhdl_pkg;

@@ -221,6 +221,10 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
         s"to_unsigned($relValStr, ${tWidthParamRef.refCodeString})"
       case (DFSInt(tWidthParamRef), DFInt32) =>
         s"to_signed($relValStr, ${tWidthParamRef.refCodeString})"
+      case (DFUInt(tWidthParamRef), DFBit | DFBool) =>
+        s"to_unsigned($relValStr, ${tWidthParamRef.refCodeString})"
+      case (DFSInt(tWidthParamRef), DFBit | DFBool) =>
+        s"to_signed($relValStr, ${tWidthParamRef.refCodeString})"
       case (DFInt32, DFUInt(_) | DFSInt(_)) =>
         s"to_integer($relValStr)"
       case _ => printer.unsupported

@@ -55,6 +55,9 @@ def dataConversion[TT <: DFType, FT <: DFType](toType: TT, fromType: FT)(
     case (_, DFBits(Int(fWidth))) =>
       assert(fWidth == toType.width)
       toType.bitsDataToData(fromData.asInstanceOf[(BitVector, BitVector)])
+    // Casting from BoolOrBit to UInt/SInt
+    case (DFUInt(_) | DFSInt(_), DFBit | DFBool) =>
+      fromData.asInstanceOf[Option[Boolean]].map(if (_) BigInt(1) else BigInt(0))
     case (DFInt32, DFNumber) =>
       Some(fromData.asInstanceOf[DFNumber.Data].value.toBigInt)
     case (DFDouble, DFNumber) =>
