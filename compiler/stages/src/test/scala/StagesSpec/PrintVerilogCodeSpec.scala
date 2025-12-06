@@ -1489,7 +1489,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |  output logic signed [7:0] y
          |);
          |  `include "dfhdl_defs.svh"
-         |  assign y = $abs(x);
+         |  assign y = `ABS(x);
          |endmodule""".stripMargin
     )
   }

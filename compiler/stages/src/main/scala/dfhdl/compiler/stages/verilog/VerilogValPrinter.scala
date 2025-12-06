@@ -185,10 +185,8 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
           case Func.Op.&       => s"&$argStrB"
           case Func.Op.|       => s"|$argStrB"
           case Func.Op.^       => s"^$argStrB"
-          case Func.Op.abs     =>
-            if (allowNativeMathFunctions && !dfVal.isConst) s"$$abs($argStr)"
-            else s"`ABS($argStr)"
-          case Func.Op.clog2 =>
+          case Func.Op.abs     => s"`ABS($argStr)"
+          case Func.Op.clog2   =>
             val internalLog = printer.dialect match
               case VerilogDialect.v95 | VerilogDialect.v2001 => ""
               case _                                         => "$"
