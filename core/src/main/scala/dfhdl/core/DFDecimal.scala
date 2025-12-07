@@ -1286,6 +1286,7 @@ object DFUInt:
       dfc: DFCG,
       check: Arg.LargerThan1.CheckNUB[V]
   ): DFUInt[IntP.CLog2[V]] = trydf {
+    check(sup)
     DFXInt(false, sup.clog2, BitAccurate)
   }
   def to[V <: IntP](max: IntParam[V])(using
@@ -1427,6 +1428,20 @@ object DFSInt:
   def forced[W <: IntP](width: IntP)(using DFC): DFSInt[W] =
     DFSInt(IntParam[W](width.asInstanceOf[W]))
   def apply[W <: IntP](using dfc: DFCG, dfType: => DFSInt[W]): DFSInt[W] = trydf { dfType }
+  def untilAbs[V <: IntP](sup: IntParam[V])(using
+      dfc: DFCG,
+      check: Arg.LargerThan1.CheckNUB[V]
+  ): DFSInt[IntP.+[IntP.CLog2[V], 1]] = trydf {
+    check(sup)
+    DFXInt(true, sup.clog2 + 1, BitAccurate)
+  }
+  def toAbs[V <: IntP](max: IntParam[V])(using
+      dfc: DFCG,
+      check: Arg.Positive.CheckNUB[V]
+  ): DFSInt[IntP.+[IntP.CLog2[IntP.+[V, 1]], 1]] = trydf {
+    check(max)
+    DFXInt(true, (max + 1).clog2 + 1, BitAccurate)
+  }
 
   object Val:
     object Ops:

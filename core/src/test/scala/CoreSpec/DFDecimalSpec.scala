@@ -38,6 +38,10 @@ class DFDecimalSpec extends DFSpec:
   val until9 = UInt.until(9)
   val max7 = UInt.to(7)
   val max8 = UInt.to(8)
+  val s_until8 = SInt.untilAbs(8)
+  val s_until9 = SInt.untilAbs(9)
+  val s_max7 = SInt.toAbs(7)
+  val s_max8 = SInt.toAbs(8)
   test("Inlined width") {
     u7.verifyWidth(7)
     s5.verifyWidth(5)
@@ -45,6 +49,10 @@ class DFDecimalSpec extends DFSpec:
     until9.verifyWidth(4)
     max7.verifyWidth(3)
     max8.verifyWidth(4)
+    s_until8.verifyWidth(4)
+    s_until9.verifyWidth(5)
+    s_max7.verifyWidth(4)
+    s_max8.verifyWidth(5)
   }
   test("DFVal Conversion") {
     assertCodeString {
