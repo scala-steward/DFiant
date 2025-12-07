@@ -200,6 +200,8 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
       case (toType: DFType, fromType: DFBits) =>
         assert(toType.width == fromType.width)
         csBitsToType(toType, relValStr)
+      case (DFBits(tWidthParamRef), DFBit | DFBool) =>
+        s"to_slv($relValStr, ${tWidthParamRef.refCodeString})"
       case (DFBits(Int(tWidth)), fromType: DFType) =>
         assert(tWidth == fromType.width)
         csToSLV(fromType, relValStr)

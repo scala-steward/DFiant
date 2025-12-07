@@ -83,6 +83,12 @@ object DFBoolOrBit:
           lhs.toScalaValue
         def toScalaBitNum(using DFC, DFVal.ConstCheck[P]): BitNum =
           if (lhs.toScalaBoolean) 1 else 0
+        def toBits[W <: IntP](width: IntParam[W])(using
+            DFCG,
+            Constraints.Width.CheckNUB[false, W]
+        ): DFValTP[DFBits[W], P] = trydf {
+          DFVal.Alias.AsIs(DFBits(width), lhs)
+        }
         def toUInt[W <: IntP](width: IntParam[W])(using
             DFCG,
             Constraints.Width.CheckNUB[false, W]

@@ -40,6 +40,8 @@ function to_slv(A : signed) return std_logic_vector;
 function to_slv(A : integer) return std_logic_vector;
 function to_slv(A : boolean) return std_logic_vector;
 function to_slv(A : std_logic) return std_logic_vector;
+function to_slv(A : boolean; length : integer) return std_logic_vector;
+function to_slv(A : std_logic; length : integer) return std_logic_vector;
 function to_sl(A : boolean) return std_logic;
 function to_sl(A : std_logic_vector(0 downto 0)) return std_logic;
 function to_bool(A : std_logic) return boolean;
@@ -131,6 +133,14 @@ begin
   else
     return "0";
   end if;
+end;
+function to_slv(A : boolean; length : integer) return std_logic_vector is
+begin
+  return resize(to_slv(A), length);
+end;
+function to_slv(A : std_logic; length : integer) return std_logic_vector is
+begin
+  return resize(to_slv(A), length);
 end;
 function to_sl(A : boolean) return std_logic is
 begin

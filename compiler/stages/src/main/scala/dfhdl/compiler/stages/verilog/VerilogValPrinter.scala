@@ -336,6 +336,11 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
         end from_vector_conv
         assert(tWidth == fromType.width)
         from_vector_conv(fromVector, "")
+      case (DFBits(tWidthParamRef), DFBit | DFBool) =>
+        if (printer.allowWidthCastSyntax)
+          s"${tWidthParamRef.refCodeString.applyBrackets()}'($relValStr)"
+        else
+          s"`EXTEND_U($relValStr, 1, ${tWidthParamRef.refCodeString})"
       case (DFBits(Int(tWidth)), _) =>
         assert(tWidth == fromType.width)
         s"{$relValStr}"

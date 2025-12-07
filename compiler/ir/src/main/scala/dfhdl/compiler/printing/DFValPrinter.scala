@@ -307,6 +307,8 @@ protected trait DFValPrinter extends AbstractValPrinter:
         s"${relValStr}.sint"
       case (DFBits(tWidthParamRef), DFBits(_)) =>
         s"${relValStr}.resize(${tWidthParamRef.refCodeString})"
+      case (DFBits(tWidthParamRef), DFBit | DFBool) =>
+        s"${relValStr}.toBits(${tWidthParamRef.refCodeString})"
       case (DFBits(Int(tWidth)), _) =>
         assert(tWidth == fromType.width)
         s"${relValStr}.bits"

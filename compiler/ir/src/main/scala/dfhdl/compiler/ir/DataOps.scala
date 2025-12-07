@@ -47,6 +47,11 @@ def dataConversion[TT <: DFType, FT <: DFType](toType: TT, fromType: FT)(
     case (DFInt32, DFUInt(Int(fWidth))) =>
       assert(fWidth <= 31)
       fromData
+    // Conversion from BoolOrBit to Bits
+    case (DFBits(Int(tWidth)), DFBit | DFBool) =>
+      fromData.asInstanceOf[Option[Boolean]]
+        .map(x => (BitVector.bit(x).resize(tWidth), BitVector.low(tWidth)))
+        .getOrElse((BitVector.low(tWidth), BitVector.high(tWidth)))
     // Casting from any data to Bits
     case (DFBits(Int(tWidth)), _) =>
       assert(tWidth == fromType.width)

@@ -807,9 +807,9 @@ object DFVal extends DFValLP:
               if aliasType.asIR.isInstanceOf[ir.DFBits] && asIs.isAnonymous &&
                 dfc.isAnonymous && !forceNewAlias && asIs.tags.isEmpty =>
             asIs.relValRef.get.asVal[AT, M]
-          // remove redundant intermediate casting converting from BoolOrBit to Bits to UInt/SInt + resize
+          // remove redundant intermediate casting converting from BoolOrBit to Bits/UInt/SInt + resize
           case asIs @ ir.DFVal.Alias.AsIs(
-                dfType = ir.DFBits(Int(1)) | ir.DFUInt(_) | ir.DFSInt(_),
+                dfType = ir.DFBits(_) | ir.DFUInt(_) | ir.DFSInt(_),
                 relValRef = ir.DFRef(ir.DFBoolOrBit.Val(deepRelVal))
               ) if asIs.isAnonymous && !forceNewAlias =>
             dfc.mutableDB.setMember(

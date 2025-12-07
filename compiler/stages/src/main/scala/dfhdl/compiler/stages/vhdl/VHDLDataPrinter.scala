@@ -34,7 +34,8 @@ protected trait VHDLDataPrinter extends AbstractDataPrinter:
   def csDFUIntFormatBig(value: BigInt, width: IntParamRef): String =
     if (allowDecimalSyntax)
       if (width.isRef)
-        s"""resize(d"$value", ${width.refCodeString})"""
+        val actualWidth = value.bitsWidth(true)
+        s"""resize(${actualWidth}d"$value", ${width.refCodeString})"""
       else
         s"""${width.refCodeString.applyBrackets()}d"$value""""
     else
@@ -44,8 +45,9 @@ protected trait VHDLDataPrinter extends AbstractDataPrinter:
   def csDFSIntFormatBig(value: BigInt, width: IntParamRef): String =
     if (allowDecimalSyntax)
       if (width.isRef)
-        if (value >= 0) s"""resize(d"$value", ${width.refCodeString})"""
-        else s"""resize(-d"${-value}", ${width.refCodeString})"""
+        val actualWidth = value.bitsWidth(true)
+        if (value >= 0) s"""resize(${actualWidth}d"$value", ${width.refCodeString})"""
+        else s"""resize(-${actualWidth}d"${-value}", ${width.refCodeString})"""
       else
         val csWidth = width.refCodeString.applyBrackets()
         if (value >= 0) s"""${csWidth}d"$value""""

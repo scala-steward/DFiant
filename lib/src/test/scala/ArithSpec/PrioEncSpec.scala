@@ -25,7 +25,7 @@ class PrioEncSpec extends DesignSpec:
          |  val selPrio: Bits[1] <> VAL =
          |    if (msPrio._1) msPrio._2
          |    else lsPrio._2
-         |  (msPrio._1 || lsPrio._1, (msPrio._1.bits, selPrio).toBits)
+         |  (msPrio._1 || lsPrio._1, (msPrio._1.toBits(1), selPrio).toBits)
          |end prioEncRecur_1
          |
          |@hw.annotation.pure
@@ -35,7 +35,7 @@ class PrioEncSpec extends DesignSpec:
          |  val selPrio: Bits[2] <> VAL =
          |    if (msPrio._1) msPrio._2
          |    else lsPrio._2
-         |  (msPrio._1 || lsPrio._1, (msPrio._1.bits, selPrio).toBits)
+         |  (msPrio._1 || lsPrio._1, (msPrio._1.toBits(1), selPrio).toBits)
          |end prioEncRecur_2
          |
          |@hw.annotation.pure
@@ -45,7 +45,7 @@ class PrioEncSpec extends DesignSpec:
          |  val selPrio: Bits[3] <> VAL =
          |    if (msPrio._1) msPrio._2
          |    else lsPrio._2
-         |  (msPrio._1 || lsPrio._1, (msPrio._1.bits, selPrio).toBits)
+         |  (msPrio._1 || lsPrio._1, (msPrio._1.toBits(1), selPrio).toBits)
          |end prioEncRecur_3
          |
          |@hw.annotation.pure
@@ -55,7 +55,7 @@ class PrioEncSpec extends DesignSpec:
          |  val selPrio: Bits[4] <> VAL =
          |    if (msPrio._1) msPrio._2
          |    else lsPrio._2
-         |  (msPrio._1 || lsPrio._1, (msPrio._1.bits, selPrio).toBits)
+         |  (msPrio._1 || lsPrio._1, (msPrio._1.toBits(1), selPrio).toBits)
          |end prioEncRecur_4
          |
          |class PrioTest extends DFDesign:
@@ -85,7 +85,7 @@ class PrioEncSpec extends DesignSpec:
          |  val selPrio: Bits[1] <> VAL =
          |    if (msPrio._1) msPrio._2
          |    else lsPrio._2
-         |  (msPrio._1 || lsPrio._1, (msPrio._1.bits, selPrio).toBits)
+         |  (msPrio._1 || lsPrio._1, (msPrio._1.toBits(1), selPrio).toBits)
          |end prioEncRecur_1
          |
          |@hw.annotation.pure
@@ -95,7 +95,7 @@ class PrioEncSpec extends DesignSpec:
          |  val selPrio: Bits[2] <> VAL =
          |    if (msPrio._1) msPrio._2
          |    else lsPrio._2
-         |  (msPrio._1 || lsPrio._1, (msPrio._1.bits, selPrio).toBits)
+         |  (msPrio._1 || lsPrio._1, (msPrio._1.toBits(1), selPrio).toBits)
          |end prioEncRecur_2
          |
          |@hw.annotation.pure
@@ -105,7 +105,7 @@ class PrioEncSpec extends DesignSpec:
          |  val selPrio: Bits[3] <> VAL =
          |    if (msPrio._1) msPrio._2
          |    else lsPrio._2
-         |  (msPrio._1 || lsPrio._1, (msPrio._1.bits, selPrio).toBits)
+         |  (msPrio._1 || lsPrio._1, (msPrio._1.toBits(1), selPrio).toBits)
          |end prioEncRecur_3
          |
          |@hw.annotation.pure
@@ -115,7 +115,7 @@ class PrioEncSpec extends DesignSpec:
          |  val selPrio: Bits[4] <> VAL =
          |    if (msPrio._1) msPrio._2
          |    else lsPrio._2
-         |  (msPrio._1 || lsPrio._1, (msPrio._1.bits, selPrio).toBits)
+         |  (msPrio._1 || lsPrio._1, (msPrio._1.toBits(1), selPrio).toBits)
          |end prioEncRecur_4
          |
          |class PrioTest extends DFDesign:
