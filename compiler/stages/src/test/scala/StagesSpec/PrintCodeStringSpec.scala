@@ -845,9 +845,11 @@ class PrintCodeStringSpec extends StageSpec:
       val up1: UInt[8] <> CONST = 11
       val up2: UInt[8] <> CONST = 22
       val up3: UInt[8] <> CONST = cp.sel(up1, up2)
+      val up4: Boolean <> CONST = cp.sel(up1, up2) == up3
       y1 := c.sel(x1, x2)
       y1 := c.sel(x1, all(0))
       y1 := c.sel(all(0), x2)
+      val zz = x2 != c.sel(x1, x2)
     val id = (new SelOp).getCodeString
     assertNoDiff(
       id,
@@ -860,9 +862,11 @@ class PrintCodeStringSpec extends StageSpec:
          |  val up1: UInt[8] <> CONST = d"8'11"
          |  val up2: UInt[8] <> CONST = d"8'22"
          |  val up3: UInt[8] <> CONST = cp.sel(up1, up2)
+         |  val up4: Boolean <> CONST = up3 == cp.sel(up1, up2)
          |  y1 := c.sel(x1, x2)
          |  y1 := c.sel(x1, h"00")
          |  y1 := c.sel(h"00", x2)
+         |  val zz = x2 != c.sel(x1, x2)
          |end SelOp
          |""".stripMargin
     )
