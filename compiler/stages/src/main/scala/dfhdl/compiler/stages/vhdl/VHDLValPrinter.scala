@@ -57,7 +57,6 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
         val opStr = dfVal.op match
           case Func.Op.===               => "="
           case Func.Op.=!=               => "/="
-          case Func.Op.>=                => "=>"
           case Func.Op.max | Func.Op.min =>
             infix = false
             dfVal.op.toString
