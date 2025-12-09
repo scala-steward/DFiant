@@ -53,21 +53,30 @@ type DFValTP[+T <: DFTypeAny, +P] = DFVal[T, Modifier[Any, Any, Any, P]]
 type DFVarOf[+T <: DFTypeAny] = DFVal[T, Modifier.Mutable]
 
 extension (using quotes: Quotes)(tpe: quotes.reflect.TypeRepr)
-  def isConstTpe: quotes.reflect.TypeRepr =
+  def isConstBool: Boolean =
     import quotes.reflect.*
-    def isConstBool(tpe: TypeRepr): Boolean = tpe.asType match
+    tpe.asType match
       case '[DFConstOf[t]]  => true
       case '[DFValOf[t]]    => false
       case '[NonEmptyTuple] =>
-        tpe.getTupleArgs.forall(isConstBool)
-      case '[SameElementsVector[t]]      => isConstBool(TypeRepr.of[t])
+        tpe.getTupleArgs.forall(_.isConstBool)
+      case '[SameElementsVector[t]]      => TypeRepr.of[t].isConstBool
       case '[BoolSelWrapper[sp, ot, of]] =>
-        List(TypeRepr.of[sp], TypeRepr.of[ot], TypeRepr.of[of]).forall(isConstBool)
+        List(TypeRepr.of[sp], TypeRepr.of[ot], TypeRepr.of[of]).forall(_.isConstBool)
       case '[DFVal.NOTHING] => false
       case _                => true
-    if (isConstBool(tpe)) TypeRepr.of[CONST]
+  def isConstTpe: quotes.reflect.TypeRepr =
+    import quotes.reflect.*
+    if (tpe.isConstBool) TypeRepr.of[CONST]
     else TypeRepr.of[NOTCONST]
 end extension
+
+inline def isConstCheck[T]: Boolean = ${ isConstCheckMacro[T] }
+def isConstCheckMacro[T](using Quotes, Type[T]): Expr[Boolean] =
+  import quotes.reflect.*
+  val tpe = TypeRepr.of[T]
+  if (tpe.isConstBool) Expr(true)
+  else Expr(false)
 
 extension (using quotes: Quotes)(term: quotes.reflect.Term)
   def getNonConstTerm: Option[quotes.reflect.Term] =
@@ -1221,7 +1230,8 @@ object DFVal extends DFValLP:
 
   object Ops:
     protected type SupportedValue =
-      DFValAny | Int | Long | Double | NonEmptyTuple | Iterable[DFValAny] | SameElementsVector[?]
+      DFValAny | Int | Long | Double | NonEmptyTuple | Iterable[DFValAny] |
+        SameElementsVector[?] | BoolSelWrapper[?, ?, ?]
     extension (inline lhs: DFValAny)
       transparent inline def apply(inline idx: Any)(using DFCG): DFValAny =
         exactOp2["apply", DFC, DFValAny](lhs, idx)

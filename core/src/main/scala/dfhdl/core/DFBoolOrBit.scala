@@ -154,10 +154,40 @@ object DFBoolOrBit:
         inline def &(rhs: Candidate.Exact)(using DFCG) = lhs && rhs
         def ^(rhs: Candidate.Exact)(using DFC): DFValTP[T, P | rhs.tc.OutP] =
           trydf { logicOp(lhs, rhs(), FuncOp.^, false) }
-        inline def sel[OT, OF](inline onTrue: OT, inline onFalse: OF)(using
+        transparent inline def sel[OT, OF](inline onTrue: OT, inline onFalse: OF)(using
             dfc: DFCG
-        ): BoolSelWrapper[P, OT, OF] = BoolSelWrapper[P, OT, OF](lhs, onTrue, onFalse)
-
+        ): Any =
+          inline val onTrueIsDFVal = inline compiletime.erasedValue[OT] match
+            case _: DFValAny => true
+            case _           => false
+          inline val onFalseIsDFVal = inline compiletime.erasedValue[OF] match
+            case _: DFValAny => true
+            case _           => false
+          inline if (onTrueIsDFVal)
+            inline onTrue match
+              case onTrueDFVal: DFValTP[tt, tp] =>
+                val tc = compiletime.summonInline[DFVal.TC[tt, OF]]
+                val dfType = onTrueDFVal.dfType
+                inline if (isConstCheck[OF])
+                  DFVal.Func(dfType, FuncOp.sel, List(lhs, onTrueDFVal, tc(dfType, onFalse)))
+                    .asValTP[tt, P | tp]
+                else
+                  DFVal.Func(dfType, FuncOp.sel, List(lhs, onTrueDFVal, tc(dfType, onFalse)))
+                    .asValOf[tt]
+          else if (onFalseIsDFVal)
+            inline onFalse match
+              case onFalseDFVal: DFValTP[ft, fp] =>
+                val tc = compiletime.summonInline[DFVal.TC[ft, OT]]
+                val dfType = onFalseDFVal.dfType
+                inline if (isConstCheck[OT])
+                  DFVal.Func(dfType, FuncOp.sel, List(lhs, tc(dfType, onTrue), onFalseDFVal))
+                    .asValTP[ft, P | fp]
+                else
+                  DFVal.Func(dfType, FuncOp.sel, List(lhs, tc(dfType, onTrue), onFalseDFVal))
+                    .asValOf[ft]
+          else
+            BoolSelWrapper[P, OT, OF](lhs, onTrue, onFalse)
+        end sel
       end extension
       extension [L](lhs: L)
         inline def ||[RT <: DFBoolOrBit, RP](
