@@ -1207,6 +1207,54 @@ object DFXInt:
           }(using dfc, CTName(op.value.toString))
       end evOpArithDFXInt
 
+      // TODO: this takes the RHS's width as the result type width. This is how VHDL behaves.
+      // But verilog requires the result type width to be the same as the LHS's width.
+      // The general rule that we apply in evOpArithDFXInt is to take the LHS's width and the RHS is also resized to the LHS's width.
+      // This approach always works, but then requires resizing if we require the actual (smaller) width of the result.
+      // However when compiling to verilog this creates linting warnings.
+      // given evOpModDFXInt[
+      //     Op <: FuncOp.%.type,
+      //     LS <: Boolean,
+      //     LW <: IntP,
+      //     LP,
+      //     L <: DFValTP[DFXInt[LS, LW, BitAccurate], LP],
+      //     R,
+      //     RS <: Boolean,
+      //     RW <: IntP,
+      //     RN <: NativeType,
+      //     RP,
+      //     RSM <: Boolean,
+      //     RWM <: IntP,
+      //     RI <: Boolean
+      // ](using
+      //     icR: Candidate.AuxMI[R, RS, RW, RN, RP, RSM, RWM, RI],
+      //     op: ValueOf[Op]
+      // )(using
+      //     check: AssertGiven[
+      //       (RP =:= CONST) | (RN =:= BitAccurate),
+      //       "The RHS argument of the modulo operation must be a constant DFHDL Int value or any SInt value."
+      //     ]
+      // ): ExactOp2Aux[Op, DFC, DFValAny, L, R, DFValTP[DFXInt[LS, RW, BitAccurate], LP | RP]] =
+      //   new ExactOp2[Op, DFC, DFValAny, L, R]:
+      //     type Out = DFValTP[DFXInt[LS, RW, BitAccurate], LP | RP]
+      //     def apply(lhs: L, rhs: R)(using dfc: DFC): Out = trydf {
+      //       given DFC = dfc.anonymize
+      //       val rhsVal = icR(rhs)
+      //       val rhsFix =
+      //         if (lhs.dfType.signed)
+      //           if (rhsVal.dfType.signed) rhsVal.toDFXIntOf(DFSInt(rhsVal.widthIntParam))
+      //           else rhsVal.toDFXIntOf(DFSInt(rhsVal.widthIntParam + 1))
+      //         else
+      //           if (rhsVal.dfType.signed) rhsVal.toDFXIntOf(DFSInt(rhsVal.widthIntParam))
+      //           else rhsVal.toDFXIntOf(DFUInt(rhsVal.widthIntParam))
+      //       DFVal.Func(
+      //         rhsFix.dfType,
+      //         op,
+      //         List(lhs, rhsFix)
+      //       )(using dfc).asValTP[DFXInt[LS, RW, BitAccurate], LP | RP]
+      //     }(using dfc, CTName(op.value.toString))
+      // end evOpModDFXInt
+
       extension [L <: Int](lhs: L)
         def +^[RS <: Boolean, RW <: IntP, RN <: NativeType, RP](
             rhs: DFValTP[DFXInt[RS, RW, RN], RP]
