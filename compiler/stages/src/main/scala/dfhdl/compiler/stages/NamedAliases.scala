@@ -83,6 +83,12 @@ case object NamedVerilogSelection extends NamedAliases:
         case _ => false
   end extension
   def criteria(dfVal: DFVal)(using getSet: MemberGetSet, co: CompilerOptions): List[DFVal] =
+    def isBasicVerilog = co.backend match
+      case be: dfhdl.backends.verilog =>
+        be.dialect match
+          case VerilogDialect.v95 | VerilogDialect.v2001 => true
+          case _                                         => false
+      case _ => false
     dfVal match
       case alias: DFVal.Alias if alias.relValRef.get.hasVerilogName                  => Nil
       case alias: DFVal.Alias.ApplyRange if alias.width != alias.relValRef.get.width =>
@@ -90,16 +96,14 @@ case object NamedVerilogSelection extends NamedAliases:
       case alias: DFVal.Alias.AsIs if alias.width < alias.relValRef.get.width =>
         if (alias.relValRef.get.dfType == DFInt32)
           Nil // conversion from DFInt32 is not a bit selection, so no need to break the expression
-        else List(alias.relValRef.get)
+        else
+          // systemverilog truncation is does not use partial selection, but old verilog does,
+          // so we need to name the value in old verilog
+          if (isBasicVerilog) List(alias.relValRef.get)
+          else Nil
       // to/from vector conversion is used with selection
       case DFVal.Alias.AsIs(dfType = DFVector(_, _), relValRef = DFRef(relVal @ DFBits.Val(_))) =>
         // in basic verilog this casting is only kept for initial values and later ignored by the backend
-        val isBasicVerilog = co.backend match
-          case be: dfhdl.backends.verilog =>
-            be.dialect match
-              case VerilogDialect.v95 | VerilogDialect.v2001 => true
-              case _                                         => false
-          case _ => false
         // preventing basic verilog compilation from naming the casted value
         if (isBasicVerilog) Nil
         else List(relVal)
@@ -124,6 +128,8 @@ case object NamedVerilogSelection extends NamedAliases:
           // otherwise, it is a selection to be named
           case _ => List(ch)
       case _ => Nil
+    end match
+  end criteria
 end NamedVerilogSelection
 
 // For vhdl patten matching of a selection is limited.
