@@ -193,7 +193,7 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
         s"signed(resize($relValStr, ${tr.refCodeString}))"
       case (DFUInt(tr @ Int(tWidth)), DFSInt(Int(fWidth))) =>
         assert(tWidth == fWidth - 1)
-        s"unsigned(resize($relValStr, ${tr.refCodeString}))"
+        s"resize(unsigned($relValStr), ${tr.refCodeString})"
       case (DFBits(tWidthParamRef), DFBits(_)) =>
         s"resize($relValStr, ${tWidthParamRef.refCodeString})"
       case (toType: DFType, fromType: DFBits) =>

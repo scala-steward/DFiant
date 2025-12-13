@@ -230,7 +230,11 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
         else extended
       case (DFUInt(tr @ Int(tWidth)), DFSInt(Int(fWidth))) =>
         assert(tWidth == fWidth - 1)
-        val truncated = s"$relValStr[${tr.uboundCS}:0]"
+        val truncated =
+          if (printer.allowWidthCastSyntax)
+            s"${tr.refCodeString.applyBrackets()}'($relValStr)"
+          else
+            s"$relValStr[${tr.uboundCS}:0]"
         if (printer.allowSignedKeywordAndOps) s"$$unsigned($truncated)"
         else truncated
       case (DFUInt(Int(tWidth)), DFBits(Int(fWidth))) =>
