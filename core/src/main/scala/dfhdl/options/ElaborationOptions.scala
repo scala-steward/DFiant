@@ -7,6 +7,7 @@ final case class ElaborationOptions(
     logLevel: LogLevel,
     onError: OnError,
     Werror: WError,
+    trapErrors: TrapErrors,
     defaultClkCfg: DefaultClkCfg,
     defaultRstCfg: DefaultRstCfg,
     printDFHDLCode: PrintDFHDLCode
@@ -21,13 +22,15 @@ object ElaborationOptions:
         logLevel: LogLevel,
         onError: OnError,
         Werror: WError,
+        trapErrors: TrapErrors,
         defaultClkCfg: DefaultClkCfg,
         defaultRstCfg: DefaultRstCfg,
         printDFHDLCode: PrintDFHDLCode
     ): Defaults[Design] = ElaborationOptions(
-      logLevel = logLevel, onError = onError, Werror = Werror, defaultClkCfg = defaultClkCfg,
-      defaultRstCfg = defaultRstCfg, printDFHDLCode = printDFHDLCode
+      logLevel = logLevel, onError = onError, Werror = Werror, trapErrors = trapErrors,
+      defaultClkCfg = defaultClkCfg, defaultRstCfg = defaultRstCfg, printDFHDLCode = printDFHDLCode
     )
+  end Defaults
   given defaults(using defaults: Defaults[Design]): ElaborationOptions = defaults
 
   opaque type LogLevel <: dfhdl.options.LogLevel = dfhdl.options.LogLevel
@@ -48,6 +51,11 @@ object ElaborationOptions:
     given [T](using conv: Conversion[T, dfhdl.options.WError]): Conversion[T, WError] = t =>
       conv(t).asInstanceOf[WError]
     given Conversion[dfhdl.options.WError, WError] = identity
+
+  opaque type TrapErrors <: Boolean = Boolean
+  object TrapErrors:
+    given TrapErrors = true
+    given Conversion[Boolean, TrapErrors] = identity
 
   opaque type DefaultClkCfg <: ClkCfg = ClkCfg
   object DefaultClkCfg:
