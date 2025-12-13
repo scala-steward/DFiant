@@ -1575,4 +1575,35 @@ class PrintCodeStringSpec extends StageSpec:
          |end Foo""".stripMargin
     )
   }
+
+  test("simplify function") {
+    val p0: Int <> CONST = 11
+    val w                = clog2(p0) + 1
+    class Foo extends RTDesign:
+      val i  = SInt(w) <> IN
+      val p1 = p0 + 1 - 1
+      val p2 = p1 + 1
+      val p3 = p2 + 1 - 2
+      val p4 = p3 + 1 + 1 + 1
+      val p5 = p4 - 2 - 1
+      val p6 = p5 - 2 + 1
+      val p7 = p6 - 2 - 1 - 4
+    end Foo
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|val p0: Int <> CONST = 11
+         |val w: Int <> CONST = clog2(p0) + 1
+         |
+         |class Foo extends RTDesign:
+         |  val i = SInt(w) <> IN
+         |  val p2: Int <> CONST = p0 + 1
+         |  val p3: Int <> CONST = p2 + (-1)
+         |  val p4: Int <> CONST = p3 + 3
+         |  val p5: Int <> CONST = p4 - 3
+         |  val p6: Int <> CONST = p5 - 1
+         |  val p7: Int <> CONST = p6 - 7
+         |end Foo""".stripMargin
+    )
+  }
 end PrintCodeStringSpec

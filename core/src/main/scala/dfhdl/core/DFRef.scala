@@ -18,7 +18,7 @@ extension [M <: ir.DFMember](member: M)
   // due to user meta-programming, it's possible that the user attempts to reference "unreachable"
   // values within a certain design. this method attempts to create reachable members instead of
   // limiting the user capabilities during elaboration.
-  private[core] def getReachableMember(using dfc: DFC): ir.DFMember =
+  private[core] def getReachableMember(using dfc: DFC): M =
     import dfc.getSet
     member match
       case dcl: ir.DFVal.Dcl               => member
@@ -27,7 +27,7 @@ extension [M <: ir.DFMember](member: M)
       // meta-programming since there we reference values outside of the design context entirely.
       case dfVal: ir.DFVal if !dfc.inMetaProgramming && !dfVal.isGlobal =>
         dfc.ownerOption match
-          case Some(currentOwner) => dfVal.cloneUnreachable
+          case Some(currentOwner) => dfVal.cloneUnreachable.asInstanceOf[M]
           case _                  => member
       case _ => member
     end match

@@ -754,35 +754,82 @@ object DFVal extends DFValLP:
     )(using DFC): DFValTP[T, P] =
       args.foreach(_.anonymizeInDFCPosition)
       apply(dfType, op, args.map(_.asIR))
+    private object SimplifyFunc:
+      def unapply(opArgs: (ir.DFType, FuncOp, List[ir.DFVal]))(using dfc: DFC): Option[ir.DFVal] =
+        import dfc.getSet
+        opArgs match
+          // TODO: maybe drop this limitation, if we can make DropStructsVecs work in meta programming
+          // or global context.
+          case _ if dfc.inMetaProgramming || dfc.ownerOption.isEmpty => None
+          // special case to handle unary negation of anonymous decimal constants
+          case (
+                _: ir.DFDecimal,
+                FuncOp.unary_-,
+                List(const @ ir.DFVal.Const(dfType = _: ir.DFDecimal, data = Some(data: BigInt)))
+              ) if (const.isAnonymous || const.asValAny.inDFCPosition) =>
+            Some(
+              dfc.mutableDB.setMember(
+                const,
+                _.copy(
+                  data = Some(-data),
+                  meta = dfc.getMeta
+                )
+              )
+            )
+          case (
+                ir.DFInt32,
+                currentOp @ (FuncOp.+ | FuncOp.-),
+                List(
+                  prevFunc: ir.DFVal.Func,
+                  currentRHSArg @ ir.DFVal.Const(data = Some(currentRHSData: BigInt))
+                )
+              ) if currentRHSArg.isAnonymous && prevFunc.isAnonymous =>
+            (prevFunc.dfType, prevFunc.op, prevFunc.args.map(_.get)) match
+              case (
+                    ir.DFInt32,
+                    prevOp @ (FuncOp.+ | FuncOp.-),
+                    List(prevLHSArg, prevRHSArg @ ir.DFVal.Const(data = Some(prevRHSData: BigInt)))
+                  ) if prevRHSArg.isAnonymous =>
+                val newRHSData = ((prevOp, currentOp): @unchecked) match
+                  // (x + c1) + c2 => x + (c1 + c2)
+                  case (FuncOp.+, FuncOp.+) => prevRHSData + currentRHSData
+                  // (x - c1) - c2 => x - (c1 + c2)
+                  case (FuncOp.-, FuncOp.-) => prevRHSData + currentRHSData
+                  // (x + c1) - c2 => x + (c1 - c2)
+                  case (FuncOp.+, FuncOp.-) => prevRHSData - currentRHSData
+                  // (x - c1) + c2 => x - (c1 - c2)
+                  case (FuncOp.-, FuncOp.+) => prevRHSData - currentRHSData
+                if (newRHSData == BigInt(0))
+                  if (prevLHSArg.isAnonymous) Some(prevLHSArg.setMeta(_ => dfc.getMeta))
+                  else Some(prevLHSArg)
+                else
+                  dfc.mutableDB.setMember(prevRHSArg, _.copy(data = Some(newRHSData)))
+                  Some(dfc.mutableDB.setMember(prevFunc, _.copy(meta = dfc.getMeta)))
+              case _ => None
+            end match
+          case _ => None
+        end match
+      end unapply
+    end SimplifyFunc
     @targetName("applyFromIR")
     def apply[T <: DFTypeAny, P](
         dfType: T,
         op: FuncOp,
         args: List[ir.DFVal]
     )(using dfc: DFC): DFValTP[T, P] =
-      (op, args) match
-        // special case to handle unary negation of anonymous decimal constants
-        case (
-              FuncOp.unary_-,
-              List(const @ ir.DFVal.Const(dfType = _: ir.DFDecimal, data = Some(data: BigInt)))
-            ) if (const.isAnonymous || const.asValAny.inDFCPosition) =>
-          dfc.mutableDB.setMember(
-            const,
-            _.copy(
-              data = Some(-data),
-              meta = dfc.getMeta
-            )
-          ).asValTP[T, P]
-        case _ =>
+      (dfType.asIR.dropUnreachableRefs, op, args.map(_.getReachableMember)) match
+        case SimplifyFunc(func) => func.asValTP[T, P]
+        case (dfType, op, args) =>
           val func: ir.DFVal = ir.DFVal.Func(
-            dfType.asIR.dropUnreachableRefs,
+            dfType,
             op,
-            args.map(_.refTW[ir.DFVal]),
+            args.map(_.refTW[ir.DFVal](knownReachable = true)),
             dfc.ownerOrEmptyRef,
             dfc.getMeta,
             dfc.tags
           )
           func.addMember.asValTP[T, P]
+      end match
     end apply
   end Func
 
