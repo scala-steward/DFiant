@@ -139,9 +139,9 @@ class PrintCodeStringSpec extends StageSpec:
          |  val w: Int <> CONST = 16
          |  val id1 = IDGen(w = w)
          |  val id2 = IDGen(w = w)
-         |  id1.x <> x.resize(w)
+         |  id1.x <> x
          |  id2.x <> id1.y
-         |  y.resize(w) <> id2.y
+         |  y <> id2.y
          |end IDTopGen""".stripMargin
     )
   }

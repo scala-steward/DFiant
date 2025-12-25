@@ -217,9 +217,26 @@ sealed trait DFVal extends DFMember.Named:
       case DFVal.DesignParam(dfValRef = DFRef(dfVal)) =>
         stripAsIsAndDesignParam(dfVal)
       case _ => dfVal
+    // TODO: maybe we need a better way to check equivalent expressions, with symbolic algebra comparison?
+    // with such comparison, it is possible to simplify expressions at least in the common cases.
     (stripAsIsAndDesignParam(this), stripAsIsAndDesignParam(that)) match
-      case (lhs: DFVal.CanBeExpr, rhs: DFVal.CanBeExpr) => lhs.protIsSimilarTo(rhs)
-      case (lhs, rhs)                                   => lhs == rhs
+      // literal constants are considered to be similar to expressions if they are
+      // at a higher level of hierarchy than the expression
+      case (lhs: DFVal.Const, rhs: DFVal.CanBeExpr)
+          if !lhs.isGlobal && !rhs.isGlobal &&
+            lhs.getOwnerDesign.isOutsideOwner(rhs.getOwnerDesign) ||
+            lhs.isGlobal && lhs.isAnonymous =>
+        lhs.dfType.isSimilarTo(rhs.dfType) && lhs.getConstData.equals(rhs.getConstData)
+      case (lhs: DFVal.CanBeExpr, rhs: DFVal.Const)
+          if !lhs.isGlobal && !rhs.isGlobal &&
+            rhs.getOwnerDesign.isOutsideOwner(lhs.getOwnerDesign) ||
+            rhs.isGlobal && rhs.isAnonymous =>
+        rhs.dfType.isSimilarTo(lhs.dfType) && rhs.getConstData.equals(lhs.getConstData)
+      case (lhs: DFVal.CanBeExpr, rhs: DFVal.CanBeExpr) =>
+        lhs.protIsSimilarTo(rhs)
+      case (lhs, rhs) => lhs == rhs
+    end match
+  end isSimilarTo
   protected def protGetConstData(using MemberGetSet): Option[Any]
   private var cachedConstDataReady: Boolean = false
   private var cachedConstData: Option[Any] = None
