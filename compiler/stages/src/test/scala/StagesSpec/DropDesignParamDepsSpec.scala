@@ -102,9 +102,9 @@ class DropDesignParamDepsSpec extends StageSpec:
       y <> x.resize(depth)
     end Inner
     class Outer(val baseWidth: Int <> CONST = 8) extends RTDesign:
-      val inner = Inner(baseWidth)
       val x     = Bits(baseWidth) <> IN
       val y     = Bits(baseWidth) <> OUT
+      val inner = Inner(baseWidth)
       inner.x <> x
       y       <> inner.y.resize(baseWidth)
     end Outer
@@ -121,14 +121,14 @@ class DropDesignParamDepsSpec extends StageSpec:
          |end Inner
          |
          |class Outer(val baseWidth: Int <> CONST = 8) extends RTDesign:
-         |  val inner = Inner(
-         |      width = baseWidth,
-         |      depth = 9
-         |  )
+         |  val inner_depth: Int <> CONST = baseWidth + 1
          |  val x = Bits(baseWidth) <> IN
          |  val y = Bits(baseWidth) <> OUT
+         |  val inner = Inner(
+         |      width = baseWidth,
+         |      depth = inner_depth
+         |  )
          |  inner.x <> x
-         |  val inner_depth: Int <> CONST = baseWidth + 1
          |  y <> inner.y.resize(baseWidth)
          |end Outer
          |""".stripMargin
