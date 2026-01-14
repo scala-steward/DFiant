@@ -139,13 +139,13 @@ class DFMatchSpec extends DFSpec:
       (Pixel(x, x), x) match
         case (Pixel(1, 2), 3) =>
 
-      val Pixel(t10, 55) = p: @unchecked
+      val Pixel(t10, 55) = p.runtimeChecked
 
-      val PixelB(Pixel(t11, t12), 55) = pB: @unchecked
+      val PixelB(Pixel(t11, t12), 55) = pB.runtimeChecked
 
-      val h"DEAD${t13: B[32]}BEEF" = y: @unchecked
+      val h"DEAD${t13: B[32]}BEEF" = y.runtimeChecked
 
-      val h"DE${t14: B[16]}ADBE${t15: B[16]}EF" = y: @unchecked
+      val h"DE${t14: B[16]}ADBE${t15: B[16]}EF" = y.runtimeChecked
     }
   }
 

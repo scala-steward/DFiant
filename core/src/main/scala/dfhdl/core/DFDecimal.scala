@@ -519,7 +519,7 @@ object DFDecimal:
         args: Expr[Seq[Any]]
     )(dfc: Expr[DFC])(using Quotes): Expr[DFConstAny] =
       import quotes.reflect.*
-      val Varargs(argsExprs) = args: @unchecked
+      val Varargs(argsExprs) = args.runtimeChecked
       val parts = sc.parts.map(_.value.get).toList
       object WidthExpr:
         def unapply(arg: Expr[Any]): Option[Expr[IntP]] =
@@ -574,20 +574,21 @@ object DFDecimal:
       val result = parts match
         // $value
         case "" :: "" :: Nil =>
-          val (ValueExpr(valueExpr) :: Nil) = argsExprs.toList: @unchecked
+          val (ValueExpr(valueExpr) :: Nil) = argsExprs.toList.runtimeChecked
           valueExpr
         // $width'$value
         case "" :: "'" :: "" :: Nil =>
-          val (WidthExpr(widthExpr) :: ValueExpr(valueExpr) :: Nil) = argsExprs.toList: @unchecked
+          val (WidthExpr(widthExpr) :: ValueExpr(valueExpr) :: Nil) =
+            argsExprs.toList.runtimeChecked
           AsIsExpr(widthExpr, valueExpr)
         // 16'$value
         case widthNoValuePattern(widthStr) :: "" :: Nil =>
-          val (ValueExpr(valueExpr) :: Nil) = argsExprs.toList: @unchecked
+          val (ValueExpr(valueExpr) :: Nil) = argsExprs.toList.runtimeChecked
           val widthExpr = Expr(widthStr.toInt)
           AsIsExpr(widthExpr, valueExpr)
         // $width'1234
         case "" :: valueNoWidthPattern(valueStr) :: Nil =>
-          val (WidthExpr(widthExpr) :: Nil) = argsExprs.toList: @unchecked
+          val (WidthExpr(widthExpr) :: Nil) = argsExprs.toList.runtimeChecked
           Expr(valueStr).asTerm.interpolate(Expr(sc.funcName), '{ Some($widthExpr) })(dfc)
         // 16'1234
         case widthValuePattern(widthStr, valueStr) :: Nil =>

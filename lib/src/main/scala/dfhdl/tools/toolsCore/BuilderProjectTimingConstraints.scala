@@ -57,7 +57,7 @@ class BuilderProjectTimingConstraintsPrinter(
               |set_${dir}_delay -clock [get_clocks $virtualClockName] -source_latency_included 0.0 ${sdc_get_ports(port,constraint)}""".stripMargin
           //format: on
         case _ => ""
-    (port.modifier.dir: @unchecked) match
+    port.modifier.dir.runtimeChecked match
       case DFVal.Modifier.IN =>
         set_false_path("-from") + (if (enableToggleRateLimitIODelay) set_io_delay("input") else "")
       case DFVal.Modifier.OUT =>

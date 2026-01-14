@@ -23,7 +23,7 @@ final class DFVal[+T <: DFTypeAny, +M <: ModifierAny](val irValue: ir.DFVal | DF
   def wait(using DFC): Unit =
     trydf { Wait(this.asValOf[DFBoolOrBit]) }
   def selectDynamic(name: String)(using DFC): Any = trydf {
-    val ir.DFStruct(structName, fieldMap) = this.asIR.dfType: @unchecked
+    val ir.DFStruct(structName, fieldMap) = this.asIR.dfType.runtimeChecked
     val dfType = fieldMap(name)
     DFVal.Alias
       .SelectField(this, name)
@@ -520,7 +520,7 @@ object DFVal extends DFValLP:
           // In the case we have a multiple elements in the tuple value that match the signature
           // of the DFHDL type, then each element is considered as a candidate
           if (multiElements)
-            val Apply(_, vArgsTerm) = term: @unchecked
+            val Apply(_, vArgsTerm) = term.runtimeChecked
             def inits(dfType: Expr[DFTuple[T]], dfc: Expr[DFC]): List[Expr[DFConstOf[DFTuple[T]]]] =
               vArgsTerm.map { a =>
                 val aExactInfo = a.exactInfo
@@ -790,7 +790,7 @@ object DFVal extends DFValLP:
                     prevOp @ (FuncOp.+ | FuncOp.-),
                     List(prevLHSArg, prevRHSArg @ ir.DFVal.Const(data = Some(prevRHSData: BigInt)))
                   ) if prevRHSArg.isAnonymous =>
-                val newRHSData = ((prevOp, currentOp): @unchecked) match
+                val newRHSData = (prevOp, currentOp).runtimeChecked match
                   // (x + c1) + c2 => x + (c1 + c2)
                   case (FuncOp.+, FuncOp.+) => prevRHSData + currentRHSData
                   // (x - c1) - c2 => x - (c1 + c2)
@@ -948,7 +948,7 @@ object DFVal extends DFValLP:
           idxLow: IntParam[L]
       )(using DFC): ir.DFVal =
         val selLength = idxHigh - idxLow + 1
-        val dfType = (relVal.dfType: @unchecked) match
+        val dfType = relVal.dfType.runtimeChecked match
           case ir.DFBits(_)                     => ir.DFBits(selLength.ref)
           case ir.DFUInt(_)                     => ir.DFUInt(selLength.ref)
           case ir.DFSInt(_)                     => ir.DFSInt(selLength.ref)
@@ -1786,9 +1786,9 @@ extension (dfVal: ir.DFVal)
               DFVal.Alias.AsIs(dfType, clonedRelVal, forceNewAlias = true)(using dfcForClone)
             case alias: ir.DFVal.Alias.ApplyRange =>
               def cloneIntParam(intParam: IntParam[Int]): IntParam[Int] =
-                val ret = (intParam: @unchecked) match
-                  case int: Int            => int
-                  case const: DFConstInt32 => const.asIR.cloneAnonValueAndDepsHere
+                val ret = intParam.runtimeChecked match
+                  case int: Int                       => int
+                  case const: DFConstInt32 @unchecked => const.asIR.cloneAnonValueAndDepsHere
                 ret.asInstanceOf[IntParam[Int]]
               DFVal.Alias.ApplyRange(
                 clonedRelVal.asValOf[DFBits[Int]], // this is OK even for UInt/SInt

@@ -264,7 +264,7 @@ class DiamondProjectTimingConstraintsPrinter(using getSet: MemberGetSet, co: Com
                 statements += s"set_false_path $dir [get_ports ${port.getName}[$i]]\n"
             case bitIdx =>
               statements += s"set_false_path $dir [get_ports ${port.getName}[$bitIdx]]\n"
-    (port.modifier.dir: @unchecked) match
+    port.modifier.dir.runtimeChecked match
       case DFVal.Modifier.IN  => add_set_false_path("-from")
       case DFVal.Modifier.OUT => add_set_false_path("-to")
       // TODO: for INOUT, also check that its actually used in both directions by the design

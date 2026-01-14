@@ -28,7 +28,7 @@ object IOBus:
       Type[T]
   ): Expr[IOBus[T, ?]] =
     import quotes.reflect.*
-    val Varargs(args) = ios: @unchecked
+    val Varargs(args) = ios.runtimeChecked
     val ctLength = args.length
     val ctLengthType = ConstantType(IntConstant(ctLength)).asTypeOf[Int]
     '{

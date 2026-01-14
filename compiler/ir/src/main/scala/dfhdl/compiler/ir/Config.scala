@@ -14,9 +14,9 @@ object ConfigN:
   given [L, R]: CanEqual[ConfigN[L], ConfigN[R]] = CanEqual.derived
   given [T](using ReadWriter[T]): ReadWriter[ConfigN[T]] = readwriter[ujson.Value].bimap(
     value =>
-      (value: @unchecked) match
-        case None     => ujson.Null
-        case value: T => writeJs(value)
+      value.runtimeChecked match
+        case None                => ujson.Null
+        case value: T @unchecked => writeJs(value)
     ,
     json =>
       json match

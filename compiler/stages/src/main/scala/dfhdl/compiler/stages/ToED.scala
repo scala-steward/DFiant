@@ -237,7 +237,7 @@ case object ToED extends Stage:
                     dclChangeList.foreach: (dclREG, dcl_din) =>
                       dclREG.asVarAny :== dcl_din.asValAny
                 def ifRstActive =
-                  val RstCfg.Explicit(active = active) = rstCfg: @unchecked
+                  val RstCfg.Explicit(active = active) = rstCfg.runtimeChecked
                   val cond = active match
                     case RstCfg.Active.High => rst.actual == 1
                     case RstCfg.Active.Low  => rst.actual == 0
@@ -246,7 +246,7 @@ case object ToED extends Stage:
                   val (_, rstBranch) = ifRstActive
                   DFIf.singleBranch(None, rstBranch, regSaveBlock)
                 def ifClkEdge(ifRstOption: Option[DFOwnerAny], block: () => Unit = regSaveBlock) =
-                  val ClkCfg.Explicit(edge = edge) = clkCfg: @unchecked
+                  val ClkCfg.Explicit(edge = edge) = clkCfg.runtimeChecked
                   val cond = edge match
                     case ClkCfg.Edge.Rising  => clk.actual.rising
                     case ClkCfg.Edge.Falling => clk.actual.falling
@@ -260,7 +260,7 @@ case object ToED extends Stage:
 
                 if (hasSeqProcess)
                   if (rstCfg != None)
-                    val RstCfg.Explicit(mode = mode) = rstCfg: @unchecked
+                    val RstCfg.Explicit(mode = mode) = rstCfg.runtimeChecked
                     mode match
                       case RstCfg.Mode.Sync =>
                         process(clk) {

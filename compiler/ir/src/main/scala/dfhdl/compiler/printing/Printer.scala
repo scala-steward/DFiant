@@ -54,7 +54,7 @@ trait Printer
         val (lhsRef, rhsRef) = if (swapLR) (net.rhsRef, net.lhsRef) else (net.lhsRef, net.rhsRef)
         val lhsStr = if (lhsRef.isViaRef) lhsRef.get.stripPortSel.getName else lhsRef.refCodeString
         val rhsStr = if (rhsRef.isViaRef) rhsRef.get.stripPortSel.getName else rhsRef.refCodeString
-        (net.op: @unchecked) match
+        net.op.runtimeChecked match
           case DFNet.Op.Connection     => csConnection(lhsStr, rhsStr, directionStr)
           case DFNet.Op.ViaConnection  => csViaConnection(lhsStr, rhsStr, directionStr)
           case DFNet.Op.LazyConnection => csLazyConnection(lhsStr, rhsStr, directionStr)
@@ -68,7 +68,7 @@ trait Printer
           case _            => false
         val lhsStr = net.lhsRef.refCodeString + lhsDin
         val rhsStr = net.rhsRef.refCodeString
-        (net.op: @unchecked) match
+        net.op.runtimeChecked match
           case DFNet.Op.Assignment   => csAssignment(lhsStr, rhsStr, lhsShared)
           case DFNet.Op.NBAssignment => csNBAssignment(lhsStr, rhsStr)
         end match
@@ -87,7 +87,7 @@ trait Printer
     clkCfg match
       case _: None.type                             => "None"
       case ClkCfg.Explicit(edge, rate, portName, _) =>
-        val csRate = (rate: @unchecked) match
+        val csRate = rate.runtimeChecked match
           case time @ TimeNumber(_, _) => csDFTimeData(time)
           case freq @ FreqNumber(_, _) => csDFFreqData(freq)
         s"ClkCfg(${csClkEdgeCfg(edge)}, $csRate, $portName)"

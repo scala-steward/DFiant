@@ -286,7 +286,7 @@ extension (dfVal: DFVal)
                 s"_${i.toPaddedString(maxValue)}"
               case _ => "_sel"
           case applyRange: DFVal.Alias.ApplyRange =>
-            (applyRange.dfType: @unchecked) match
+            applyRange.dfType.runtimeChecked match
               case DFBits(_) | DFUInt(_) | DFSInt(_) =>
                 val idxHigh = applyRange.idxHighRef.getInt.toPaddedString(applyRange.width - 1)
                 val idxLow = applyRange.idxLowRef.getInt.toPaddedString(applyRange.width - 1)

@@ -320,7 +320,7 @@ class QuartusPrimeIPPrinter(using
   import DFDesignBlock.InstMode.BlackBox
   def contents(qsysIP: DFDesignBlock): String =
     val ipName = qsysIP.dclName
-    val BlackBox(BlackBox.Source.VendorIP(_, ipType)) = qsysIP.instMode: @unchecked
+    val BlackBox(BlackBox.Source.VendorIP(_, ipType)) = qsysIP.instMode.runtimeChecked
     val ipInstanceName = s"${ipType}_inst"
     val members = qsysIP.members(MemberView.Folded)
     val ipVersion = members.collectFirst {

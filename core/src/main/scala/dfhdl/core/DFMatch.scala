@@ -85,7 +85,7 @@ object DFMatch:
         retDFType match
           case DFUnit => firstCaseRet.get
           case _      =>
-            val DFVal(headerIR: DFMatchHeader) = header: @unchecked
+            val DFVal(headerIR: DFMatchHeader) = header.runtimeChecked
             val headerUpdate = headerIR.copy(dfType = retDFType.asIR.dropUnreachableRefs)
             // updating the type of the match header
             headerIR.replaceMemberWith(headerUpdate).asValAny.asInstanceOf[R]

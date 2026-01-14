@@ -52,7 +52,7 @@ extension [Q <: Quotes & Singleton](using quotes: Q)(term: quotes.reflect.Term)
       case t @ Apply(TypeApply(fun, _), tupleArgs) if t.tpe <:< TypeRepr.of[NonEmptyTuple] =>
         val terms = tupleArgs.map(t => t.exactTerm)
         val tpes = terms.map(_.tpe)
-        val AppliedType(tycon, _) = t.tpe: @unchecked
+        val AppliedType(tycon, _) = t.tpe.runtimeChecked
         val tupleTypeArgs = tpes.map(_.asTypeTree)
         Apply(TypeApply(fun, tupleTypeArgs), terms)
       case t => t

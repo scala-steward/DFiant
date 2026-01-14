@@ -246,7 +246,7 @@ object DFBits:
         args: Expr[Seq[Any]]
     )(dfc: Expr[DFC])(using Quotes): Expr[DFConstAny] =
       import quotes.reflect.*
-      var Varargs(argsExprs) = args: @unchecked
+      var Varargs(argsExprs) = args.runtimeChecked
 
       var parts = sc.parts.map(_.value.get).toList
       var explicitWidthOption: Expr[Option[IntP]] = '{ None }

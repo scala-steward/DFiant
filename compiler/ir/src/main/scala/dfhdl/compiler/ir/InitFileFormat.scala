@@ -40,7 +40,7 @@ object InitFileFormat:
       case Auto => detectAutoFormat(fileName, fileContents, dataWidth)
       case _    => fileFormat
     try
-      (detectedFormat: @unchecked) match
+      detectedFormat.runtimeChecked match
         case VerilogBin => readVerilogBin(fileContents, arrLen, dataWidth, undefinedValue)
         case VerilogHex => readVerilogHex(fileContents, arrLen, dataWidth, undefinedValue)
         // case AMDXilinxCOE   => readAMDXilinxCOE(fileContents, arrLen, dataWidth)

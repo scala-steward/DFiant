@@ -58,7 +58,7 @@ trait Tool:
   private var preCheckDone: Boolean = false
   final protected def error(msg: String)(using to: ToolOptions): Unit =
     // TODO: there is a false exhaustivity warning here in 3.4.2 or later
-    (to.onError: @unchecked) match
+    to.onError.runtimeChecked match
       case OnError.Exit =>
         println(msg)
         sys.exit(1)

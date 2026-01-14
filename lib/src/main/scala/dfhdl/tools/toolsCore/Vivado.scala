@@ -327,7 +327,7 @@ class VivadoIPPrinter(using
   import DFDesignBlock.InstMode.BlackBox
   def contents(vivadoIP: DFDesignBlock): String =
     val ipName = vivadoIP.dclName
-    val BlackBox(BlackBox.Source.VendorIP(_, ipType)) = vivadoIP.instMode: @unchecked
+    val BlackBox(BlackBox.Source.VendorIP(_, ipType)) = vivadoIP.instMode.runtimeChecked
     val members = vivadoIP.members(MemberView.Folded)
     val ipVersion = members.collectFirst {
       case param: DFVal.DesignParam if param.getName == "version" =>

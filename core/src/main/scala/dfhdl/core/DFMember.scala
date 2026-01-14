@@ -10,7 +10,7 @@ trait DFMember[+T <: ir.DFMember] extends Any:
 type DFMemberAny = DFMember[ir.DFMember]
 object DFMember:
   extension [T <: ir.DFMember](member: DFMember[T])
-    inline def asIR: T = (member.irValue: @unchecked) match
+    inline def asIR: T = member.irValue.runtimeChecked match
       case memberIR: T @unchecked                   => memberIR
       case err: DFError.REG_DIN[?] if err.firstTime =>
         err.firstTime = false

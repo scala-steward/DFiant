@@ -204,7 +204,7 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
   end csDFDesignDefDcl
   def csDFDesignDefInst(design: DFDesignBlock): String =
     val ports = design.members(MemberView.Folded).view.collect { case port @ DclIn() =>
-      val DFNet.Connection(_, from: DFVal, _) = port.getConnectionTo.get: @unchecked
+      val DFNet.Connection(_, from: DFVal, _) = port.getConnectionTo.get.runtimeChecked
       printer.csDFValRef(from, design.getOwner)
     }.mkString(", ")
     val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>

@@ -85,7 +85,7 @@ def selRangeData(
     fromData: Any,
     relBitHigh: Int,
     relBitLow: Int
-)(using MemberGetSet): Any = ((dfType, fromData): @unchecked) match
+)(using MemberGetSet): Any = (dfType, fromData).runtimeChecked match
   case (_: DFBits, (valueBits: BitVector, bubbleBits: BitVector)) =>
     assert(relBitHigh >= 0 && relBitHigh < valueBits.length)
     assert(relBitLow >= 0 && relBitLow < valueBits.length)
@@ -173,7 +173,7 @@ def calcFuncData[OT <: DFType](
         op match
           case FuncOp.++     => argData.toVector.asInstanceOf[outType.Data]
           case FuncOp.repeat =>
-            val Some(cnt: BigInt) = argData(1): @unchecked
+            val Some(cnt: BigInt) = argData(1).runtimeChecked
             Vector.fill(cnt.toInt)(argData.head).asInstanceOf[outType.Data]
           case x =>
             println(x)

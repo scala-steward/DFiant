@@ -111,7 +111,7 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
           processStatCheck(body, returnCheck)
         }
       case _ if returnCheck != CheckType.None =>
-        (returnCheck: @unchecked) match
+        returnCheck.runtimeChecked match
           case CheckType.Return =>
           // tree match
           //   case Goto() =>
@@ -150,7 +150,7 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
     val (allDefs: List[DefDef] @unchecked, allStepBlocks: List[Tree]) = (trees.partition {
       case _: DefDef => true
       case _         => false
-    }): @unchecked
+    }).runtimeChecked
     val (onEntryExit: List[DefDef], stepDefs: List[DefDef]) = allDefs.partition {
       case OnEntryDef() => true
       case OnExitDef()  => true
