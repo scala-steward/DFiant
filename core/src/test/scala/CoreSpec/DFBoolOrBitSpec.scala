@@ -32,6 +32,7 @@ class DFBoolOrBitSpec extends DFSpec:
       bl := false
     }
   }
+
   test("Logical Ops") {
     val bt = Bit <> VAR
     val bl = Boolean <> VAR
@@ -107,6 +108,30 @@ class DFBoolOrBitSpec extends DFSpec:
       )(
         """t1.toScalaBoolean"""
       )
+    }
+  }
+
+  test("selection operation") {
+    val bl = Boolean <> VAR
+    val c1: Int <> CONST = 1
+    val c2: Int <> CONST = 2
+    assertCodeString(
+      """|val t1 = bl.sel(d"4'11", d"4'12")
+         |val t2 = bl.sel(d"4'12", d"4'11")
+         |val t3 = bl.sel(d"4'1", d"4'13")
+         |val t4 = bl.sel(d"4'13", d"4'1")
+         |val t5 = bl.sel(c1, c2)
+         |val t6 = bl.sel(d"4'${c1}", d"4'12")
+         |val t7 = bl.sel(d"4'12", d"4'${c2}")
+         |""".stripMargin
+    ) {
+      val t1 = bl.sel(11, d"4'12")
+      val t2 = bl.sel(d"4'12", 11)
+      val t3 = bl.sel(1, d"4'13")
+      val t4 = bl.sel(d"4'13", 1)
+      val t5 = bl.sel(c1, c2)
+      val t6 = bl.sel(c1, d"4'12")
+      val t7 = bl.sel(d"4'12", c2)
     }
   }
 end DFBoolOrBitSpec

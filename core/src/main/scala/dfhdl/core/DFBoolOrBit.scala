@@ -160,10 +160,17 @@ object DFBoolOrBit:
           inline val onTrueIsDFVal = inline compiletime.erasedValue[OT] match
             case _: DFValAny => true
             case _           => false
+          inline val onTrueIsDFConstInt32 = inline compiletime.erasedValue[OT] match
+            case _: DFConstInt32 => true
+            case _               => false
           inline val onFalseIsDFVal = inline compiletime.erasedValue[OF] match
             case _: DFValAny => true
             case _           => false
-          inline if (onTrueIsDFVal)
+          inline val onFalseIsDFConstInt32 = inline compiletime.erasedValue[OF] match
+            case _: DFConstInt32 => true
+            case _               => false
+          // onTrue type has priority, except when onTrue is a DFHDL Int parameter while onFalse is not
+          inline if (onTrueIsDFVal && !(onTrueIsDFConstInt32 && !onFalseIsDFConstInt32))
             inline onTrue match
               case onTrueDFVal: DFValTP[tt, tp] =>
                 val tc = compiletime.summonInline[DFVal.TC[tt, OF]]
