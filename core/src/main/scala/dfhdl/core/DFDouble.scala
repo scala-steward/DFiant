@@ -31,18 +31,22 @@ object TDFDouble:
 
     object TC:
       import DFVal.TC
-      given DFDoubleFromCandidate[R, IC <: Candidate[R]](using ic: IC): TC[DFDouble, R] with
-        type OutP = ic.OutP
+      given DFDoubleFromCandidate[
+          R,
+          RP,
+          IC <: Candidate[R]
+      ](using ic: IC { type OutP = RP }): TC[DFDouble, R] with
+        type OutP = RP
         def conv(dfType: DFDouble, arg: R)(using DFC): Out = ic(arg)
 
     object Compare:
       import DFVal.Compare
-      given DFDoubleCompare[R, IC <: Candidate[R], Op <: FuncOp, C <: Boolean](using
-          ic: IC,
+      given DFDoubleCompare[R, RP, IC <: Candidate[R], Op <: FuncOp, C <: Boolean](using
+          ic: IC { type OutP = RP },
           op: ValueOf[Op],
           castling: ValueOf[C]
       ): Compare[DFDouble, R, Op, C] with
-        type OutP = ic.OutP
+        type OutP = RP
         def conv(dfType: DFDouble, arg: R)(using DFC): Out = ic(arg)
 
     object Ops:
@@ -75,22 +79,6 @@ object TDFDouble:
 
         def unary_-(using DFCG): DFValTP[DFDouble, P] = trydf {
           DFVal.Func(DFDouble, FuncOp.unary_-, List(lhs))
-        }
-
-        def <[RP](rhs: DFValTP[DFDouble, RP])(using DFCG): DFValOf[DFBool] = trydf {
-          DFVal.Func(DFBool, FuncOp.<, List(lhs, rhs))
-        }
-
-        def <=[RP](rhs: DFValTP[DFDouble, RP])(using DFCG): DFValOf[DFBool] = trydf {
-          DFVal.Func(DFBool, FuncOp.<=, List(lhs, rhs))
-        }
-
-        def >[RP](rhs: DFValTP[DFDouble, RP])(using DFCG): DFValOf[DFBool] = trydf {
-          DFVal.Func(DFBool, FuncOp.>, List(lhs, rhs))
-        }
-
-        def >=[RP](rhs: DFValTP[DFDouble, RP])(using DFCG): DFValOf[DFBool] = trydf {
-          DFVal.Func(DFBool, FuncOp.>=, List(lhs, rhs))
         }
       end extension
     end Ops

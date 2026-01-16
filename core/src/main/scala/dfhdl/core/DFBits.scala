@@ -438,22 +438,22 @@ object DFBits:
               ") is different than the receiver width (" + ToString[LW] +
               ").\nConsider applying `.resize` to resolve this issue."
           ]
-      given DFBitsFromCandidate[LW <: IntP, V, IC <: Candidate[V]](using
-          ic: IC
+      given DFBitsFromCandidate[LW <: IntP, V, RP, IC <: Candidate[V]](using
+          ic: IC { type OutP = RP }
       )(using
           check: `LW == RW`.CheckNUB[LW, ic.OutW]
       ): TC[DFBits[LW], V] with
-        type OutP = ic.OutP
+        type OutP = RP
         def conv(dfType: DFBits[LW], value: V)(using dfc: DFC): Out =
           import Ops.resizeBits
           val dfVal = ic(value)
           if (dfVal.hasTag[ir.TruncateTag] && dfType.widthInt < dfVal.widthInt)
-            dfVal.resizeBits(dfType.widthIntParam).asValTP[DFBits[LW], ic.OutP]
+            dfVal.resizeBits(dfType.widthIntParam).asValTP[DFBits[LW], RP]
           else if (dfVal.hasTag[ir.ExtendTag] && dfType.widthInt > dfVal.widthInt)
-            dfVal.resizeBits(dfType.widthIntParam).asValTP[DFBits[LW], ic.OutP]
+            dfVal.resizeBits(dfType.widthIntParam).asValTP[DFBits[LW], RP]
           else
             check(dfType.widthInt, dfVal.widthInt)
-            dfVal.nameInDFCPosition.asValTP[DFBits[LW], ic.OutP]
+            dfVal.nameInDFCPosition.asValTP[DFBits[LW], RP]
         end conv
       end DFBitsFromCandidate
       given DFBitsFromSEV[LW <: IntP, T <: BitOrBool, V <: SameElementsVector[T]]: TC[DFBits[LW], V]
@@ -466,31 +466,39 @@ object DFBits:
 
     object TCConv:
       import DFVal.TCConv
-      given DFBitsFromCandidateConv[V, IC <: Candidate[V]](using
-          ic: IC
+      given DFBitsFromCandidateConv[V, RP, IC <: Candidate[V]](using
+          ic: IC { type OutP = RP }
       ): TCConv[DFBits[Int], V] with
-        type OutP = ic.OutP
+        type OutP = RP
         def apply(value: V)(using DFC): Out =
           val dfVal = ic(value)
-          dfVal.nameInDFCPosition.asValTP[DFBits[Int], ic.OutP]
+          dfVal.nameInDFCPosition.asValTP[DFBits[Int], RP]
 
     object Compare:
       import DFVal.Compare
-      given DFBitsCompareCandidate[LW <: IntP, R, IC <: Candidate[R], Op <: FuncOp, C <: Boolean](
-          using ic: IC
+      given DFBitsCompareCandidate[
+          LW <: IntP,
+          R,
+          RP,
+          IC <: Candidate[R],
+          Op <: FuncOp.===.type | FuncOp.=!=.type,
+          C <: Boolean
+      ](
+          using ic: IC { type OutP = RP }
       )(using
           check: CompareCheck[LW, ic.OutW, C],
           op: ValueOf[Op],
           castling: ValueOf[C]
       ): Compare[DFBits[LW], R, Op, C] with
-        type OutP = ic.OutP
+        type OutP = RP
         def conv(dfType: DFBits[LW], arg: R)(using DFC): Out =
           val dfValArg = ic(arg)
           check(dfType.widthInt, dfValArg.dfType.widthInt)
-          dfValArg.asValTP[DFBits[LW], ic.OutP]
+          dfValArg.asValTP[DFBits[LW], RP]
+      end DFBitsCompareCandidate
       given DFBitsCompareSEV[
           LW <: IntP,
-          Op <: FuncOp,
+          Op <: FuncOp.===.type | FuncOp.=!=.type,
           C <: Boolean,
           T <: BitOrBool,
           V <: SameElementsVector[T]

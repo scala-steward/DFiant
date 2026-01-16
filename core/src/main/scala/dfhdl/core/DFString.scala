@@ -31,19 +31,30 @@ object TDFString:
 
     object TC:
       import DFVal.TC
-      given DFStringFromCandidate[R, IC <: Candidate[R]](using ic: IC): TC[DFString, R] with
-        type OutP = ic.OutP
+      given DFStringFromCandidate[
+          R,
+          RP,
+          IC <: Candidate[R]
+      ](using ic: IC { type OutP = RP }): TC[DFString, R] with
+        type OutP = RP
         def conv(dfType: DFString, arg: R)(using DFC): Out = ic(arg)
 
     object Compare:
       import DFVal.Compare
-      given DFStringCompare[R, IC <: Candidate[R], Op <: FuncOp, C <: Boolean](using
-          ic: IC,
+      given DFStringCompare[
+          R,
+          RP,
+          IC <: Candidate[R],
+          Op <: FuncOp.===.type | FuncOp.=!=.type,
+          C <: Boolean
+      ](using
+          ic: IC { type OutP = RP },
           op: ValueOf[Op],
           castling: ValueOf[C]
       ): Compare[DFString, R, Op, C] with
-        type OutP = ic.OutP
+        type OutP = RP
         def conv(dfType: DFString, arg: R)(using DFC): Out = ic(arg)
+    end Compare
 
     object Ops:
       given evOpArithDFString[

@@ -1129,9 +1129,11 @@ object DFVal extends DFValLP:
     def apply(from: R)(using DFC): Out
 
   trait TCConvLP:
-    given fromTC[T <: DFTypeAny, R, TC <: DFVal.TC[T, R]](using tc: TC, dfType: T): TCConv[T, R]
-    with
-      type OutP = tc.OutP
+    given fromTC[T <: DFTypeAny, R, RP, TC <: DFVal.TC[T, R]](using
+        tc: TC { type OutP = RP },
+        dfType: T
+    ): TCConv[T, R] with
+      type OutP = RP
       def apply(from: R)(using DFC): Out = tc(dfType, from)
   object TCConv extends TCConvLP:
     export DFBits.Val.TCConv.given
@@ -1149,12 +1151,10 @@ object DFVal extends DFValLP:
       def conv(dfType: T, from: OPEN)(using DFC): Out = DFVal.OPEN(dfType)
       def connect(dfVal: DFValOf[T], that: OPEN)(using DFC): Unit =
         dfVal.connect(conv(dfVal.dfType, that))
-    given fromTC[
-        T <: DFTypeAny,
-        R,
-        TC <: DFVal.TC[T, R]
-    ](using tc: TC): TC_Or_OPEN_Or_Resource[T, R] with
-      type OutP = tc.OutP
+    given fromTC[T <: DFTypeAny, R, RP, TC <: DFVal.TC[T, R]](using
+        tc: TC { type OutP = RP }
+    ): TC_Or_OPEN_Or_Resource[T, R] with
+      type OutP = RP
       def conv(dfType: T, from: R)(using DFC): Out = tc(dfType, from)
       def connect(dfVal: DFValOf[T], that: R)(using DFC): Unit =
         dfVal.connect(conv(dfVal.dfType, that))
@@ -1204,7 +1204,13 @@ object DFVal extends DFValLP:
             "`."
         )
       ]
-    given sameValType[T <: DFTypeAny, P, R <: DFValTP[T, P], Op <: FuncOp, C <: Boolean](using
+    given sameValType[
+        T <: DFTypeAny,
+        P,
+        R <: DFValTP[T, P],
+        Op <: FuncOp.===.type | FuncOp.=!=.type,
+        C <: Boolean
+    ](using
         ValueOf[Op],
         ValueOf[C]
     ): Compare[T, R, Op, C] with
@@ -1217,8 +1223,11 @@ object DFVal extends DFValLP:
           s"Cannot compare DFHDL value type `${dfType.codeString}` with DFHDL value type `${arg.dfType.codeString}`."
         )
         arg
+    end sameValType
   end CompareLP
   object Compare extends CompareLP:
+    type Aux[T <: DFTypeAny, V, Op <: FuncOp, C <: Boolean, OutP0] =
+      Compare[T, V, Op, C] { type OutP = OutP0 }
     export DFBoolOrBit.Val.Compare.given
     export DFBits.Val.Compare.given
     export DFDecimal.Val.Compare.given
@@ -1274,6 +1283,26 @@ object DFVal extends DFValLP:
   export DFOpaque.Val.Ops.{evOpAsDFOpaqueIterable, evOpClkAsClkComp, evOpRstAsRstComp}
   export TDFString.Val.Ops.given
   export ConnectOps.given
+
+  given evOpCompare[LT <: DFTypeAny, LP, L <: DFValTP[LT, LP], R, Op <: FuncOp, RP](using
+      tc: Compare.Aux[LT, R, Op, false, RP],
+      op: ValueOf[Op]
+  ): ExactOp2Aux[Op, DFC, DFValOf[DFBool], L, R, DFValTP[DFBool, LP | RP]] =
+    new ExactOp2[Op, DFC, DFValOf[DFBool], L, R]:
+      type Out = DFValTP[DFBool, LP | RP]
+      def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
+        tc(lhs, rhs)
+      }(using dfc, CTName(op.value.toString))
+
+  given evOpCompareCastled[L, LP, RT <: DFTypeAny, RP, R <: DFValTP[RT, RP], Op <: FuncOp](using
+      tc: Compare.Aux[RT, L, Op, true, LP],
+      op: ValueOf[Op]
+  ): ExactOp2Aux[Op, DFC, DFValOf[DFBool], L, R, DFValTP[DFBool, LP | RP]] =
+    new ExactOp2[Op, DFC, DFValOf[DFBool], L, R]:
+      type Out = DFValTP[DFBool, LP | RP]
+      def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
+        tc(rhs, lhs)
+      }(using dfc, CTName(op.value.toString))
 
   object Ops:
     protected type SupportedValue =
@@ -1357,6 +1386,72 @@ object DFVal extends DFValLP:
         // on the bothWays flag for all other cases
         else exactOp2["<>", DFC, Any](lhs, rhs, bothWays = true)
     end extension
+
+    extension [L](inline lhs: L)
+      transparent inline def <[R](inline rhs: R)(using DFCG): DFValOf[DFBool] =
+        compare[FuncOp.<.type, L, R](lhs, rhs)
+      transparent inline def <=[R](inline rhs: R)(using DFCG): DFValOf[DFBool] =
+        compare[FuncOp.<=.type, L, R](lhs, rhs)
+      transparent inline def >[R](inline rhs: R)(using DFCG): DFValOf[DFBool] =
+        compare[FuncOp.>.type, L, R](lhs, rhs)
+      transparent inline def >=[R](inline rhs: R)(using DFCG): DFValOf[DFBool] =
+        compare[FuncOp.>=.type, L, R](lhs, rhs)
+    end extension
+
+    private transparent inline def compare[Op <: FuncOp, L, R](inline lhs: L, inline rhs: R)(using
+        DFC,
+        ValueOf[Op]
+    ): DFValOf[DFBool] =
+      inline val lhsIsDFVal = inline compiletime.erasedValue[L] match
+        case _: DFValAny => true
+        case _           => false
+      inline val rhsIsDFVal = inline compiletime.erasedValue[R] match
+        case _: DFValAny => true
+        case _           => false
+      inline if (lhsIsDFVal && rhsIsDFVal)
+        inline lhs match
+          case lhs: DFValTP[lt, lp] => inline rhs match
+              case rhs: DFValTP[rt, rp] =>
+                specialCompare[Op, lt, lp, rt, rp](lhs, rhs)
+      else exactOp2[Op, DFC, DFValOf[DFBool]](lhs, rhs)
+    end compare
+
+    private transparent inline def specialCompare[
+        Op <: FuncOp,
+        LT <: DFTypeAny,
+        LP,
+        RT <: DFTypeAny,
+        RP
+    ](
+        inline lhs: DFValTP[LT, LP],
+        inline rhs: DFValTP[RT, RP]
+    )(using dfc: DFC, op: ValueOf[Op]): DFValTP[DFBool, LP | RP] =
+      val dualSummon = compiletime.summonInline[DualSummonTrapError[
+        DFVal.Compare[LT, DFValTP[RT, RP], Op, false],
+        DFVal.Compare[RT, DFValTP[LT, LP], Op, true]
+      ]]
+      specialCompareRuntime[Op, LT, LP, RT, RP](lhs, rhs, dualSummon)
+    end specialCompare
+
+    private def specialCompareRuntime[Op <: FuncOp, LT <: DFTypeAny, LP, RT <: DFTypeAny, RP](
+        lhs: DFValTP[LT, LP],
+        rhs: DFValTP[RT, RP],
+        dualSummon: DualSummonTrapError[
+          DFVal.Compare[LT, DFValTP[RT, RP], Op, false],
+          DFVal.Compare[RT, DFValTP[LT, LP], Op, true]
+        ]
+    )(using dfc: DFC, op: ValueOf[Op]): DFValTP[DFBool, LP | RP] = trydf {
+      (dualSummon.valueL, dualSummon.valueR).runtimeChecked match
+        case (Some(tcL), Some(tcR)) =>
+          try tcL(lhs, rhs)
+          catch
+            case eL: Throwable =>
+              try tcR(rhs, lhs)
+              catch case eR: Throwable => throw eL
+        case (Some(tcL), None) => tcL(lhs, rhs)
+        case (None, Some(tcR)) => tcR(rhs, lhs)
+      end match
+    }(using dfc, CTName(op.value.toString)).asValTP[DFBool, LP | RP]
 
     extension [T <: DFTypeAny, A, C, I, S <: Int, V](dfVal: DFVal[T, Modifier[A, C, I, Any]])
       def prev(step: Inlined[S], init: InitValue[T])(using

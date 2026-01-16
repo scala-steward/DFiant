@@ -191,7 +191,7 @@ object DFStruct:
       given DFStructArgCC[
           F <: Fields,
           RF <: Fields,
-          Op <: FuncOp,
+          Op <: FuncOp.===.type | FuncOp.=!=.type,
           C <: Boolean
       ](using sf: SameFields[F, RF]): Compare[DFStruct[F], RF, Op, C] with
         type OutP = Any

@@ -57,24 +57,33 @@ object DFBoolOrBit:
 
     object TC:
       import DFVal.TC
-      given DFBoolOrBitFromCandidate[T <: DFBoolOrBit, R, IC <: Candidate[R]](using
-          ic: IC
+      given DFBoolOrBitFromCandidate[T <: DFBoolOrBit, R, RP, IC <: Candidate[R]](using
+          ic: IC { type OutP = RP }
       ): TC[T, R] with
-        type OutP = ic.OutP
+        type OutP = RP
         def conv(dfType: T, arg: R)(using DFC): Out = b2b(dfType, arg)
     end TC
 
     object Compare:
       import DFVal.Compare
-      given DFBoolOrBitCompare[T <: DFBoolOrBit, R, IC <: Candidate[R], Op <: FuncOp, C <: Boolean](
+      given DFBoolOrBitCompare[
+          T <: DFBoolOrBit,
+          R,
+          RP,
+          IC <: Candidate[R],
+          Op <: FuncOp.===.type | FuncOp.=!=.type,
+          C <: Boolean
+      ](
           using
-          ic: IC,
+          ic: IC { type OutP = RP },
           op: ValueOf[Op],
           castling: ValueOf[C]
       ): Compare[T, R, Op, C] with
-        type OutP = ic.OutP
+        type OutP = RP
         def conv(dfType: T, arg: R)(using DFC): Out =
           b2b(dfType, arg)
+      end DFBoolOrBitCompare
+    end Compare
 
     object Ops:
       import DFDecimal.Constraints

@@ -186,7 +186,7 @@ object DFTuple:
       given DFTupleArg[
           T <: NonEmptyTuple,
           R <: NonEmptyTuple,
-          Op <: FuncOp,
+          Op <: FuncOp.===.type | FuncOp.=!=.type,
           C <: Boolean,
           Z <: TCZipper[T, R, DFValAny, [T <: DFTypeAny, R] =>> Compare[T, R, Op, C]]
       ](using

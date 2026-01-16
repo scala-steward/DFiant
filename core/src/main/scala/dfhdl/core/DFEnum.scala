@@ -118,7 +118,7 @@ object DFEnum:
       given DFEnumCompareEntry[
           E <: DFEncoding,
           RE <: E,
-          Op <: FuncOp,
+          Op <: FuncOp.===.type | FuncOp.=!=.type,
           C <: Boolean
       ]: Compare[DFEnum[E], RE, Op, C] with
         type OutP = CONST
