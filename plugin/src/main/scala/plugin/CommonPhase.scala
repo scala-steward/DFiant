@@ -286,7 +286,7 @@ abstract class CommonPhase extends PluginPhase:
   extension (tpe: Type)(using Context)
     def simple: Type =
       tpe match
-        case tr: TermRef        => tr.underlying.dealias
+        case tr: TermRef        => tr.underlying.simple
         case ann: AnnotatedType => ann.parent.simple
         case _                  => tpe.dealias
     @tailrec private def flattenConsTuple(pastArgs: List[Type]): Type = tpe.stripAnnots match

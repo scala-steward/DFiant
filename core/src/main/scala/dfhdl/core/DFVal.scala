@@ -33,14 +33,13 @@ final class DFVal[+T <: DFTypeAny, +M <: ModifierAny](val irValue: ir.DFVal | DF
 
   transparent inline def ==[R](
       inline that: R
-  )(using DFC): DFValTP[DFBool, Any] = ${
-    DFVal.equalityMacro[T, M, R, FuncOp.===.type]('this, 'that)('dfc)
-  }
+  )(using DFCG): DFValOf[DFBool] =
+    DFVal.Ops.compareWorkaround[FuncOp.===.type, this.type, R](this, that)
+
   transparent inline def !=[R](
       inline that: R
-  )(using DFC): DFValTP[DFBool, Any] = ${
-    DFVal.equalityMacro[T, M, R, FuncOp.=!=.type]('this, 'that)('dfc)
-  }
+  )(using DFC): DFValTP[DFBool, Any] =
+    DFVal.Ops.compareWorkaround[FuncOp.=!=.type, this.type, R](this, that)
 end DFVal
 
 type DFValAny = DFVal[DFTypeAny, ModifierAny]
@@ -326,29 +325,6 @@ object DFVal extends DFValLP:
         case DFTuple.Val(dfVal)  => Some(dfVal)
         case DFStruct.Val(dfVal) => Some(dfVal)
         case _                   => None
-
-  def equalityMacro[T <: DFTypeAny, M <: ModifierAny, R, Op <: FuncOp](
-      dfVal: Expr[DFVal[T, M]],
-      arg: Expr[R]
-  )(dfc: Expr[DFC])(using Quotes, Type[T], Type[M], Type[R], Type[Op]): Expr[DFValTP[DFBool, Any]] =
-    import quotes.reflect.*
-    if (TypeRepr.of[T].typeSymbol equals defn.NothingClass)
-      return ControlledMacroError.report("This is fake")
-    val exactInfo = arg.exactInfo
-    val lpType = dfVal.asTerm.tpe.isConstTpe.asTypeOf[Any]
-    val rpType = exactInfo.exactTpe.isConstTpe.asTypeOf[Any]
-    '{
-      val c = compiletime.summonInline[DFVal.Compare[T, exactInfo.Underlying, Op, false]]
-      c($dfVal, ${ exactInfo.exactExpr })(using
-        $dfc,
-        compiletime.summonInline[ValueOf[Op]],
-        new ValueOf[false](false)
-      )
-        // TODO: May not be need if this issue is solved:
-        // https://github.com/lampepfl/dotty/issues/19554
-        .asValTP[DFBool, lpType.Underlying | rpType.Underlying]
-    }
-  end equalityMacro
 
   // Enabling equality with Int, Boolean, and Tuples.
   // just to give a better error message via the compiler plugin.
@@ -1398,10 +1374,27 @@ object DFVal extends DFValLP:
         compare[FuncOp.>=.type, L, R](lhs, rhs)
     end extension
 
-    private transparent inline def compare[Op <: FuncOp, L, R](inline lhs: L, inline rhs: R)(using
-        DFC,
-        ValueOf[Op]
-    ): DFValOf[DFBool] =
+    // this is a workaround to avoid a compiler crash due to erasure issue (not minimized yet)
+    private[DFVal] transparent inline def compareWorkaround[Op <: FuncOp, L, R](
+        lhs: L,
+        inline rhs: R
+    )(using DFC, ValueOf[Op]): DFValOf[DFBool] =
+      inline val rhsIsDFVal = inline compiletime.erasedValue[R] match
+        case _: DFValAny => true
+        case _           => false
+      inline if (rhsIsDFVal)
+        inline rhs match
+          case rhs: DFValTP[rt, rp] =>
+            inline compiletime.erasedValue[L] match
+              case _: DFValTP[lt, lp] =>
+                specialCompare[Op, lt, lp, rt, rp](lhs.asInstanceOf[DFValTP[lt, lp]], rhs)
+      else exactOp2[Op, DFC, DFValOf[DFBool]](lhs, rhs)
+    end compareWorkaround
+
+    private[core] transparent inline def compare[Op <: FuncOp, L, R](
+        inline lhs: L,
+        inline rhs: R
+    )(using DFC, ValueOf[Op]): DFValOf[DFBool] =
       inline val lhsIsDFVal = inline compiletime.erasedValue[L] match
         case _: DFValAny => true
         case _           => false
