@@ -306,9 +306,9 @@ object DFBits:
           }
           Expr(partFiltered)
         })
-        '{
-          Some(Seq(${ vArgs }*))
-        }
+        // We cast to Seq[Nothing] to avoid an `& String` type constraint on the extractor.
+        // This casting is removed (ignored) later in `CustomControlPhase`.
+        '{ Some(Seq(${ vArgs }*).asInstanceOf[Seq[Nothing]]) }
       else
         val dfVal = partsStr.head match
           case widthExp(widthStr, wordStr) =>

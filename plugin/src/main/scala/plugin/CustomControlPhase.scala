@@ -619,9 +619,13 @@ class CustomControlPhase(setting: Setting) extends CommonPhase:
       object Binds:
         def unapply(rhs: Tree)(using Context): Option[List[Tree]] =
           rhs match
-            case Apply(_, List(Apply(_, List(Typed(SeqLiteral(elems, _), _))))) =>
+            case Apply(
+                  _,
+                  List(TypeApply(Select(Apply(_, List(Typed(SeqLiteral(elems, _), _))), _), _))
+                ) =>
               Some(elems)
-            case _ => None
+            case _ =>
+              None
     end SI
     object Struct:
       def unapply(arg: UnApply)(using Context): Option[(Type, List[Tree])] =
@@ -745,7 +749,7 @@ class CustomControlPhase(setting: Setting) extends CommonPhase:
                 idxHigh = idxHigh - partWidth
               case bindTree: Bind =>
                 bindTree.tpe.simple match
-                  case StripAndString(DFVal(DFBits(widthTpe))) =>
+                  case DFVal(DFBits(widthTpe)) =>
                     widthTpe match
                       case ConstantType(Constant(partWidth: Int)) if partWidth > 0 =>
                         val idxLow = idxHigh - partWidth + 1

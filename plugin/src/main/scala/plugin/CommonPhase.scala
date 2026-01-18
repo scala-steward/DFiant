@@ -117,16 +117,6 @@ abstract class CommonPhase extends PluginPhase:
   var genDesignParamSym: TermSymbol = uninitialized
   private var bTpe: Type = uninitialized
 
-  object StripAndString:
-    def unapply(tpe: Type)(using Context): Option[Type] =
-      tpe.simple match
-        case AndType(str, t) if str =:= defn.StringType && t <:< bTpe =>
-          Some(t)
-        case AndType(t, str) if str =:= defn.StringType && t <:< bTpe =>
-          Some(t)
-        case _ => None
-  end StripAndString
-
   extension (tree: TypeDef)
     def hasDFC(using Context): Boolean =
       (tree.tpe <:< hasDFCTpe) // && (dfSpecTpe == NoType || !(tree.tpe <:< dfSpecTpe))

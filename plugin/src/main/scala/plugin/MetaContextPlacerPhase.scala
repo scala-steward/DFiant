@@ -34,7 +34,7 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
   val phaseName = "MetaContextPlacer"
 
   override val runsAfter = Set("TopAnnot")
-  override val runsBefore = Set("FixInterpDFValPhase")
+  override val runsBefore = Set("inlinedPositions")
   // override val debugFilter: String => Boolean = _.contains("Playground.scala")
   var dfcArgStack = List.empty[Tree]
   var emptyDFCSym: TermSymbol = uninitialized
