@@ -34,12 +34,12 @@ final class DFVal[+T <: DFTypeAny, +M <: ModifierAny](val irValue: ir.DFVal | DF
   transparent inline def ==[R](
       inline that: R
   )(using DFCG): DFValOf[DFBool] =
-    DFVal.Ops.compareWorkaround[FuncOp.===.type, this.type, R](this, that)
+    DFVal.Ops.compare[FuncOp.===.type, this.type, R](this, that)
 
   transparent inline def !=[R](
       inline that: R
   )(using DFC): DFValTP[DFBool, Any] =
-    DFVal.Ops.compareWorkaround[FuncOp.=!=.type, this.type, R](this, that)
+    DFVal.Ops.compare[FuncOp.=!=.type, this.type, R](this, that)
 end DFVal
 
 type DFValAny = DFVal[DFTypeAny, ModifierAny]
@@ -1373,23 +1373,6 @@ object DFVal extends DFValLP:
       transparent inline def >=[R](inline rhs: R)(using DFCG): DFValOf[DFBool] =
         compare[FuncOp.>=.type, L, R](lhs, rhs)
     end extension
-
-    // this is a workaround to avoid a compiler crash due to erasure issue (not minimized yet)
-    private[DFVal] transparent inline def compareWorkaround[Op <: FuncOp, L, R](
-        lhs: L,
-        inline rhs: R
-    )(using DFC, ValueOf[Op]): DFValOf[DFBool] =
-      inline val rhsIsDFVal = inline compiletime.erasedValue[R] match
-        case _: DFValAny => true
-        case _           => false
-      inline if (rhsIsDFVal)
-        inline rhs match
-          case rhs: DFValTP[rt, rp] =>
-            inline compiletime.erasedValue[L] match
-              case _: DFValTP[lt, lp] =>
-                specialCompare[Op, lt, lp, rt, rp](lhs.asInstanceOf[DFValTP[lt, lp]], rhs)
-      else exactOp2[Op, DFC, DFValOf[DFBool]](lhs, rhs)
-    end compareWorkaround
 
     private[core] transparent inline def compare[Op <: FuncOp, L, R](
         inline lhs: L,
