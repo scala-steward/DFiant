@@ -1264,7 +1264,9 @@ object DFVal extends DFValLP:
     evOpArithIntDFInt32,
     evOpApplyDFXInt,
     evOpApplyRangeDFXInt,
-    evOpShiftOrPowerInt
+    evOpShiftOrPowerInt,
+    evOpCarryAddSubDFXInt,
+    evOpCarryMulDFXInt
   }
   export DFPhysical.Val.Ops.given
   export TDFDouble.Val.Ops.given
@@ -1370,6 +1372,15 @@ object DFVal extends DFValLP:
         exactOp2[BoolOnlyOp[FuncOp.|.type], DFC, DFValAny](lhs, rhs)
       transparent inline def &&(inline rhs: SupportedValue)(using DFCG): DFValAny =
         exactOp2[BoolOnlyOp[FuncOp.&.type], DFC, DFValAny](lhs, rhs)
+    end extension
+    protected[core] trait CarryOp[Op <: FuncOp]
+    extension (inline lhs: SupportedValue)
+      transparent inline def +^(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[CarryOp[FuncOp.+.type], DFC, DFValAny](lhs, rhs)
+      transparent inline def -^(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[CarryOp[FuncOp.-.type], DFC, DFValAny](lhs, rhs)
+      transparent inline def *^(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[CarryOp[FuncOp.`*`.type], DFC, DFValAny](lhs, rhs)
     end extension
     extension (inline lhs: SupportedValue)
       transparent inline def as(inline aliasType: DFType.Supported)(using DFCG): DFValAny =
