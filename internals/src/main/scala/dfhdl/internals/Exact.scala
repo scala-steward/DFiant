@@ -243,11 +243,11 @@ end Exact1
 /////////////////////////////////////////////////////////////////////////////////
 // ExactOp1
 /////////////////////////////////////////////////////////////////////////////////
-trait ExactOp1[Op, OutUB, Ctx, LHS]:
+trait ExactOp1[Op, Ctx, OutUB, LHS]:
   type Out <: OutUB
   def apply(lhs: LHS)(using Ctx): Out
-type ExactOp1Aux[Op, OutUB, Ctx, LHS, O <: OutUB] =
-  ExactOp1[Op, OutUB, Ctx, LHS] { type Out = O }
+type ExactOp1Aux[Op, Ctx, OutUB, LHS, O <: OutUB] =
+  ExactOp1[Op, Ctx, OutUB, LHS] { type Out = O }
 transparent inline def exactOp1[Op, Ctx, OutUB](inline lhs: Any)(using ctx: Ctx): OutUB =
   ${ exactOp1Macro[Op, Ctx, OutUB]('lhs)('ctx) }
 private def exactOp1Macro[Op, Ctx, OutUB](lhs: Expr[Any])(ctx: Expr[Ctx])(using
@@ -258,7 +258,7 @@ private def exactOp1Macro[Op, Ctx, OutUB](lhs: Expr[Any])(ctx: Expr[Ctx])(using
 ): Expr[OutUB] =
   import quotes.reflect.*
   val lhsExactInfo = lhs.exactInfo
-  Expr.summon[ExactOp1[Op, OutUB, Ctx, lhsExactInfo.Underlying]] match
+  Expr.summon[ExactOp1[Op, Ctx, OutUB, lhsExactInfo.Underlying]] match
     case Some(expr) => '{ $expr(${ lhsExactInfo.exactExpr })(using $ctx) }
     case None       =>
       ControlledMacroError.report("Unsupported argument type for this operation.")

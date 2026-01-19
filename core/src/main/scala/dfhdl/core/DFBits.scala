@@ -577,6 +577,66 @@ object DFBits:
             DFVal.Alias.ApplyRange(lhs, IntParam(idxHigh), IntParam(idxLow))
           }(using dfc, CTName("bit range selection (apply)"))
       end evOpApplyRangeDFBits
+      given evLogicOpDFBits[
+          Op <: FuncOp.|.type | FuncOp.&.type | FuncOp.^.type,
+          L,
+          LW <: IntP,
+          LP,
+          R,
+          RW <: IntP,
+          RP
+      ](using
+          icL: Candidate.Aux[L, LW, LP],
+          icR: Candidate.Aux[R, RW, RP],
+          op: ValueOf[Op]
+      )(using
+          check: `LW == RW`.CheckNUB[LW, RW]
+      ): ExactOp2Aux[Op, DFC, DFValAny, L, R, DFValTP[DFBits[LW], LP | RP]] =
+        new ExactOp2[Op, DFC, DFValAny, L, R]:
+          type Out = DFValTP[DFBits[LW], LP | RP]
+          def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
+            val lhsVal = icL(lhs)
+            val rhsVal = icR(rhs)
+            check(lhsVal.widthInt, rhsVal.widthInt)
+            DFVal.Func(lhsVal.dfType, op.value, List(lhsVal, rhsVal))
+          }
+      end evLogicOpDFBits
+      given evLogicReduceOpDFBits[
+          Op <: FuncOp.|.type | FuncOp.&.type | FuncOp.^.type,
+          LW <: IntP,
+          LP,
+          L <: DFValTP[DFBits[LW], LP] | DFValTP[DFUInt[LW], LP]
+      ](using
+          op: ValueOf[Op]
+      ): ExactOp1Aux[Op, DFC, DFValAny, L, DFValTP[DFBit, LP]] =
+        new ExactOp1[Op, DFC, DFValAny, L]:
+          type Out = DFValTP[DFBit, LP]
+          def apply(lhs: L)(using DFC): Out = trydf {
+            DFVal.Func(DFBit, op.value, List(lhs)).asValTP[DFBit, LP]
+          }
+      end evLogicReduceOpDFBits
+      given evConcatOpDFBits[
+          Op <: FuncOp.++.type,
+          L,
+          LW <: IntP,
+          LP,
+          R,
+          RW <: IntP,
+          RP
+      ](using
+          icL: Candidate.Aux[L, LW, LP],
+          icR: Candidate.Aux[R, RW, RP],
+          op: ValueOf[Op]
+      ): ExactOp2Aux[Op, DFC, DFValAny, L, R, DFValTP[DFBits[IntP.+[LW, RW]], LP | RP]] =
+        new ExactOp2[Op, DFC, DFValAny, L, R]:
+          type Out = DFValTP[DFBits[IntP.+[LW, RW]], LP | RP]
+          def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
+            val lhsVal = icL(lhs)
+            val rhsVal = icR(rhs)
+            val width = lhsVal.widthIntParam + rhsVal.widthIntParam
+            DFVal.Func(DFBits(width), FuncOp.++, List(lhsVal, rhsVal))
+          }
+      end evConcatOpDFBits
 
       extension [W <: IntP, P](lhs: DFValTP[DFBits[W], P])
         def truncate(using DFCG): DFValTP[DFBits[Int], P] =
@@ -595,59 +655,6 @@ object DFBits:
           val width =
             iter.map(_.widthIntParam.asInstanceOf[IntParam[Int]]).reduce(_ + _)
           DFVal.Func(DFBits(width), FuncOp.++, iter.toList)
-      // only Bits and UInt as expected candidates
-      extension [W0 <: IntP, L <: DFValOf[DFBits[W0]] | DFValOf[DFUInt[W0]], LW <: IntP, LP](
-          lhs: L
-      )(using
-          icL: Candidate[L]
-      )
-        def &[R](rhs: Candidate.Exact)(using
-            dfc: DFCG,
-            check: `LW == RW`.CheckNUB[icL.OutW, rhs.tc.OutW]
-        ): DFValTP[DFBits[icL.OutW], icL.OutP | rhs.tc.OutP] = trydf {
-          val lhsVal = icL(lhs)
-          val rhsVal = rhs()
-          check(lhsVal.widthInt, rhsVal.widthInt)
-          DFVal.Func(lhsVal.dfType, FuncOp.&, List(lhsVal, rhsVal))
-        }
-        def |[R](rhs: Candidate.Exact)(using
-            dfc: DFCG,
-            check: `LW == RW`.CheckNUB[icL.OutW, rhs.tc.OutW]
-        ): DFValTP[DFBits[icL.OutW], icL.OutP | rhs.tc.OutP] = trydf {
-          val lhsVal = icL(lhs)
-          val rhsVal = rhs()
-          check(lhsVal.widthInt, rhsVal.widthInt)
-          DFVal.Func(lhsVal.dfType, FuncOp.|, List(lhsVal, rhsVal))
-        }
-        def ^[R](rhs: Candidate.Exact)(using
-            dfc: DFCG,
-            check: `LW == RW`.CheckNUB[icL.OutW, rhs.tc.OutW]
-        ): DFValTP[DFBits[icL.OutW], icL.OutP | rhs.tc.OutP] = trydf {
-          val lhsVal = icL(lhs)
-          val rhsVal = rhs()
-          check(lhsVal.widthInt, rhsVal.widthInt)
-          DFVal.Func(lhsVal.dfType, FuncOp.^, List(lhsVal, rhsVal))
-        }
-        ///////////////////////////////////////////////////////////////////////////////
-        // The `reduce?` is a workaround https://github.com/scala/scala3/issues/20053
-        // See PreTyperPhase of compiler plugin to see replacements `.?` with `.reduce?`
-        ///////////////////////////////////////////////////////////////////////////////
-        def `reduce&`(using dfc: DFCG): DFValTP[DFBit, icL.OutP] = trydf {
-          DFVal.Func(DFBit, FuncOp.&, List(icL(lhs)))
-        }
-        def `reduce|`(using dfc: DFCG): DFValTP[DFBit, icL.OutP] = trydf {
-          DFVal.Func(DFBit, FuncOp.|, List(icL(lhs)))
-        }
-        def `reduce^`(using dfc: DFCG): DFValTP[DFBit, icL.OutP] = trydf {
-          DFVal.Func(DFBit, FuncOp.^, List(icL(lhs)))
-        }
-        // reduction AND of all bits
-        private def &(using dfc: DFCG): DFValTP[DFBit, icL.OutP] = `reduce&`
-        // reduction OR of all bits
-        private def |(using dfc: DFCG): DFValTP[DFBit, icL.OutP] = `reduce|`
-        // reduction XOR of all bits
-        private def ^(using dfc: DFCG): DFValTP[DFBit, icL.OutP] = `reduce^`
-      end extension
       extension [L <: DFValAny, LW <: IntP, LP](lhs: L)(using icL: Candidate.Aux[L, LW, LP])
         def extend(using DFCG): DFValTP[DFBits[Int], icL.OutP] =
           icL(lhs).tag(ir.ExtendTag).asValTP[DFBits[Int], icL.OutP]
@@ -670,14 +677,6 @@ object DFBits:
             if (lhsWidth.toScalaInt == 1) num.asInstanceOf[IntParam[IntP.*[icL.OutW, N]]]
             else lhsWidth * num
           DFVal.Func(DFBits(width), FuncOp.repeat, List(lhsVal, num.toDFConst))
-        }
-        def ++[R](rhs: Candidate.Exact)(using
-            dfc: DFCG
-        ): DFValTP[DFBits[IntP.+[icL.OutW, rhs.tc.OutW]], icL.OutP | rhs.tc.OutP] = trydf {
-          val lhsVal = icL(lhs)
-          val rhsVal = rhs()
-          val width = lhsVal.widthIntParam + rhsVal.widthIntParam
-          DFVal.Func(DFBits(width), FuncOp.++, List(lhsVal, rhsVal))
         }
       end extension
 
@@ -755,57 +754,6 @@ object DFBits:
           DFVal.Func(lhs.dfType, FuncOp.<<, List(lhs, shiftVal))
         }
       end extension
-      extension [L](lhs: L)
-        def ++[RW <: IntP, RP](
-            rhs: DFValTP[DFBits[RW], RP]
-        )(using
-            es: Exact.Summon[L, lhs.type]
-        )(using
-            dfc: DFCG,
-            c: Candidate[es.Out]
-        ): DFValTP[DFBits[IntP.+[c.OutW, RW]], c.OutP | RP] = trydf {
-          val lhsVal = c(es(lhs))
-          val width = lhsVal.widthIntParam + rhs.widthIntParam
-          DFVal.Func(DFBits(width), FuncOp.++, List(lhsVal, rhs))
-        }
-        def &[RW <: IntP, RP](
-            rhs: DFValTP[DFBits[RW], RP]
-        )(using
-            es: Exact.Summon[L, lhs.type]
-        )(using
-            dfc: DFCG,
-            c: Candidate[es.Out]
-        )(using check: `LW == RW`.CheckNUB[c.OutW, RW]): DFValTP[DFBits[RW], c.OutP | RP] = trydf {
-          val lhsVal = c(es(lhs))
-          check(lhsVal.widthInt, rhs.widthInt)
-          DFVal.Func(rhs.dfType, FuncOp.&, List(lhsVal, rhs))
-        }
-        def |[RW <: IntP, RP](
-            rhs: DFValTP[DFBits[RW], RP]
-        )(using
-            es: Exact.Summon[L, lhs.type]
-        )(using
-            dfc: DFCG,
-            c: Candidate[es.Out]
-        )(using check: `LW == RW`.CheckNUB[c.OutW, RW]): DFValTP[DFBits[RW], c.OutP | RP] = trydf {
-          val lhsVal = c(es(lhs))
-          check(lhsVal.widthInt, rhs.widthInt)
-          DFVal.Func(rhs.dfType, FuncOp.|, List(lhsVal, rhs))
-        }
-        def ^[RW <: IntP, RP](
-            rhs: DFValTP[DFBits[RW], RP]
-        )(using
-            es: Exact.Summon[L, lhs.type]
-        )(using
-            dfc: DFCG,
-            c: Candidate[es.Out]
-        )(using check: `LW == RW`.CheckNUB[c.OutW, RW]): DFValTP[DFBits[RW], c.OutP | RP] = trydf {
-          val lhsVal = c(es(lhs))
-          check(lhsVal.widthInt, rhs.widthInt)
-          DFVal.Func(rhs.dfType, FuncOp.^, List(lhsVal, rhs))
-        }
-      end extension
-
     end Ops
   end Val
 end DFBits

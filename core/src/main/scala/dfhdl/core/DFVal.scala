@@ -297,6 +297,7 @@ sealed protected trait DFValLP:
   // lower priority than other evidence because this is more generic
   export DFXInt.Val.Ops.evOpArithDFXInt
   export DFOpaque.Val.Ops.{evOpAsDFOpaqueTFE, evOpAsDFOpaqueComp}
+  export DFBits.Val.Ops.{evLogicOpDFBits, evConcatOpDFBits}
 end DFValLP
 object DFVal extends DFValLP:
   protected type FieldWithModifier[V, M <: ModifierAny] = V match
@@ -1249,7 +1250,8 @@ object DFVal extends DFValLP:
   ): RegInitCheck[I] with {}
 
   // exporting evidence for common exact operations
-  export DFBits.Val.Ops.given
+  export DFBits.Val.Ops.{evOpApplyDFBits, evOpApplyRangeDFBits, evOpAsDFBits, evLogicReduceOpDFBits}
+  export DFBoolOrBit.Val.Ops.given
   export DFTuple.Val.Ops.given
   export DFVector.Val.Ops.given
   export DFXInt.Val.Ops.{evOpArithIntDFInt32, evOpApplyDFXInt, evOpApplyRangeDFXInt}
@@ -1282,7 +1284,7 @@ object DFVal extends DFValLP:
 
   object Ops:
     protected type SupportedValue =
-      DFValAny | Int | Long | Double | NonEmptyTuple | Iterable[DFValAny] |
+      DFValAny | Boolean | Int | Long | Double | NonEmptyTuple | Iterable[DFValAny] |
         SameElementsVector[?] | BoolSelWrapper[?, ?, ?]
     extension (inline lhs: DFValAny)
       transparent inline def apply(inline idx: Any)(using DFCG): DFValAny =
@@ -1330,6 +1332,27 @@ object DFVal extends DFValLP:
             exactOp2[FuncOp.min.type, DFC, DFValAny](lhs, rhs)(using
               compiletime.summonInline[DFCG]
             )
+      transparent inline def |(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.|.type, DFC, DFValAny](lhs, rhs)
+      transparent inline def &(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.&.type, DFC, DFValAny](lhs, rhs)
+      transparent inline def ^(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.^.type, DFC, DFValAny](lhs, rhs)
+      transparent inline def |(using DFCG): DFValAny =
+        exactOp1[FuncOp.|.type, DFC, DFValAny](lhs)
+      transparent inline def &(using DFCG): DFValAny =
+        exactOp1[FuncOp.&.type, DFC, DFValAny](lhs)
+      transparent inline def ^(using DFCG): DFValAny =
+        exactOp1[FuncOp.^.type, DFC, DFValAny](lhs)
+      transparent inline def ++(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.++.type, DFC, DFValAny](lhs, rhs)
+    end extension
+    protected[core] trait BoolOnlyOp[Op <: FuncOp]
+    extension (inline lhs: SupportedValue)
+      transparent inline def ||(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[BoolOnlyOp[FuncOp.|.type], DFC, DFValAny](lhs, rhs)
+      transparent inline def &&(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[BoolOnlyOp[FuncOp.&.type], DFC, DFValAny](lhs, rhs)
     end extension
     extension (inline lhs: SupportedValue)
       transparent inline def as(inline aliasType: DFType.Supported)(using DFCG): DFValAny =

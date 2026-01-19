@@ -41,7 +41,6 @@ import reporting.*
   *   - change infix operator precedence of terms: `a := b match {...}` to be `a := (b match {...})`
   *     and `a <> b match {...}` to be `a <> (b match {...})`
   *   - change process{} to process.forever{}
-  *   - workaround for https://github.com/scala/scala3/issues/20053
   */
 class PreTyperPhase(setting: Setting) extends PluginPhase:
   import untpd.*
@@ -125,8 +124,6 @@ class PreTyperPhase(setting: Setting) extends PluginPhase:
       end match
     end transform
 
-  val reduceOpSet = Set("|", "&", "^")
-  val warnOpSet = Set("reduce|", "reduce&", "reduce^")
   private val `fixXand<>Precedence` = new UntypedTreeMap:
     object InfixOpChange:
       def unapply(tree: InfixOp)(using Context): Option[InfixOp] =
@@ -150,17 +147,6 @@ class PreTyperPhase(setting: Setting) extends PluginPhase:
           select match
             case FullSelectGivenName(updateName) => cpy.ValDef(tree)(name = updateName.toTermName)
             case _                               => tree
-        // workaround https://github.com/scala/scala3/issues/20053
-        case tree @ Select(t, name) =>
-          val nameStr = name.toString()
-          if (reduceOpSet.contains(nameStr)) cpy.Select(tree)(t, s"reduce$nameStr".toTermName)
-          else if (warnOpSet.contains(nameStr))
-            report.error(
-              s"do not directly call `.$nameStr`; instead call `.${nameStr.last}`",
-              tree.srcPos
-            )
-            tree
-          else tree
         case t =>
           t
       end match
