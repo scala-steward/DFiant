@@ -311,6 +311,12 @@ class DFDecimalSpec extends DFSpec:
          |val t5 = u8 != d"8'255"
          |val t6 = u8 <= b8.uint
          |val t7 = u8.resize(4) >= b8.resize(4).uint
+         |val t8 = u8 == d"8'${one}"
+         |val t9 = s8 == sd"8'${one}"
+         |val t10 = s8 == sd"8'${negOne}"
+         |val t11 = u8 < d"8'${one}"
+         |val t12 = s8 >= sd"8'${one}"
+         |val t13 = s8 <= sd"8'${negOne}"
          |""".stripMargin
     } {
       val t1 = u8 == u8
@@ -320,7 +326,6 @@ class DFDecimalSpec extends DFSpec:
       val t5 = u8 != h"FF"
       val t6 = u8 <= b8
       val t7 = u8.resize(4) >= b8.resize(4)
-      // TODO: comparisons with Int are not showing up
       val t8 = u8 == one
       val t9 = s8 == one
       val t10 = s8 == negOne
@@ -378,20 +383,19 @@ class DFDecimalSpec extends DFSpec:
       u8 == negOne
     }
     assertRuntimeErrorLog(
-      """|Cannot apply this operation between a value of 8 bits width (LHS) to a value of 10 bits width (RHS).
+      """|Cannot compare a DFHDL value (width = 8) with a Scala `Int` argument that is wider (width = 10).
          |An explicit conversion must be applied.
          |""".stripMargin
     ) {
       u8 == big
     }
-    // TODO: this fails with the wrong message (sign mismatch)
-    // assertRuntimeErrorLog(
-    //   """|Cannot apply this operation between a value of 8 bits width (LHS) to a value of 10 bits width (RHS).
-    //      |An explicit conversion must be applied.
-    //      |""".stripMargin
-    // ) {
-    //   s8 == big
-    // }
+    assertRuntimeErrorLog(
+      """|Cannot compare a DFHDL value (width = 8) with a Scala `Int` argument that is wider (width = 11).
+         |An explicit conversion must be applied.
+         |""".stripMargin
+    ) {
+      s8 == big
+    }
   }
   test("Arithmetic") {
     assertEquals(d"8'22" + d"8'22", d"8'44")

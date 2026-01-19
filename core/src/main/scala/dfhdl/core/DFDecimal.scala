@@ -153,7 +153,7 @@ object DFDecimal:
         ValW <: IntP,
         ArgS <: Boolean,
         ArgW <: IntP,
-        ArgIsInt <: Boolean, // argument is from a Scala Int
+        ArgIsInt <: Boolean, // argument is from a Scala Int or DFHDL Int
         Castle <: Boolean // castling of dfVal and arg
     ]:
       def apply(
@@ -162,6 +162,7 @@ object DFDecimal:
           argSigned: Boolean,
           argWidth: Int
       ): Unit
+    end CompareCheck
     given [
         ValS <: Boolean,
         ValW <: IntP,
@@ -194,11 +195,12 @@ object DFDecimal:
           argSigned: Boolean,
           argWidth: Int
       ): Unit =
-        val skipChecks = argIsInt.value && (dfValSigned || !argSigned)
+        val isInt = argIsInt.value
+        val skipChecks = isInt && (dfValSigned || !argSigned)
         val argWFix =
-          if (argIsInt.value && dfValSigned && !argSigned) argWidth + 1
+          if (isInt && dfValSigned && !argSigned) argWidth + 1
           else argWidth
-        if (argIsInt) checkVAW(dfValWidth, argWFix)
+        if (isInt) checkVAW(dfValWidth, argWFix)
         if (!skipChecks)
           val ls = if (castle) argSigned else dfValSigned
           val rs = if (castle) dfValSigned else argSigned
@@ -862,10 +864,10 @@ object DFXInt:
       ](using
           ic: IC { type OutP = RP }
       )(using
-          check: CompareCheck[LS, LW, ic.OutSMask, ic.OutWMask, ic.IsScalaInt, C],
-          nativeCheck: NativeCheck[LN, ic.OutN, ic.IsScalaInt],
-          op: ValueOf[Op],
-          castling: ValueOf[C]
+          isInt32: IsGiven[ic.OutN =:= NativeType.Int32]
+      )(using
+          check: CompareCheck[LS, LW, ic.OutSMask, ic.OutWMask, ic.IsScalaInt || isInt32.Out, C],
+          nativeCheck: NativeCheck[LN, ic.OutN, ic.IsScalaInt]
       ): Compare[DFXInt[LS, LW, LN], R, Op, C] with
         type OutP = RP
         def conv(dfType: DFXInt[LS, LW, LN], arg: R)(using dfc: DFC): Out =

@@ -306,6 +306,16 @@ object GivenOrError:
   end givenOrErrorMacro
 end GivenOrError
 
+trait IsGiven[T]:
+  type Out <: Boolean
+trait IsGivenLP:
+  given notGiven[T]: IsGiven[T] with
+    type Out = false
+object IsGiven extends IsGivenLP:
+  given isGiven[T](using t: T): IsGiven[T] with
+    type Out = true
+end IsGiven
+
 //from Map[K,V] to Map[V,Set[K]], traverse the input only once
 //From: https://stackoverflow.com/a/51356499/3845175
 extension [K, V](m: Map[K, V])
