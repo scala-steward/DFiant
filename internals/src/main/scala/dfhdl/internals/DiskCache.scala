@@ -69,7 +69,7 @@ class DiskCache(val cacheFolderStr: String):
       protected def defaultHash: String =
         val hashInt = key match
           case s: String          => MurmurHash3.stringHash(s)
-          case p: Product         => MurmurHash3.productHash(p)
+          case p: Product         => MurmurHash3.caseClassHash(p)
           case i: IterableOnce[?] => MurmurHash3.orderedHash(i)
         hashInt.toHexString
     protected def valueToCacheStr(value: R): String
