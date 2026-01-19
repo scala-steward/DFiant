@@ -935,6 +935,20 @@ object DFXInt:
             DFVal.Alias.ApplyRange.applyDFXInt(lhs, IntParam(idxHigh), IntParam(idxLow))
           }(using dfc, CTName("bit range selection (apply)"))
       end evOpApplyRangeDFXInt
+      given evOpShiftOrPowerInt[
+          Op <: FuncOp.>>.type | FuncOp.<<.type | FuncOp.**.type,
+          L <: Int,
+          RP,
+          R <: DFValTP[DFInt32, RP]
+      ](using
+          op: ValueOf[Op]
+      ): ExactOp2Aux[Op, DFC, DFValAny, L, R, DFValTP[DFInt32, RP]] =
+        new ExactOp2[Op, DFC, DFValAny, L, R]:
+          type Out = DFValTP[DFInt32, RP]
+          def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
+            DFVal.Func(DFInt32, op.value, List(DFConstInt32(lhs), rhs)).asValTP[DFInt32, RP]
+          }
+      end evOpShiftOrPowerInt
 
       export dfhdl.internals.clog2
       def clog2[P, S <: Boolean, W <: IntP, N <: NativeType](
@@ -1006,34 +1020,8 @@ object DFXInt:
           DFVal.Alias.AsIs(DFXInt(signed, updatedWidth, BitAccurate), lhs)
         }
         end resize
-        @targetName("shiftRightDFXInt")
-        def >>(shift: DFUInt.Val.UBArg.Exact[W])(using
-            dfc: DFCG
-        ): DFValTP[DFXInt[S, W, N], P | shift.tc.OutP] = trydf {
-          val shiftVal = shift(lhs.widthIntParam)(using dfc.anonymize)
-          DFVal.Func(lhs.dfType, FuncOp.>>, List(lhs, shiftVal))
-        }
-        @targetName("shiftLeftDFXInt")
-        def <<(shift: DFUInt.Val.UBArg.Exact[W])(using
-            dfc: DFCG
-        ): DFValTP[DFXInt[S, W, N], P | shift.tc.OutP] = trydf {
-          val shiftVal = shift(lhs.widthIntParam)(using dfc.anonymize)
-          DFVal.Func(lhs.dfType, FuncOp.<<, List(lhs, shiftVal))
-        }
       end extension
 
-      extension [L <: Int](lhs: L)
-        def <<[P](shift: DFValTP[DFInt32, P])(using dfc: DFCG): DFValTP[DFInt32, P] = trydf {
-          DFVal.Func(DFInt32, FuncOp.<<, List(DFConstInt32(lhs), shift)).asValTP[DFInt32, P]
-        }
-        def >>[P](shift: DFValTP[DFInt32, P])(using dfc: DFCG): DFValTP[DFInt32, CONST | P] =
-          trydf {
-            DFVal.Func(DFInt32, FuncOp.>>, List(DFConstInt32(lhs), shift)).asValTP[DFInt32, P]
-          }
-        def **[P](shift: DFValTP[DFInt32, P])(using dfc: DFCG): DFValTP[DFInt32, P] = trydf {
-          DFVal.Func(DFInt32, FuncOp.**, List(DFConstInt32(lhs), shift)).asValTP[DFInt32, P]
-        }
-      end extension
       private def arithOp[
           OS <: Boolean,
           OW <: IntP,
@@ -1347,6 +1335,7 @@ object DFUInt:
           )
         ]
     object UBArg extends UBArgLP:
+      type Aux[UB <: IntP, R, P] = UBArg[UB, R] { type OutP = P }
       type Exact[UB <: IntP] = Exact1[IntP, UB, [ub <: IntP] =>> IntParam[ub], DFC, UBArg]
       given fromInt[UB <: Int, R <: Int](using
           unsignedCheck: Unsigned.Check[R < 0],

@@ -1250,11 +1250,22 @@ object DFVal extends DFValLP:
   ): RegInitCheck[I] with {}
 
   // exporting evidence for common exact operations
-  export DFBits.Val.Ops.{evOpApplyDFBits, evOpApplyRangeDFBits, evOpAsDFBits, evLogicReduceOpDFBits}
+  export DFBits.Val.Ops.{
+    evOpApplyDFBits,
+    evOpApplyRangeDFBits,
+    evOpAsDFBits,
+    evOpLogicReduceDFBits,
+    evOpShift
+  }
   export DFBoolOrBit.Val.Ops.given
   export DFTuple.Val.Ops.given
   export DFVector.Val.Ops.given
-  export DFXInt.Val.Ops.{evOpArithIntDFInt32, evOpApplyDFXInt, evOpApplyRangeDFXInt}
+  export DFXInt.Val.Ops.{
+    evOpArithIntDFInt32,
+    evOpApplyDFXInt,
+    evOpApplyRangeDFXInt,
+    evOpShiftOrPowerInt
+  }
   export DFPhysical.Val.Ops.given
   export TDFDouble.Val.Ops.given
   export DFEnum.Val.Ops.given
@@ -1346,6 +1357,12 @@ object DFVal extends DFValLP:
         exactOp1[FuncOp.^.type, DFC, DFValAny](lhs)
       transparent inline def ++(inline rhs: SupportedValue)(using DFCG): DFValAny =
         exactOp2[FuncOp.++.type, DFC, DFValAny](lhs, rhs)
+      transparent inline def >>(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.>>.type, DFC, DFValAny](lhs, rhs)
+      transparent inline def <<(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.<<.type, DFC, DFValAny](lhs, rhs)
+      transparent inline def **(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.**.type, DFC, DFValAny](lhs, rhs)
     end extension
     protected[core] trait BoolOnlyOp[Op <: FuncOp]
     extension (inline lhs: SupportedValue)

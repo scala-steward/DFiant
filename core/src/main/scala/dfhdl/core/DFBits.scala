@@ -601,7 +601,7 @@ object DFBits:
             DFVal.Func(lhsVal.dfType, op.value, List(lhsVal, rhsVal))
           }
       end evLogicOpDFBits
-      given evLogicReduceOpDFBits[
+      given evOpLogicReduceDFBits[
           Op <: FuncOp.|.type | FuncOp.&.type | FuncOp.^.type,
           LW <: IntP,
           LP,
@@ -614,7 +614,7 @@ object DFBits:
           def apply(lhs: L)(using DFC): Out = trydf {
             DFVal.Func(DFBit, op.value, List(lhs)).asValTP[DFBit, LP]
           }
-      end evLogicReduceOpDFBits
+      end evOpLogicReduceDFBits
       given evConcatOpDFBits[
           Op <: FuncOp.++.type,
           L,
@@ -637,6 +637,25 @@ object DFBits:
             DFVal.Func(DFBits(width), FuncOp.++, List(lhsVal, rhsVal))
           }
       end evConcatOpDFBits
+      given evOpShift[
+          Op <: FuncOp.>>.type | FuncOp.<<.type,
+          LW <: IntP,
+          LP,
+          LT <: DFBits[LW] | DFSInt[LW] | DFUInt[LW] | DFInt32,
+          L <: DFValTP[LT, LP],
+          R,
+          RP
+      ](using
+          ub: DFUInt.Val.UBArg.Aux[LW, R, RP],
+          op: ValueOf[Op]
+      ): ExactOp2Aux[Op, DFC, DFValAny, L, R, DFValTP[LT, LP | RP]] =
+        new ExactOp2[Op, DFC, DFValAny, L, R]:
+          type Out = DFValTP[LT, LP | RP]
+          def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
+            val shiftVal = ub(lhs.widthIntParam.asInstanceOf[IntParam[LW]], rhs)
+            DFVal.Func(lhs.dfType, op.value, List(lhs, shiftVal))
+          }
+      end evOpShift
 
       extension [W <: IntP, P](lhs: DFValTP[DFBits[W], P])
         def truncate(using DFCG): DFValTP[DFBits[Int], P] =
@@ -738,20 +757,6 @@ object DFBits:
         ): DFValTP[DFBits[RW], P] = trydf {
           check(lhs.widthInt, updatedWidth)
           DFVal.Alias.ApplyRange(lhs, updatedWidth - 1, 0).asValTP[DFBits[RW], P]
-        }
-        @targetName("shiftRightDFBits")
-        def >>(shift: DFUInt.Val.UBArg.Exact[W])(using
-            dfc: DFCG
-        ): DFValTP[DFBits[W], P | shift.tc.OutP] = trydf {
-          val shiftVal = shift(lhs.widthIntParam)(using dfc.anonymize)
-          DFVal.Func(lhs.dfType, FuncOp.>>, List(lhs, shiftVal))
-        }
-        @targetName("shiftLeftDFBits")
-        def <<(shift: DFUInt.Val.UBArg.Exact[W])(using
-            dfc: DFCG
-        ): DFValTP[DFBits[W], P | shift.tc.OutP] = trydf {
-          val shiftVal = shift(lhs.widthIntParam)(using dfc.anonymize)
-          DFVal.Func(lhs.dfType, FuncOp.<<, List(lhs, shiftVal))
         }
       end extension
     end Ops
