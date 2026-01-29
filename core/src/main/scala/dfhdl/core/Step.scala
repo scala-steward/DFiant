@@ -12,6 +12,14 @@ object StepBlock:
       dfc.tags
     )
     step.asFE
+
+  // for meta programming only
+  private[dfhdl] def forced(using dfc: DFC): StepBlock =
+    ir.StepBlock(
+      dfc.owner.ref,
+      dfc.getMeta,
+      dfc.tags
+    ).addMember.asFE
 end StepBlock
 
 sealed trait Step
