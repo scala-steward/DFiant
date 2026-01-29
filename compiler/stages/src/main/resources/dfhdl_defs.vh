@@ -23,7 +23,9 @@
 //  OTHER DEALINGS IN THE SOFTWARE.
 //  
 //  For more information, please refer to <http://unlicense.org/>
-
+//
+// TODO: remove UNUSEDSIGNAL lint-off after 
+// https://github.com/verilator/verilator/issues/6893 is fixed
 `define MAX(a, b) ((a) > (b) ? (a) : (b))
 `define MIN(a, b) ((a) < (b) ? (a) : (b))
 `define ABS(a) ((a) < 0 ? -(a) : (a))
@@ -73,6 +75,7 @@
 `define SIGNED_SHIFT_RIGHT(data, shift, width) \
     ((data[width-1] == 1'b1) ? ((data >> shift) | ({width{1'b1}} << (width - shift))) : (data >> shift))
 function integer clog2;
+/* verilator lint_off UNUSEDSIGNAL */
 input integer n;
 integer result, temp;
 begin
@@ -83,10 +86,12 @@ begin
     result = result + 1;
   end
   clog2 = result;
+/* verilator lint_on UNUSEDSIGNAL */
 end
 endfunction
 // Function to perform base raised to the power of exp (base ** exp)
 function integer power;
+/* verilator lint_off UNUSEDSIGNAL */
 input integer base;
 input integer exp;
 integer i;  // Loop variable
@@ -99,6 +104,7 @@ begin
       power = power * base;
     end
   end
+/* verilator lint_on UNUSEDSIGNAL */
 end
 endfunction
 
