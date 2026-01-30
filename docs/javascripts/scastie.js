@@ -1,12 +1,11 @@
-let dfhdlVersion = "0.16.0";
-let scalaVersion = "3.7.4";
+let dfhdlVersion = "0.17.0";
+let scalaVersion = "3.8.1";
 
 let sbtConfig = `
 val dfhdlVersion = "${dfhdlVersion}"
 scalacOptions ++= Seq(
   "-deprecation",
   "-feature",
-  "-language:implicitConversions",
   "-language:strictEquality",
 )
 addCompilerPlugin(

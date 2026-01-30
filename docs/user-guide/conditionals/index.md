@@ -112,10 +112,10 @@ y match
     // Use part1 and part2 bits
 
 // Store extracted bits in variables
-val h"DEAD${extracted: B[32]}BEEF" = input: @unchecked
+val h"DEAD${extracted: B[32]}BEEF" = input.runtimeChecked
 
 // Extract multiple sections into variables
-val h"DE${first: B[16]}ADBE${second: B[16]}EF" = input: @unchecked
+val h"DE${first: B[16]}ADBE${second: B[16]}EF" = input.runtimeChecked
 
 // Using guards with extracted bit fields
 y match
