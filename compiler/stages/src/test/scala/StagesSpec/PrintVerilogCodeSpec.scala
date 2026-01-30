@@ -1163,6 +1163,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |  `define MyEnum_B 1
          |  `define MyEnum_C 2
          |  function [8*8:1] MyEnum_to_string;
+         |    /* verilator lint_off UNUSEDSIGNAL */
          |    input [1:0] value;
          |    case (value)
          |      `MyEnum_A: MyEnum_to_string = "MyEnum_A";
@@ -1170,6 +1171,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |      `MyEnum_C: MyEnum_to_string = "MyEnum_C";
          |      default: MyEnum_to_string = "?";
          |    endcase
+         |    /* verilator lint_on UNUSEDSIGNAL */
          |  endfunction
          |  parameter bar = {param, "!"};
          |  parameter param2 = {2{param}};

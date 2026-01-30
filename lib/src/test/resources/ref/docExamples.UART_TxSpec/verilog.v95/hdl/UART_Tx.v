@@ -22,6 +22,7 @@ module UART_Tx(
   `define Status_StopBit 8
   `define Status_Finalize 16
   function [8*15:1] Status_to_string;
+    /* verilator lint_off UNUSEDSIGNAL */
     input [4:0] value;
     case (value)
       `Status_Idle: Status_to_string = "Status_Idle";
@@ -31,6 +32,7 @@ module UART_Tx(
       `Status_Finalize: Status_to_string = "Status_Finalize";
       default: Status_to_string = "?";
     endcase
+    /* verilator lint_on UNUSEDSIGNAL */
   endfunction
   input  wire   clk;
   input  wire   rst;
