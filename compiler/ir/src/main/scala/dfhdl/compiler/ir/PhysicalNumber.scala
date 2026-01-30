@@ -65,7 +65,7 @@ object LiteralNumber:
   case object Unit extends PhysicalNumber.Unit:
     given ReadWriter[Unit.type] = macroRW
   extension (lhs: LiteralNumber)
-    def /(rhs: TimeNumber): FreqNumber = rhs.to_freq * lhs
+    def /(rhs: TimeNumber): FreqNumber = rhs.to_hz * lhs
     def /(rhs: FreqNumber): TimeNumber = rhs.to_period * lhs
     def /(rhs: LiteralNumber): LiteralNumber = LiteralNumber(lhs.value / rhs.value)
     def *(rhs: LiteralNumber): LiteralNumber = LiteralNumber(lhs.value * rhs.value)
@@ -147,4 +147,11 @@ object FreqNumber:
   end extension
 end FreqNumber
 
-type RateNumber = TimeNumber | FreqNumber
+// type RateNumber = TimeNumber | FreqNumber
+into opaque type RateNumber <: TimeNumber | FreqNumber = TimeNumber | FreqNumber
+object RateNumber:
+  given ReadWriter[RateNumber] = summon[ReadWriter[TimeNumber | FreqNumber]]
+  given CanEqual[RateNumber, TimeNumber | FreqNumber] = CanEqual.derived
+  given CanEqual[TimeNumber | FreqNumber, RateNumber] = CanEqual.derived
+  given Conversion[FreqNumber, RateNumber] = identity
+  given Conversion[TimeNumber, RateNumber] = identity

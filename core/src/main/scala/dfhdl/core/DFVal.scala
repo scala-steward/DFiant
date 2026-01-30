@@ -288,12 +288,6 @@ sealed protected trait DFValLP:
     x =>
       import dfc.getSet
       x.asIR.getConstData.get.asInstanceOf[ir.RateNumber]
-  given DFRateToRateNumberConfigN(using
-      dfc: DFCG
-  ): Conversion[DFConstOf[DFTime | DFFreq], ir.ConfigN[ir.RateNumber]] =
-    x =>
-      import dfc.getSet
-      x.asIR.getConstData.get.asInstanceOf[ir.ConfigN[ir.RateNumber]]
   // lower priority than other evidence because this is more generic
   export DFXInt.Val.Ops.evOpArithDFXInt
   export DFOpaque.Val.Ops.{evOpAsDFOpaqueTFE, evOpAsDFOpaqueComp}

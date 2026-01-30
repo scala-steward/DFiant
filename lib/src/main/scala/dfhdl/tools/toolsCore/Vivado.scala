@@ -115,7 +115,8 @@ class VivadoProjectTclConfigPrinter(using
       case configConstraint: constraints.DeviceConfig => configConstraint
     }.getOrElse(throw new IllegalArgumentException("No `@deviceConfig` constraint found"))
     if (bo.flash)
-      s"""write_cfgmem -format mcs -interface ${config.interface} -size ${config.sizeLimitMb / 8} -loadbit "up 0x0 ./${topName}.bit" -file ./${topName}.mcs"""
+      s"""write_cfgmem -format mcs -interface ${config.interface} -size ${config.sizeLimitMb /
+          8} -loadbit "up 0x0 ./${topName}.bit" -file ./${topName}.mcs"""
     else ""
   def configFileName: String = s"$topName.tcl"
   def vivadoIPs: String =
@@ -183,9 +184,8 @@ class VivadoProjectConstraintsPrinter(using
           case MasterSMAP(8)        => "M_SELECTMAP"
           case SlaveSMAP(busWidth)  => s"S_SELECTMAP$busWidth"
           case MasterSMAP(busWidth) => s"M_SELECTMAP$busWidth"
-        val configRate = constraint.masterRate match
-          case None             => None
-          case rate: RateNumber => Some((rate.to_freq / 1.MHz).value.toInt)
+        val configRate =
+          constraint.masterRate.toOption.map(rate => (rate.to_freq / 1.MHz).value.toInt)
         val compress = if (bo.compress) "TRUE" else "FALSE"
         List(
           s"set_property CONFIG_MODE $configMode [current_design]",

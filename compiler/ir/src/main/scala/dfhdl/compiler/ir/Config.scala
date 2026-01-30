@@ -6,6 +6,8 @@ object ConfigN:
     def apply(x: None.type): ConfigN[T] = x
   given [T]: Conversion[T, ConfigN[T]] with
     def apply(x: T): ConfigN[T] = x
+  given [F, T](using conv: Conversion[F, T]): Conversion[F, ConfigN[T]] with
+    def apply(x: F): ConfigN[T] = conv(x)
   given [T1, T2](using CanEqual[T1, T2]): CanEqual[ConfigN[T1], ConfigN[T2]] = CanEqual.derived
   given [T]: CanEqual[ConfigN[T], None.type] = CanEqual.derived
   given [T]: CanEqual[None.type, ConfigN[T]] = CanEqual.derived

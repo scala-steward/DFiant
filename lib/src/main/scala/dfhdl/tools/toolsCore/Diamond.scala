@@ -222,9 +222,10 @@ class DiamondProjectPhysicalConstraintsPrinter(using
       config.interface match
         case SlaveSMAP(_) => "ENABLE"
         case _            => "DISABLE"
-    val mcclkFreq = config.masterRate match
-      case None             => ""
-      case rate: RateNumber => s" MCCLK_FREQ=${(rate.to_freq / 1.MHz).value.toInt}"
+    val mcclkFreq =
+      config.masterRate.toOption.map(rate =>
+        s" MCCLK_FREQ=${(rate.to_freq / 1.MHz).value.toInt}"
+      ).getOrElse("")
     s"""SYSCONFIG CONFIG_IOVOLTAGE=3.3$mcclkFreq COMPRESS_CONFIG=$compress MASTER_SPI_PORT=$masterSPI SLAVE_SPI_PORT=$slaveSPI SLAVE_PARALLEL_PORT=$slaveParallel;"""
   end sysConfig
 

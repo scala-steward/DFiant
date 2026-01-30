@@ -46,17 +46,15 @@ class BuilderProjectTimingConstraintsPrinter(
     def set_false_path(dir: String): String =
       s"set_false_path $dir ${sdc_get_ports(port, constraint)}"
     def set_io_delay(dir: String): String =
-      constraint.maxFreqMinPeriod match
-        case None                         => ""
-        case maxFreqMinPeriod: RateNumber =>
-          val maxFreqMinPeriodNS = maxFreqMinPeriod.to_ns.value.min(MaxClockPeriodNS)
-          val virtualClockName = s"virtual_clock_${port.getName}"
-          //format: off
-          s"""|
-              |create_clock -period $maxFreqMinPeriodNS -name $virtualClockName
-              |set_${dir}_delay -clock [get_clocks $virtualClockName] -source_latency_included 0.0 ${sdc_get_ports(port,constraint)}""".stripMargin
-          //format: on
-        case _ => ""
+      constraint.maxFreqMinPeriod.toOption.map(maxFreqMinPeriod =>
+        val maxFreqMinPeriodNS = maxFreqMinPeriod.to_ns.value.min(MaxClockPeriodNS)
+        val virtualClockName = s"virtual_clock_${port.getName}"
+        //format: off
+        s"""|
+            |create_clock -period $maxFreqMinPeriodNS -name $virtualClockName
+            |set_${dir}_delay -clock [get_clocks $virtualClockName] -source_latency_included 0.0 ${sdc_get_ports(port,constraint)}""".stripMargin
+        //format: on
+      ).getOrElse("")
     port.modifier.dir.runtimeChecked match
       case DFVal.Modifier.IN =>
         set_false_path("-from") + (if (enableToggleRateLimitIODelay) set_io_delay("input") else "")
