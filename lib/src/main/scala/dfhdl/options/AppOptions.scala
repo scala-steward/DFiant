@@ -21,19 +21,20 @@ object AppOptions:
       AppOptions(appMode = appMode, clearConsole = clearConsole, cacheEnable = cacheEnable)
   given (using defaults: Defaults[Design]): AppOptions = defaults
 
-  opaque type AppMode <: ConfigN[dfhdl.app.AppMode] = ConfigN[dfhdl.app.AppMode]
+  into opaque type AppMode <: ConfigN[dfhdl.app.AppMode] = ConfigN[dfhdl.app.AppMode]
   object AppMode:
     export dfhdl.app.AppMode.*
+    import language.implicitConversions
     given AppMode = None
     given CanEqual[dfhdl.app.AppMode, AppMode] = CanEqual.derived
     given Conversion[dfhdl.app.AppMode, AppMode] = identity
 
-  opaque type ClearConsole <: Boolean = Boolean
+  into opaque type ClearConsole <: Boolean = Boolean
   object ClearConsole:
     given ClearConsole = if (metalsIsRunning || scala_cliIsRunning) true else false
     given Conversion[Boolean, ClearConsole] = identity
 
-  opaque type CacheEnable <: Boolean = Boolean
+  into opaque type CacheEnable <: Boolean = Boolean
   object CacheEnable:
     given CacheEnable = true
     given Conversion[Boolean, CacheEnable] = identity

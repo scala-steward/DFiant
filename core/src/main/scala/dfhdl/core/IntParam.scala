@@ -52,7 +52,7 @@ object IntP:
     case _   => Sig1[FuncOp.abs.type, T]
 end IntP
 
-opaque type IntParam[V <: IntP] = Int | DFConstInt32
+into opaque type IntParam[V <: IntP] = Int | DFConstInt32
 protected sealed trait IntParamLP:
   given [T <: IntP]: Conversion[IntParam[T], IntParam[Int]] = value =>
     value.asInstanceOf[IntParam[Int]]

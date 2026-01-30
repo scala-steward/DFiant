@@ -2,7 +2,7 @@ package dfhdl.compiler.ir
 import dfhdl.internals.BitVector
 import upickle.default.*
 import scala.collection.mutable.ArrayBuffer
-opaque type Data = Any
+into opaque type Data = Any
 object Data:
   given Conversion[Any, Data] = identity
   given ReadWriter[BitVector] = readwriter[String].bimap(

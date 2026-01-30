@@ -56,6 +56,7 @@ lazy val internals = project
   .settings(
     name := s"$projectName-internals",
     settings,
+    implicitConversionSettings,
     libraryDependencies ++= commonDependencies
   )
 
@@ -72,6 +73,7 @@ lazy val compiler_ir = (project in file("compiler/ir"))
   .settings(
     name := s"$projectName-compiler-ir",
     settings,
+    implicitConversionSettings,
     libraryDependencies += dependencies.upickle
   ).dependsOn(internals)
 
@@ -79,6 +81,7 @@ lazy val core = project
   .settings(
     name := s"$projectName-core",
     settings,
+    implicitConversionSettings,
     pluginTestUseSettings,
     libraryDependencies ++= commonDependencies,
     Compile / resourceGenerators += Def.task {
@@ -182,8 +185,8 @@ def compilerOptionsVersionDependent(scalaVersion: String) = {
 lazy val compilerOptions = Seq(
   "-unchecked",
   "-feature",
+  "-preview",
   "-language:strictEquality",
-  "-language:implicitConversions",
   "-deprecation",
   //TODO: remove when fixed scalac issues:
   //https://github.com/lampepfl/dotty/issues/19299
@@ -220,4 +223,10 @@ lazy val commonSettings = Seq(
   scalacOptions ++= {
     compilerOptions ++ compilerOptionsVersionDependent(scalaVersion.value)
   }
+)
+
+lazy val implicitConversionSettings = Seq(
+  Compile / scalacOptions ++= Seq(
+    "-language:implicitConversions"
+  )
 )

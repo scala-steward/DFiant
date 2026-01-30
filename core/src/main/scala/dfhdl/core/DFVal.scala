@@ -15,7 +15,7 @@ import scala.annotation.tailrec
 import dfhdl.platforms.resources.Resource
 
 import scala.reflect.ClassTag
-final class DFVal[+T <: DFTypeAny, +M <: ModifierAny](val irValue: ir.DFVal | DFError)
+into final class DFVal[+T <: DFTypeAny, +M <: ModifierAny](val irValue: ir.DFVal | DFError)
     extends DFMember[ir.DFVal]
     with Selectable:
   type Fields = DFVal.Fields[T @uncheckedVariance, M @uncheckedVariance]

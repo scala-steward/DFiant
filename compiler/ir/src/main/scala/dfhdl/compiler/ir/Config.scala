@@ -1,6 +1,6 @@
 package dfhdl.compiler.ir
 import upickle.default.*
-opaque type ConfigN[T] = T | None.type
+into opaque type ConfigN[T] = T | None.type
 object ConfigN:
   given [T]: Conversion[None.type, ConfigN[T]] with
     def apply(x: None.type): ConfigN[T] = x
