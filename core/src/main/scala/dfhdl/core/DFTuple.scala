@@ -132,11 +132,12 @@ object DFTuple:
       given DFTupleFromTuple[
           T <: NonEmptyTuple,
           R <: NonEmptyTuple,
+          RP,
           Z <: TCZipper[T, R, DFValAny, TC]
       ](using
-          zipper: Z
+          zipper: Z { type OutP = RP }
       ): TC[DFTuple[T], R] with
-        type OutP = zipper.OutP
+        type OutP = RP
         def conv(dfType: DFTuple[T], value: R)(using DFC): Out =
           val dfVals =
             zipper(dfType.fieldList, value.toList)
@@ -150,7 +151,7 @@ object DFTuple:
           RP,
           R <: DFValTP[DFTuple[RT], RP]
       ](using
-          zipper: TCZipper[T, RT, DFValAny, TC]
+          zipper: TCZipper[T, RT, DFValAny, TC] { type OutP = RP }
       ): TC[DFTuple[T], R] with
         type OutP = RP
         def conv(dfType: DFTuple[T], value: R)(using DFC): Out =
@@ -164,11 +165,12 @@ object DFTuple:
       given DFTupleFromTuple[
           T <: NonEmptyTuple,
           R <: NonEmptyTuple,
+          RP,
           Z <: TCZipper[T, R, DFValAny, TCConv]
       ](using
-          zipper: Z
+          zipper: Z { type OutP = RP }
       ): TCConv[DFTuple[T], R] with
-        type OutP = zipper.OutP
+        type OutP = RP
         def apply(value: R)(using DFC): Out =
           val valueList = value.toList
           val dfVals =
@@ -186,17 +188,19 @@ object DFTuple:
       given DFTupleArg[
           T <: NonEmptyTuple,
           R <: NonEmptyTuple,
-          Op <: FuncOp,
+          RP,
+          Op <: FuncOp.===.type | FuncOp.=!=.type,
           C <: Boolean,
           Z <: TCZipper[T, R, DFValAny, [T <: DFTypeAny, R] =>> Compare[T, R, Op, C]]
       ](using
-          zipper: Z
+          zipper: Z { type OutP = RP }
       ): Compare[DFTuple[T], R, Op, C] with
-        type OutP = zipper.OutP
+        type OutP = RP
         def conv(dfType: DFTuple[T], value: R)(using DFC): Out =
           val dfVals =
             zipper(dfType.fieldList, value.toList)
           DFVal.Func(dfType, FuncOp.++, dfVals).asInstanceOf[Out]
+      end DFTupleArg
     end Compare
 
     object Ops:

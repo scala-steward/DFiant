@@ -23,6 +23,7 @@ module UART_Tx#(
   `define Status_StopBit 8
   `define Status_Finalize 16
   function [8*15:1] Status_to_string;
+    /* verilator lint_off UNUSEDSIGNAL */
     input [4:0] value;
     case (value)
       `Status_Idle: Status_to_string = "Status_Idle";
@@ -32,6 +33,7 @@ module UART_Tx#(
       `Status_Finalize: Status_to_string = "Status_Finalize";
       default: Status_to_string = "?";
     endcase
+    /* verilator lint_on UNUSEDSIGNAL */
   endfunction
   reg [4:0] status;
   reg [clog2(BIT_CLOCKS) - 1:0] bitClkCnt;
@@ -41,7 +43,7 @@ module UART_Tx#(
   begin
     if (rst == 1'b1) begin
       status             <= `Status_Idle;
-      bitClkCnt          <= `TO_UNSIGNED(0, 1, clog2(BIT_CLOCKS));
+      bitClkCnt          <= `dPW(0, 1, clog2(BIT_CLOCKS));
       dataBitCnt         <= 3'd0;
     end
     else begin
@@ -50,7 +52,7 @@ module UART_Tx#(
           tx_en          <= 1'b0;
           tx             <= 1'b1;
           tx_done        <= 1'b0;
-          bitClkCnt      <= `TO_UNSIGNED(0, 1, clog2(BIT_CLOCKS));
+          bitClkCnt      <= `dPW(0, 1, clog2(BIT_CLOCKS));
           dataBitCnt     <= 3'd0;
           if (data_en) begin
             shiftData    <= data;
@@ -61,15 +63,15 @@ module UART_Tx#(
           tx_en          <= 1'b1;
           tx             <= 1'b0;
           if (bitClkCnt == (BIT_CLOCKS - 1)) begin
-            bitClkCnt    <= `TO_UNSIGNED(0, 1, clog2(BIT_CLOCKS));
+            bitClkCnt    <= `dPW(0, 1, clog2(BIT_CLOCKS));
             status       <= `Status_DataBits;
           end
-          else bitClkCnt <= bitClkCnt + `TO_UNSIGNED(1, 1, clog2(BIT_CLOCKS));
+          else bitClkCnt <= bitClkCnt + `dPW(1, 1, clog2(BIT_CLOCKS));
         end
         `Status_DataBits: begin
           tx             <= shiftData[0];
           if (bitClkCnt == (BIT_CLOCKS - 1)) begin
-            bitClkCnt    <= `TO_UNSIGNED(0, 1, clog2(BIT_CLOCKS));
+            bitClkCnt    <= `dPW(0, 1, clog2(BIT_CLOCKS));
             shiftData    <= shiftData >> 1;
             if (dataBitCnt == 3'd7) begin
               dataBitCnt <= 3'd0;
@@ -77,16 +79,16 @@ module UART_Tx#(
             end
             else dataBitCnt <= dataBitCnt + 3'd1;
           end
-          else bitClkCnt <= bitClkCnt + `TO_UNSIGNED(1, 1, clog2(BIT_CLOCKS));
+          else bitClkCnt <= bitClkCnt + `dPW(1, 1, clog2(BIT_CLOCKS));
         end
         `Status_StopBit: begin
           tx             <= 1'b1;
           if (bitClkCnt == (BIT_CLOCKS - 1)) begin
-            bitClkCnt    <= `TO_UNSIGNED(0, 1, clog2(BIT_CLOCKS));
+            bitClkCnt    <= `dPW(0, 1, clog2(BIT_CLOCKS));
             tx_done      <= 1'b1;
             status       <= `Status_Finalize;
           end
-          else bitClkCnt <= bitClkCnt + `TO_UNSIGNED(1, 1, clog2(BIT_CLOCKS));
+          else bitClkCnt <= bitClkCnt + `dPW(1, 1, clog2(BIT_CLOCKS));
         end
         `Status_Finalize: begin
           tx_en          <= 1'b0;

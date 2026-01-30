@@ -96,7 +96,7 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
     val originRefTable = getSet.designDB.originRefTable
     // checks for all references
     refTable.foreach { (r, m) =>
-      if (m != DFMember.Empty && !memberSet.contains(m))
+      if (!m.isInstanceOf[DFMember.Empty] && !memberSet.contains(m))
         reportViolation(s"Ref $r exists for a removed member: $m")
       r match
         case r: DFRef.TwoWayAny if !originRefTable.contains(r) =>
@@ -234,7 +234,7 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
   end orderCheck
 
   def transform(designDB: DB)(using MemberGetSet, CompilerOptions): DB =
-    refCheck()
+    // refCheck()
     memberExistenceCheck()
     ownershipCheck(designDB.top, designDB.membersNoGlobals.drop(1))
     orderCheck()

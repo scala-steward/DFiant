@@ -90,7 +90,7 @@ object IntParamRef:
     def isInt: Boolean = intParamRef match
       case int: Int => true
       case _        => false
-    def getInt(using MemberGetSet): Int = (intParamRef: @unchecked) match
+    def getInt(using MemberGetSet): Int = intParamRef.runtimeChecked match
       case Int(int) => int
     def isRef: Boolean = intParamRef match
       case ref: DFRef.TypeRef => true
@@ -135,7 +135,7 @@ end IntParamRef
 
 extension (intCompanion: Int.type)
   def unapply(intParamRef: IntParamRef)(using MemberGetSet): Option[Int] =
-    (intParamRef: @unchecked) match
+    intParamRef.runtimeChecked match
       case int: Int            => Some(int)
       case DFRef(dfVal: DFVal) =>
         dfVal.getConstData.asInstanceOf[Option[Option[BigInt]]].flatten.map(_.toInt)

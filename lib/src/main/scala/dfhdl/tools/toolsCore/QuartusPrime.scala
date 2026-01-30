@@ -123,7 +123,7 @@ class QuartusPrimeProjectTclConfigPrinter(using
     if (pro) "" else "set_global_assignment -name GENERATE_SVF_FILE ON"
   def qsysIPs: String =
     designDB.uniqueDesignMemberList.collect {
-      case (qsysIP: DFDesignBlock, _) if qsysIP.isQsysIPBlackbox =>
+      case (qsysIP: DFDesignBlock, _) if qsysIP.isVendorIPBlackbox =>
         s"catch {exec qsys-script --script=ips/${qsysIP.dclName}.tcl --quartus-project=${topName}}"
     }.mkString("\n")
   def contents: String =
@@ -317,10 +317,10 @@ class QuartusPrimeIPPrinter(using
     co: CompilerOptions,
     bo: BuilderOptions
 ):
+  import DFDesignBlock.InstMode.BlackBox
   def contents(qsysIP: DFDesignBlock): String =
     val ipName = qsysIP.dclName
-    val DFDesignBlock.InstMode.BlackBox(DFDesignBlock.InstMode.BlackBox.Source.Qsys(ipType)) =
-      qsysIP.instMode: @unchecked
+    val BlackBox(BlackBox.Source.VendorIP(_, ipType)) = qsysIP.instMode.runtimeChecked
     val ipInstanceName = s"${ipType}_inst"
     val members = qsysIP.members(MemberView.Folded)
     val ipVersion = members.collectFirst {
@@ -361,7 +361,7 @@ class QuartusPrimeIPPrinter(using
   end contents
   def getSourceFiles: List[SourceFile] =
     getSet.designDB.uniqueDesignMemberList.collect {
-      case (qsysIP: DFDesignBlock, _) if qsysIP.isQsysIPBlackbox =>
+      case (qsysIP: DFDesignBlock, _) if qsysIP.isVendorIPBlackbox =>
         SourceFile(
           SourceOrigin.Compiled,
           QuartusPrimeIP,

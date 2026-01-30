@@ -66,7 +66,7 @@ class Logger:
 def trydfSpecific[T](
     block: => T
 )(finale: DFError => T)(using dfc: DFC, ctName: CTName): T =
-  if (dfc.inMetaProgramming) block
+  if (dfc.inMetaProgramming || !dfc.elaborationOptions.trapErrors) block
   else
     try block
     catch

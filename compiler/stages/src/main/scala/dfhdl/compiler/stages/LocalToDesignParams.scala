@@ -14,46 +14,38 @@ case object LocalToDesignParams extends Stage:
     co.backend match
       case be: dfhdl.backends.vhdl => true
       case _                       => false
-  override def dependencies: List[Stage] = List(GlobalizePortVectorParams)
+  override def dependencies: List[Stage] = List(GlobalizePortVectorParams, SimpleOrderMembers)
   override def nullifies: Set[Stage] = Set()
   def transform(designDB: DB)(using getSet: MemberGetSet, co: CompilerOptions): DB =
     given RefGen = RefGen.fromGetSet
-    val ioLocalParams = mutable.LinkedHashSet.empty[DFVal]
-    def collectIOLocalParams(ref: DFRefAny): Unit = ref.get match
-      // skip existing design parameters
-      case _: DFVal.DesignParam => // do nothing
-      // skip global parameters
-      case gp: DFVal.CanBeGlobal if gp.isGlobal => // do nothing
-      // check this value and its dependencies
-      case dfVal: DFVal =>
-        // already collected
-        if (!ioLocalParams.contains(dfVal))
-          // collect dependencies
-          dfVal.getRefs.foreach(collectIOLocalParams)
-          // if the value is named collect this value too
-          if (!dfVal.isAnonymous)
-            ioLocalParams.add(dfVal)
-      case _ => // do nothing
-
-    // collect all local parameters that are used in IOs
-    designDB.members.foreach {
-      case port @ DclPort() => port.getRefs.foreach(collectIOLocalParams)
-      case _                => // do nothing
-    }
-
     // adding design parameters with initial values set as the anonymized local parameters
     val patchList: List[(DFMember, Patch)] =
-      ioLocalParams.view.collect { lp =>
-        val dsn = new MetaDesign(
-          lp,
-          Patch.Add.Config.ReplaceWithLast(Patch.Replace.Config.FullReplacement)
-        ):
-          val lpAnon = plantMember(lp.anonymize).asValAny
-          val dp = dfhdl.core.DFVal.DesignParam(lpAnon, Some(lpAnon))(using
-            dfc.setMeta(lp.meta)
-          )
-        dsn.patch
-      }.toList
+      designDB.designMemberList.flatMap { (design, members) =>
+        val localConsts = members.view.collect {
+          case const @ DclConst() => const.getName -> const
+        }.toMap
+        val designInstances = members.collect { case di: DFDesignBlock => di }
+        val exploredDesigns = if (design.isTop) design :: designInstances else designInstances
+        exploredDesigns.flatMap { designInstance =>
+          val ioLocalParams = designInstance.getIOLocalParams
+          ioLocalParams.view.collect { lp =>
+            val dsn = new MetaDesign(
+              lp,
+              Patch.Add.Config.ReplaceWithLast(Patch.Replace.Config.FullReplacement)
+            ):
+              val lpAnon = plantMember(lp.anonymize).asValAny
+              val paramValue =
+                if (designInstance.isTop) lpAnon
+                else
+                  val paramName = s"${designInstance.getName}_${lp.getName}"
+                  localConsts.get(paramName).getOrElse(lpAnon.asIR).asValAny
+              val dp = dfhdl.core.DFVal.DesignParam(paramValue, Some(lpAnon))(using
+                dfc.setMeta(lp.meta)
+              )
+            dsn.patch
+          }.toList
+        }
+      }
     designDB.patch(patchList)
   end transform
 end LocalToDesignParams

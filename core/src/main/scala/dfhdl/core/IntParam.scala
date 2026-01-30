@@ -47,9 +47,12 @@ object IntP:
   type CLog2[T <: IntP] <: IntP = T match
     case Int => 32 - NumberOfLeadingZeros[T - 1]
     case _   => Sig1[FuncOp.clog2.type, T]
+  type Abs[T <: IntP] <: IntP = T match
+    case Int => int.Abs[T]
+    case _   => Sig1[FuncOp.abs.type, T]
 end IntP
 
-opaque type IntParam[V <: IntP] = Int | DFConstInt32
+into opaque type IntParam[V <: IntP] = Int | DFConstInt32
 protected sealed trait IntParamLP:
   given [T <: IntP]: Conversion[IntParam[T], IntParam[Int]] = value =>
     value.asInstanceOf[IntParam[Int]]

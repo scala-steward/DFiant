@@ -38,6 +38,10 @@ class DFDecimalSpec extends DFSpec:
   val until9 = UInt.until(9)
   val max7 = UInt.to(7)
   val max8 = UInt.to(8)
+  val s_until8 = SInt.untilAbs(8)
+  val s_until9 = SInt.untilAbs(9)
+  val s_max7 = SInt.toAbs(7)
+  val s_max8 = SInt.toAbs(8)
   test("Inlined width") {
     u7.verifyWidth(7)
     s5.verifyWidth(5)
@@ -45,6 +49,10 @@ class DFDecimalSpec extends DFSpec:
     until9.verifyWidth(4)
     max7.verifyWidth(3)
     max8.verifyWidth(4)
+    s_until8.verifyWidth(4)
+    s_until9.verifyWidth(5)
+    s_max7.verifyWidth(4)
+    s_max8.verifyWidth(5)
   }
   test("DFVal Conversion") {
     assertCodeString {
@@ -115,6 +123,18 @@ class DFDecimalSpec extends DFSpec:
          |val sl: Int <> CONST = 1 << param
          |val sr: Int <> CONST = 1 >> param
          |val pow: Int <> CONST = 2 ** param
+         |val u4 = u6(3, 0)
+         |val ubit = u6(1)
+         |val s4 = s6(3, 0)
+         |val sbit = s6(1)
+         |val uint42: UInt[6] <> CONST = d"6'42"
+         |val sint42: SInt[7] <> CONST = sd"7'42"
+         |val sintNeg42: SInt[7] <> CONST = sd"7'-42"
+         |val negSintNeg42: SInt[7] <> CONST = sd"7'42"
+         |val absTest = abs(s4)
+         |val absTest2: SInt[7] <> CONST = abs(sintNeg42)
+         |val numSignedBit: Bit <> CONST = sint42(6)
+         |val numSignedBitP = s8p(param - 1)
          |""".stripMargin
     } {
       val c: UInt[8] <> CONST = 1
@@ -244,6 +264,26 @@ class DFDecimalSpec extends DFSpec:
       val sl = 1 << param
       val sr = 1 >> param
       val pow = 2 ** param
+      val u4 = u6(3, 0)
+      val ubit = u6(1)
+      val s4 = s6(3, 0)
+      val sbit = s6(1)
+      val str42 = "42"
+      val strNeg42 = "-42"
+      val uint42 = d"${str42}"
+      val sint42 = sd"${str42}"
+      val sintNeg42 = sd"${strNeg42}"
+      val negSintNeg42 = -sd"${strNeg42}"
+      val absTest = abs(s4)
+      val absTest2: SInt[7] <> CONST = abs(sintNeg42)
+      val numSignedBit = sint42.signbit
+      val numSignedBitP = s8p.signbit
+      assertRuntimeErrorLog(
+        """|Unexpected negative value found for unsigned decimal string interpolation: -42
+           |To Fix: Use the signed decimal string interpolator `sd` instead.""".stripMargin
+      ) {
+        d"${strNeg42}"
+      }
     }
     assertDSLErrorLog(
       """|Cannot apply this operation between an unsigned value (LHS) and a signed value (RHS).
@@ -271,6 +311,12 @@ class DFDecimalSpec extends DFSpec:
          |val t5 = u8 != d"8'255"
          |val t6 = u8 <= b8.uint
          |val t7 = u8.resize(4) >= b8.resize(4).uint
+         |val t8 = u8 == d"8'${one}"
+         |val t9 = s8 == sd"8'${one}"
+         |val t10 = s8 == sd"8'${negOne}"
+         |val t11 = u8 < d"8'${one}"
+         |val t12 = s8 >= sd"8'${one}"
+         |val t13 = s8 <= sd"8'${negOne}"
          |""".stripMargin
     } {
       val t1 = u8 == u8
@@ -280,7 +326,6 @@ class DFDecimalSpec extends DFSpec:
       val t5 = u8 != h"FF"
       val t6 = u8 <= b8
       val t7 = u8.resize(4) >= b8.resize(4)
-      // TODO: comparisons with Int are not showing up
       val t8 = u8 == one
       val t9 = s8 == one
       val t10 = s8 == negOne
@@ -338,20 +383,19 @@ class DFDecimalSpec extends DFSpec:
       u8 == negOne
     }
     assertRuntimeErrorLog(
-      """|Cannot apply this operation between a value of 8 bits width (LHS) to a value of 10 bits width (RHS).
+      """|Cannot compare a DFHDL value (width = 8) with a Scala `Int` argument that is wider (width = 10).
          |An explicit conversion must be applied.
          |""".stripMargin
     ) {
       u8 == big
     }
-    // TODO: this fails with the wrong message (sign mismatch)
-    // assertRuntimeErrorLog(
-    //   """|Cannot apply this operation between a value of 8 bits width (LHS) to a value of 10 bits width (RHS).
-    //      |An explicit conversion must be applied.
-    //      |""".stripMargin
-    // ) {
-    //   s8 == big
-    // }
+    assertRuntimeErrorLog(
+      """|Cannot compare a DFHDL value (width = 8) with a Scala `Int` argument that is wider (width = 11).
+         |An explicit conversion must be applied.
+         |""".stripMargin
+    ) {
+      s8 == big
+    }
   }
   test("Arithmetic") {
     assertEquals(d"8'22" + d"8'22", d"8'44")

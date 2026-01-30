@@ -40,6 +40,8 @@ function to_slv(A : signed) return std_logic_vector;
 function to_slv(A : integer) return std_logic_vector;
 function to_slv(A : boolean) return std_logic_vector;
 function to_slv(A : std_logic) return std_logic_vector;
+function to_slv(A : boolean; length : integer) return std_logic_vector;
+function to_slv(A : std_logic; length : integer) return std_logic_vector;
 function to_sl(A : boolean) return std_logic;
 function to_sl(A : std_logic_vector(0 downto 0)) return std_logic;
 function to_bool(A : std_logic) return boolean;
@@ -69,6 +71,12 @@ function to_string(A : integer) return string;
 function to_string(A : boolean) return string;
 function to_string(A : std_logic) return string;
 function to_string(A : std_logic_vector) return string;
+function max(A, B : integer) return integer;
+function min(A, B : integer) return integer;
+function to_unsigned(A : boolean; length : integer) return unsigned;
+function to_signed(A : boolean; length : integer) return signed;
+function to_unsigned(A : std_logic; length : integer) return unsigned;
+function to_signed(A : std_logic; length : integer) return signed;
 end package dfhdl_pkg;
 
 package body dfhdl_pkg is
@@ -125,6 +133,14 @@ begin
   else
     return "0";
   end if;
+end;
+function to_slv(A : boolean; length : integer) return std_logic_vector is
+begin
+  return resize(to_slv(A), length);
+end;
+function to_slv(A : std_logic; length : integer) return std_logic_vector is
+begin
+  return resize(to_slv(A), length);
 end;
 function to_sl(A : boolean) return std_logic is
 begin
@@ -360,5 +376,37 @@ begin
   end loop;
   
   return result;
+end;
+function max(A, B : integer) return integer is
+begin
+    if A > B then
+        return A;
+    else
+        return B;
+    end if;
+end;
+function min(A, B : integer) return integer is
+begin
+    if A < B then
+        return A;
+    else
+        return B;
+    end if;
+end;
+function to_unsigned(A : boolean; length : integer) return unsigned is
+begin
+  return unsigned(resize(to_slv(A), length));
+end;
+function to_signed(A : boolean; length : integer) return signed is
+begin
+  return signed(resize(to_slv(A), length));
+end;
+function to_unsigned(A : std_logic; length : integer) return unsigned is
+begin
+  return unsigned(resize(to_slv(A), length));
+end;
+function to_signed(A : std_logic; length : integer) return signed is
+begin
+  return signed(resize(to_slv(A), length));
 end;
 end package body dfhdl_pkg;

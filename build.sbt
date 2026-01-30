@@ -5,7 +5,7 @@ commands += DFHDLCommands.docExamplesRefUpdate
 
 // format: off
 val projectName = "dfhdl"
-val compilerVersion = "3.7.4"
+val compilerVersion = "3.8.1"
 
 inThisBuild(
   List(
@@ -33,6 +33,7 @@ name := projectName
 ThisBuild / organization := "io.github.dfianthdl"
 ThisBuild / scalaVersion := compilerVersion
 ThisBuild / versionScheme := Some("semver-spec")
+ThisBuild / resolvers += Resolver.scalaNightlyRepository
 //ThisBuild / version      := "0.3.0-SNAPSHOT"
 
 // PROJECTS
@@ -55,6 +56,7 @@ lazy val internals = project
   .settings(
     name := s"$projectName-internals",
     settings,
+    implicitConversionSettings,
     libraryDependencies ++= commonDependencies
   )
 
@@ -71,6 +73,7 @@ lazy val compiler_ir = (project in file("compiler/ir"))
   .settings(
     name := s"$projectName-compiler-ir",
     settings,
+    implicitConversionSettings,
     libraryDependencies += dependencies.upickle
   ).dependsOn(internals)
 
@@ -78,6 +81,7 @@ lazy val core = project
   .settings(
     name := s"$projectName-core",
     settings,
+    implicitConversionSettings,
     pluginTestUseSettings,
     libraryDependencies ++= commonDependencies,
     Compile / resourceGenerators += Def.task {
@@ -123,6 +127,10 @@ lazy val platforms = project
   .settings(
     name := s"$projectName-platforms",
     settings,
+    // Override global license: platforms module is published under Apache 2.0
+    licenses := List(
+      "Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0.txt")
+    ),
     pluginUseSettings,
     libraryDependencies ++= commonDependencies
   )
@@ -136,11 +144,11 @@ lazy val platforms = project
 lazy val dependencies =
   new {
     private val scodecV = "1.2.4"
-    private val munitV = "1.2.1"
-    private val airframelogV = "2025.1.21"
-    private val oslibV = "0.11.6"
-    private val scallopV = "5.2.0"
-    private val upickleV = "4.4.1"
+    private val munitV = "1.2.2"
+    private val airframelogV = "2025.1.27"
+    private val oslibV = "0.11.7"
+    private val scallopV = "5.3.0"
+    private val upickleV = "4.4.2"
 
     val scodec = "org.scodec" %% "scodec-bits" % scodecV
     val munit = "org.scalameta" %% "munit" % munitV % Test
@@ -177,8 +185,8 @@ def compilerOptionsVersionDependent(scalaVersion: String) = {
 lazy val compilerOptions = Seq(
   "-unchecked",
   "-feature",
+  "-preview",
   "-language:strictEquality",
-  "-language:implicitConversions",
   "-deprecation",
   //TODO: remove when fixed scalac issues:
   //https://github.com/lampepfl/dotty/issues/19299
@@ -215,4 +223,10 @@ lazy val commonSettings = Seq(
   scalacOptions ++= {
     compilerOptions ++ compilerOptionsVersionDependent(scalaVersion.value)
   }
+)
+
+lazy val implicitConversionSettings = Seq(
+  Compile / scalacOptions ++= Seq(
+    "-language:implicitConversions"
+  )
 )

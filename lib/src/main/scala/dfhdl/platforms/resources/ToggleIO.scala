@@ -16,7 +16,8 @@ object ToggleIO:
         ExpectedActiveState[T],
         "Missing implicit expected active state for toggle resource `" +
           t.Out +
-          "`.\nTo fix this, add:\n  `given ExpectedActiveState[" + t.Out + "] = " + t.Out + ".EXPECTED_ACTIVE_STATE`"
+          "`.\nTo fix this, add:\n  `given ExpectedActiveState[" + t.Out + "] = " + t.Out +
+          ".EXPECTED_ACTIVE_STATE`"
       ]
   ): CanConnect[R, V] with
     def connect(resource: R, dfVal: V)(using DFC): Unit =
@@ -38,6 +39,6 @@ abstract class ToggleIOComp[T <: Toggle](
       injectConstraint(constraints.Timing.Ignore(maxFreqMinPeriod = maxFreqMinPeriod))
   def apply(activeState: T = defaultActiveState)(using DFC): Resource = new Resource(activeState)
 
-opaque type ExpectedActiveState[T <: Toggle] <: T = T
+into opaque type ExpectedActiveState[T <: Toggle] <: T = T
 object ExpectedActiveState:
   given [T <: Toggle]: Conversion[T, ExpectedActiveState[T]] = identity

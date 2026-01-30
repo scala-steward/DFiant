@@ -249,6 +249,10 @@ class VerilatorConfigPrinter(verilatorVersion: String)(using
       case _ => None
     }.mkString("\n")
   end lintOffBlackBoxes
+  extension (dfVal: DFVal)
+    def fileNameFilter: String =
+      if (dfVal.isGlobal) s"${getSet.topName}_defs.*"
+      else s"${dfVal.getOwnerDesign.dclName}.*"
   def lintOffOpenOutPorts: String =
     designDB.getOpenOutPorts.map: dfVal =>
       lintOffCommand(
@@ -261,7 +265,7 @@ class VerilatorConfigPrinter(verilatorVersion: String)(using
     designDB.getUnusedAnnotValues.map: dfVal =>
       lintOffCommand(
         rule = "UNUSEDSIGNAL",
-        file = s"${dfVal.getOwnerDesign.dclName}.*",
+        file = dfVal.fileNameFilter,
         matchWild = s"*: '${dfVal.getName}'*"
       )
     .distinct.mkString("\n")
@@ -272,7 +276,7 @@ class VerilatorConfigPrinter(verilatorVersion: String)(using
         else s"$idxHigh:$idxLow"
       lintOffCommand(
         rule = "UNUSEDSIGNAL",
-        file = s"${dfVal.getOwnerDesign.dclName}.*",
+        file = dfVal.fileNameFilter,
         matchWild = s"*Bits of signal are not used: '${dfVal.getName}'[$bitSel]*"
       )
     .distinct.mkString("\n")
@@ -281,7 +285,7 @@ class VerilatorConfigPrinter(verilatorVersion: String)(using
       designDB.getUnusedParamAnnotValues.map: dfVal =>
         lintOffCommand(
           rule = "UNUSEDPARAM",
-          file = s"${dfVal.getOwnerDesign.dclName}.*",
+          file = dfVal.fileNameFilter,
           matchWild = s"*: '${dfVal.getName}'*"
         )
       .distinct.mkString("\n")

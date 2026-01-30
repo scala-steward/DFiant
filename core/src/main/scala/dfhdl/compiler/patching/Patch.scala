@@ -321,6 +321,17 @@ extension (db: DB)
                   Patch.Add(db2, config2: Patch.Add.Config.ReplaceWithLast)
                 ) =>
               tbl + (m -> Patch.Add(db1 concat db2, config2))
+            // concatenating additions with After and ReplaceWithFirst configurations, respectively
+            case (
+                  Patch.Add(db1, Patch.Add.Config.After),
+                  Patch.Add(db2, config2: Patch.Add.Config.ReplaceWithFirst)
+                ) =>
+              val config = Patch.Add.Config.ReplaceWithMemberN(
+                db1.members.length - 1,
+                config2.replacementConfig,
+                config2.refFilter
+              )
+              tbl + (m -> Patch.Add(db1 concat db2, config))
             // concatenating additions with ReplaceWithFirst and After configurations, respectively
             case (
                   Patch.Add(db1, config1: Patch.Add.Config.ReplaceWithFirst),

@@ -27,16 +27,17 @@ trait Design extends Container, HasClsMetaArgs:
   ): Unit =
     import dfc.getSet
     val designBlock = containedOwner.asIR
-    // the first class extending EDBlackBox.QsysIP will set the actual typeName of the IP
+    // the first class extending EDBlackBox.xyzIP will set the actual typeName of the IP
     val instMode = mkInstMode match
-      case InstMode.BlackBox(InstMode.BlackBox.Source.Qsys(_)) =>
+      case InstMode.BlackBox(InstMode.BlackBox.Source.VendorIP(vendor, _)) =>
         designBlock.instMode match
           // preserve the current typeName if it is already set
-          case InstMode.BlackBox(InstMode.BlackBox.Source.Qsys(typeName)) if typeName.nonEmpty =>
+          case InstMode.BlackBox(InstMode.BlackBox.Source.VendorIP(vendor, typeName))
+              if typeName.nonEmpty =>
             designBlock.instMode
           case _ =>
             // set the IP typeName to the name of the class
-            InstMode.BlackBox(InstMode.BlackBox.Source.Qsys(name))
+            InstMode.BlackBox(InstMode.BlackBox.Source.VendorIP(vendor, name))
       case instMode => instMode
     // the default RT Domain configuration is set as a global tag
     getSet.setGlobalTag(ir.DefaultRTDomainCfgTag(dfc.elaborationOptions.defaultRTDomainCfg))
@@ -205,5 +206,9 @@ abstract class EDBlackBox(source: EDBlackBox.Source) extends EDDesign:
   override private[core] def mkInstMode: InstMode = InstMode.BlackBox(source)
 object EDBlackBox:
   export ir.DFDesignBlock.InstMode.BlackBox.Source
-  abstract class QsysIP extends EDBlackBox(Source.Qsys(typeName = "")):
+  import ir.constraints.DeviceID.Vendor
+  abstract class QsysIP
+      extends EDBlackBox(Source.VendorIP(Vendor.AlteraIntel(pro = true), typeName = "")):
+    val version: String <> CONST
+  abstract class VivadoIP extends EDBlackBox(Source.VendorIP(Vendor.XilinxAMD, typeName = "")):
     val version: String <> CONST

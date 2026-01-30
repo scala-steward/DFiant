@@ -17,6 +17,7 @@
 `define ALUSel_COPY1 10
 
 function [8*12:1] ALUSel_to_string;
+  /* verilator lint_off UNUSEDSIGNAL */
   input [3:0] value;
   case (value)
     `ALUSel_ADD: ALUSel_to_string = "ALUSel_ADD";
@@ -32,6 +33,7 @@ function [8*12:1] ALUSel_to_string;
     `ALUSel_COPY1: ALUSel_to_string = "ALUSel_COPY1";
     default: ALUSel_to_string = "?";
   endcase
+  /* verilator lint_on UNUSEDSIGNAL */
 endfunction
 `undef ALU_DEFS_MODULE
 `endif

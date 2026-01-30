@@ -56,12 +56,15 @@ protected trait VerilogTypePrinter extends AbstractTypePrinter:
       dfType.entries.view
         .map((n, v) => s"`${enumName}_${n}: $funcName = \"${enumName}_${n}\";")
         .mkString("\n").hindent(2)
+    // workaround for verilator bug: https://github.com/verilator/verilator/issues/6893
     s"""|function [8*${maxCharWidth}:1] $funcName;
+        |  /* verilator lint_off UNUSEDSIGNAL */
         |  input [${dfType.width - 1}:0] value;
         |  case (value)
         |${cases}
         |    default: $funcName = "?";
         |  endcase
+        |  /* verilator lint_on UNUSEDSIGNAL */
         |endfunction""".stripMargin
   end csDFEnumToStringFuncDcl
   def csDFEnumDcl(dfType: DFEnum, global: Boolean): String =

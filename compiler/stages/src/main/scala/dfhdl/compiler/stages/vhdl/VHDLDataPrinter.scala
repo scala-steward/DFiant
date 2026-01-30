@@ -31,13 +31,11 @@ protected trait VHDLDataPrinter extends AbstractDataPrinter:
       s"""${width.refCodeString.applyBrackets()}x"$hexRep""""
   def csDFBoolFormat(value: Boolean): String = value.toString()
   def csDFBitFormat(bitRep: String): String = s"'$bitRep'"
-  def csDecimalFormat(value: BigInt): String =
-    if (allowDecimalSyntax) s"""d"$value""""
-    else s"""x"${value.toString(16)}""""
   def csDFUIntFormatBig(value: BigInt, width: IntParamRef): String =
     if (allowDecimalSyntax)
       if (width.isRef)
-        s"""resize(d"$value", ${width.refCodeString})"""
+        val actualWidth = value.bitsWidth(true)
+        s"""resize(${actualWidth}d"$value", ${width.refCodeString})"""
       else
         s"""${width.refCodeString.applyBrackets()}d"$value""""
     else
@@ -46,7 +44,10 @@ protected trait VHDLDataPrinter extends AbstractDataPrinter:
       else s"""unsigned'(resize(x"${value.toString(16)}", ${width.refCodeString}))"""
   def csDFSIntFormatBig(value: BigInt, width: IntParamRef): String =
     if (allowDecimalSyntax)
-      if (width.isRef) s"""resize(d"$value", ${width.refCodeString})"""
+      if (width.isRef)
+        val actualWidth = value.bitsWidth(true)
+        if (value >= 0) s"""resize(${actualWidth}d"$value", ${width.refCodeString})"""
+        else s"""resize(-${actualWidth}d"${-value}", ${width.refCodeString})"""
       else
         val csWidth = width.refCodeString.applyBrackets()
         if (value >= 0) s"""${csWidth}d"$value""""

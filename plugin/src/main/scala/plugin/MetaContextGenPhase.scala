@@ -263,7 +263,7 @@ class MetaContextGenPhase(setting: Setting) extends CommonPhase:
       tree.fun.symbol.getAnnotation(metaContextForwardAnnotSym).flatMap { annot =>
         annot.tree match
           case Apply(_, List(Literal(Constant(argIdx: Int)))) =>
-            val ApplyFunArgs(_, args) = tree: @unchecked
+            val ApplyFunArgs(_, args) = tree.runtimeChecked
             Some(args.flatten.toList(argIdx))
           case _ => None
       }

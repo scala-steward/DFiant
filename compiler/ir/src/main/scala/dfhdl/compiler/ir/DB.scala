@@ -203,17 +203,17 @@ final case class DB(
       case MemberView.Folded =>
         ownerMemberTable(owner)
       case MemberView.Flattened =>
-        def recur(owner: DFOwner, includeOwner: Boolean = true): List[DFMember] =
+        def recur(owner: DFOwner): List[DFMember] =
           val members = ownerMemberTable(owner)
           members.flatMap {
             case d: DFDesignBlock => Some(d)
-            case o: DFOwner       => if (includeOwner) o :: recur(o) else recur(o)
+            case o: DFOwner       => o :: recur(o)
             case m                => Some(m)
           }
         end recur
         owner match
           case d: DFDesignBlock => designMemberTable(d)
-          case _                => recur(owner, includeOwner = false)
+          case _                => recur(owner)
 
   // holds a hash table that lists members of each owner. The member list order is maintained.
   lazy val ownerMemberTable: Map[DFOwner, List[DFMember]] =
@@ -652,7 +652,7 @@ final case class DB(
             !magnetConnectionTable.contains(p) && !p.hasNonBubbleInit =>
         val ownerDesign = p.getOwnerDesign
         s"""|DFiant HDL connectivity error!
-            |Position:  ${ownerDesign.meta.position}
+            |Position:  ${p.meta.position}
             |Hierarchy: ${ownerDesign.getFullName}
             |Message:   Found a dangling (unconnected/unassigned and uninitialized) output port `${p.getName}`.""".stripMargin
     }

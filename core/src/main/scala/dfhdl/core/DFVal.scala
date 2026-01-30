@@ -15,7 +15,7 @@ import scala.annotation.tailrec
 import dfhdl.platforms.resources.Resource
 
 import scala.reflect.ClassTag
-final class DFVal[+T <: DFTypeAny, +M <: ModifierAny](val irValue: ir.DFVal | DFError)
+into final class DFVal[+T <: DFTypeAny, +M <: ModifierAny](val irValue: ir.DFVal | DFError)
     extends DFMember[ir.DFVal]
     with Selectable:
   type Fields = DFVal.Fields[T @uncheckedVariance, M @uncheckedVariance]
@@ -23,7 +23,7 @@ final class DFVal[+T <: DFTypeAny, +M <: ModifierAny](val irValue: ir.DFVal | DF
   def wait(using DFC): Unit =
     trydf { Wait(this.asValOf[DFBoolOrBit]) }
   def selectDynamic(name: String)(using DFC): Any = trydf {
-    val ir.DFStruct(structName, fieldMap) = this.asIR.dfType: @unchecked
+    val ir.DFStruct(structName, fieldMap) = this.asIR.dfType.runtimeChecked
     val dfType = fieldMap(name)
     DFVal.Alias
       .SelectField(this, name)
@@ -33,14 +33,13 @@ final class DFVal[+T <: DFTypeAny, +M <: ModifierAny](val irValue: ir.DFVal | DF
 
   transparent inline def ==[R](
       inline that: R
-  )(using DFC): DFValTP[DFBool, Any] = ${
-    DFVal.equalityMacro[T, M, R, FuncOp.===.type]('this, 'that)('dfc)
-  }
+  )(using DFCG): DFValOf[DFBool] =
+    DFVal.Ops.compare[FuncOp.===.type, this.type, R](this, that)
+
   transparent inline def !=[R](
       inline that: R
-  )(using DFC): DFValTP[DFBool, Any] = ${
-    DFVal.equalityMacro[T, M, R, FuncOp.=!=.type]('this, 'that)('dfc)
-  }
+  )(using DFC): DFValTP[DFBool, Any] =
+    DFVal.Ops.compare[FuncOp.=!=.type, this.type, R](this, that)
 end DFVal
 
 type DFValAny = DFVal[DFTypeAny, ModifierAny]
@@ -53,21 +52,30 @@ type DFValTP[+T <: DFTypeAny, +P] = DFVal[T, Modifier[Any, Any, Any, P]]
 type DFVarOf[+T <: DFTypeAny] = DFVal[T, Modifier.Mutable]
 
 extension (using quotes: Quotes)(tpe: quotes.reflect.TypeRepr)
-  def isConstTpe: quotes.reflect.TypeRepr =
+  def isConstBool: Boolean =
     import quotes.reflect.*
-    def isConstBool(tpe: TypeRepr): Boolean = tpe.asType match
+    tpe.asType match
       case '[DFConstOf[t]]  => true
       case '[DFValOf[t]]    => false
       case '[NonEmptyTuple] =>
-        tpe.getTupleArgs.forall(isConstBool)
-      case '[SameElementsVector[t]]      => isConstBool(TypeRepr.of[t])
+        tpe.getTupleArgs.forall(_.isConstBool)
+      case '[SameElementsVector[t]]      => TypeRepr.of[t].isConstBool
       case '[BoolSelWrapper[sp, ot, of]] =>
-        List(TypeRepr.of[sp], TypeRepr.of[ot], TypeRepr.of[of]).forall(isConstBool)
+        List(TypeRepr.of[sp], TypeRepr.of[ot], TypeRepr.of[of]).forall(_.isConstBool)
       case '[DFVal.NOTHING] => false
       case _                => true
-    if (isConstBool(tpe)) TypeRepr.of[CONST]
+  def isConstTpe: quotes.reflect.TypeRepr =
+    import quotes.reflect.*
+    if (tpe.isConstBool) TypeRepr.of[CONST]
     else TypeRepr.of[NOTCONST]
 end extension
+
+inline def isConstCheck[T]: Boolean = ${ isConstCheckMacro[T] }
+def isConstCheckMacro[T](using Quotes, Type[T]): Expr[Boolean] =
+  import quotes.reflect.*
+  val tpe = TypeRepr.of[T]
+  if (tpe.isConstBool) Expr(true)
+  else Expr(false)
 
 extension (using quotes: Quotes)(term: quotes.reflect.Term)
   def getNonConstTerm: Option[quotes.reflect.Term] =
@@ -280,15 +288,10 @@ sealed protected trait DFValLP:
     x =>
       import dfc.getSet
       x.asIR.getConstData.get.asInstanceOf[ir.RateNumber]
-  given DFRateToRateNumberConfigN(using
-      dfc: DFCG
-  ): Conversion[DFConstOf[DFTime | DFFreq], ir.ConfigN[ir.RateNumber]] =
-    x =>
-      import dfc.getSet
-      x.asIR.getConstData.get.asInstanceOf[ir.ConfigN[ir.RateNumber]]
   // lower priority than other evidence because this is more generic
   export DFXInt.Val.Ops.evOpArithDFXInt
   export DFOpaque.Val.Ops.{evOpAsDFOpaqueTFE, evOpAsDFOpaqueComp}
+  export DFBits.Val.Ops.{evLogicOpDFBits, evConcatOpDFBits}
 end DFValLP
 object DFVal extends DFValLP:
   protected type FieldWithModifier[V, M <: ModifierAny] = V match
@@ -317,29 +320,6 @@ object DFVal extends DFValLP:
         case DFTuple.Val(dfVal)  => Some(dfVal)
         case DFStruct.Val(dfVal) => Some(dfVal)
         case _                   => None
-
-  def equalityMacro[T <: DFTypeAny, M <: ModifierAny, R, Op <: FuncOp](
-      dfVal: Expr[DFVal[T, M]],
-      arg: Expr[R]
-  )(dfc: Expr[DFC])(using Quotes, Type[T], Type[M], Type[R], Type[Op]): Expr[DFValTP[DFBool, Any]] =
-    import quotes.reflect.*
-    if (TypeRepr.of[T].typeSymbol equals defn.NothingClass)
-      return ControlledMacroError.report("This is fake")
-    val exactInfo = arg.exactInfo
-    val lpType = dfVal.asTerm.tpe.isConstTpe.asTypeOf[Any]
-    val rpType = exactInfo.exactTpe.isConstTpe.asTypeOf[Any]
-    '{
-      val c = compiletime.summonInline[DFVal.Compare[T, exactInfo.Underlying, Op, false]]
-      c($dfVal, ${ exactInfo.exactExpr })(using
-        $dfc,
-        compiletime.summonInline[ValueOf[Op]],
-        new ValueOf[false](false)
-      )
-        // TODO: May not be need if this issue is solved:
-        // https://github.com/lampepfl/dotty/issues/19554
-        .asValTP[DFBool, lpType.Underlying | rpType.Underlying]
-    }
-  end equalityMacro
 
   // Enabling equality with Int, Boolean, and Tuples.
   // just to give a better error message via the compiler plugin.
@@ -373,9 +353,11 @@ object DFVal extends DFValLP:
               |Hierarchy: ${lhsIR.getOwnerDesign.getFullName}
               |Message:   ${errMsg}""".stripMargin
         )
+      lhsIR.injectGlobalCtx()
       lhsIR.getConstData.asInstanceOf[Option[Option[D]]]
         .getOrElse(error("Cannot fetch a Scala value from a non-constant DFHDL value."))
         .getOrElse(error("Cannot fetch a Scala value from a bubble (invalid) DFHDL value."))
+  end extension
 
   trait InitCheck[I]
   given [I](using
@@ -509,7 +491,7 @@ object DFVal extends DFValLP:
           // In the case we have a multiple elements in the tuple value that match the signature
           // of the DFHDL type, then each element is considered as a candidate
           if (multiElements)
-            val Apply(_, vArgsTerm) = term: @unchecked
+            val Apply(_, vArgsTerm) = term.runtimeChecked
             def inits(dfType: Expr[DFTuple[T]], dfc: Expr[DFC]): List[Expr[DFConstOf[DFTuple[T]]]] =
               vArgsTerm.map { a =>
                 val aExactInfo = a.exactInfo
@@ -743,21 +725,82 @@ object DFVal extends DFValLP:
     )(using DFC): DFValTP[T, P] =
       args.foreach(_.anonymizeInDFCPosition)
       apply(dfType, op, args.map(_.asIR))
+    private object SimplifyFunc:
+      def unapply(opArgs: (ir.DFType, FuncOp, List[ir.DFVal]))(using dfc: DFC): Option[ir.DFVal] =
+        import dfc.getSet
+        opArgs match
+          // TODO: maybe drop this limitation, if we can make DropStructsVecs work in meta programming
+          // or global context.
+          case _ if dfc.inMetaProgramming || dfc.ownerOption.isEmpty => None
+          // special case to handle unary negation of anonymous decimal constants
+          case (
+                _: ir.DFDecimal,
+                FuncOp.unary_-,
+                List(const @ ir.DFVal.Const(dfType = _: ir.DFDecimal, data = Some(data: BigInt)))
+              ) if (const.isAnonymous || const.asValAny.inDFCPosition) =>
+            Some(
+              dfc.mutableDB.setMember(
+                const,
+                _.copy(
+                  data = Some(-data),
+                  meta = dfc.getMeta
+                )
+              )
+            )
+          case (
+                ir.DFInt32,
+                currentOp @ (FuncOp.+ | FuncOp.-),
+                List(
+                  prevFunc: ir.DFVal.Func,
+                  currentRHSArg @ ir.DFVal.Const(data = Some(currentRHSData: BigInt))
+                )
+              ) if currentRHSArg.isAnonymous && prevFunc.isAnonymous =>
+            (prevFunc.dfType, prevFunc.op, prevFunc.args.map(_.get)) match
+              case (
+                    ir.DFInt32,
+                    prevOp @ (FuncOp.+ | FuncOp.-),
+                    List(prevLHSArg, prevRHSArg @ ir.DFVal.Const(data = Some(prevRHSData: BigInt)))
+                  ) if prevRHSArg.isAnonymous =>
+                val newRHSData = (prevOp, currentOp).runtimeChecked match
+                  // (x + c1) + c2 => x + (c1 + c2)
+                  case (FuncOp.+, FuncOp.+) => prevRHSData + currentRHSData
+                  // (x - c1) - c2 => x - (c1 + c2)
+                  case (FuncOp.-, FuncOp.-) => prevRHSData + currentRHSData
+                  // (x + c1) - c2 => x + (c1 - c2)
+                  case (FuncOp.+, FuncOp.-) => prevRHSData - currentRHSData
+                  // (x - c1) + c2 => x - (c1 - c2)
+                  case (FuncOp.-, FuncOp.+) => prevRHSData - currentRHSData
+                if (newRHSData == BigInt(0))
+                  if (prevLHSArg.isAnonymous) Some(prevLHSArg.setMeta(_ => dfc.getMeta))
+                  else Some(prevLHSArg)
+                else
+                  dfc.mutableDB.setMember(prevRHSArg, _.copy(data = Some(newRHSData)))
+                  Some(dfc.mutableDB.setMember(prevFunc, _.copy(meta = dfc.getMeta)))
+              case _ => None
+            end match
+          case _ => None
+        end match
+      end unapply
+    end SimplifyFunc
     @targetName("applyFromIR")
     def apply[T <: DFTypeAny, P](
         dfType: T,
         op: FuncOp,
         args: List[ir.DFVal]
-    )(using DFC): DFValTP[T, P] =
-      val func: ir.DFVal = ir.DFVal.Func(
-        dfType.asIR.dropUnreachableRefs,
-        op,
-        args.map(_.refTW[ir.DFVal]),
-        dfc.ownerOrEmptyRef,
-        dfc.getMeta,
-        dfc.tags
-      )
-      func.addMember.asValTP[T, P]
+    )(using dfc: DFC): DFValTP[T, P] =
+      (dfType.asIR.dropUnreachableRefs, op, args.map(_.getReachableMember)) match
+        case SimplifyFunc(func) => func.asValTP[T, P]
+        case (dfType, op, args) =>
+          val func: ir.DFVal = ir.DFVal.Func(
+            dfType,
+            op,
+            args.map(_.refTW[ir.DFVal](knownReachable = true)),
+            dfc.ownerOrEmptyRef,
+            dfc.getMeta,
+            dfc.tags
+          )
+          func.addMember.asValTP[T, P]
+      end match
     end apply
   end Func
 
@@ -768,6 +811,8 @@ object DFVal extends DFValLP:
           relVal: DFVal[VT, M],
           forceNewAlias: Boolean = false
       )(using dfc: DFC): DFVal[AT, M] =
+        import dfc.getSet
+        import ir.unapply
         relVal.asIR match
           // anonymous constant are replaced by a different constant
           // after its data value was converted according to the alias
@@ -775,7 +820,7 @@ object DFVal extends DFValLP:
               if (const.isAnonymous || relVal.inDFCPosition) && !forceNewAlias =>
             val updatedData = ir.dataConversion(aliasType.asIR, const.dfType)(
               const.data.asInstanceOf[const.dfType.Data]
-            )(using dfc.getSet)
+            )
             dfc.mutableDB.setMember(
               const,
               _.copy(
@@ -788,12 +833,24 @@ object DFVal extends DFValLP:
           case asIs: ir.DFVal.Alias.AsIs
               if aliasType.asIR.isInstanceOf[ir.DFBits] && asIs.isAnonymous &&
                 dfc.isAnonymous && !forceNewAlias && asIs.tags.isEmpty =>
-            import dfc.getSet
             asIs.relValRef.get.asVal[AT, M]
+          // remove redundant intermediate casting converting from BoolOrBit to Bits/UInt/SInt + resize
+          case asIs @ ir.DFVal.Alias.AsIs(
+                dfType = ir.DFBits(_) | ir.DFUInt(_) | ir.DFSInt(_),
+                relValRef = ir.DFRef(ir.DFBoolOrBit.Val(deepRelVal))
+              ) if asIs.isAnonymous && !forceNewAlias =>
+            dfc.mutableDB.setMember(
+              asIs,
+              _.copy(
+                dfType = aliasType.asIR.dropUnreachableRefs,
+                meta = dfc.getMeta
+              )
+            ).asVal[AT, M]
           // named constants or other non-constant values are referenced
           // in a new alias construct
           case _ =>
             forced(aliasType.asIR, relVal.anonymizeInDFCPosition.asIR).asVal[AT, M]
+        end match
       end apply
       def forced(aliasType: ir.DFType, relVal: ir.DFVal)(using DFC): ir.DFVal =
         val alias: ir.DFVal.Alias.AsIs =
@@ -844,6 +901,12 @@ object DFVal extends DFValLP:
           idxLow: IntParam[L]
       )(using DFC): DFVal[DFBits[H - L + 1], M] =
         forced(relVal.asIR, idxHigh, idxLow).asVal[DFBits[H - L + 1], M]
+      def applyDFXInt[S <: Boolean, W <: IntP, M <: ModifierAny, H <: IntP, L <: IntP](
+          relVal: DFVal[DFXInt[S, W, NativeType.BitAccurate], M],
+          idxHigh: IntParam[H],
+          idxLow: IntParam[L]
+      )(using DFC): DFVal[DFXInt[S, H - L + 1, NativeType.BitAccurate], M] =
+        forced(relVal.asIR, idxHigh, idxLow).asVal[DFXInt[S, H - L + 1, NativeType.BitAccurate], M]
       def applyVector[T <: DFTypeAny, M <: ModifierAny, H <: IntP, L <: IntP](
           relVal: DFVal[DFVector[T, Tuple1[?]], M],
           idxHigh: IntParam[H],
@@ -856,8 +919,10 @@ object DFVal extends DFValLP:
           idxLow: IntParam[L]
       )(using DFC): ir.DFVal =
         val selLength = idxHigh - idxLow + 1
-        val dfType = (relVal.dfType: @unchecked) match
+        val dfType = relVal.dfType.runtimeChecked match
           case ir.DFBits(_)                     => ir.DFBits(selLength.ref)
+          case ir.DFUInt(_)                     => ir.DFUInt(selLength.ref)
+          case ir.DFSInt(_)                     => ir.DFSInt(selLength.ref)
           case ir.DFVector(cellType = cellType) =>
             ir.DFVector(cellType, List(selLength.ref))
         relVal match
@@ -869,7 +934,7 @@ object DFVal extends DFValLP:
               const.data,
               idxHigh,
               idxLow
-            )
+            )(using dfc.getSet)
             Const.forced(dfType.asFE, updatedData).asIR
           // named constants or other non-constant values are referenced
           // in a new alias construct
@@ -1035,9 +1100,11 @@ object DFVal extends DFValLP:
     def apply(from: R)(using DFC): Out
 
   trait TCConvLP:
-    given fromTC[T <: DFTypeAny, R, TC <: DFVal.TC[T, R]](using tc: TC, dfType: T): TCConv[T, R]
-    with
-      type OutP = tc.OutP
+    given fromTC[T <: DFTypeAny, R, RP, TC <: DFVal.TC[T, R]](using
+        tc: TC { type OutP = RP },
+        dfType: T
+    ): TCConv[T, R] with
+      type OutP = RP
       def apply(from: R)(using DFC): Out = tc(dfType, from)
   object TCConv extends TCConvLP:
     export DFBits.Val.TCConv.given
@@ -1055,12 +1122,10 @@ object DFVal extends DFValLP:
       def conv(dfType: T, from: OPEN)(using DFC): Out = DFVal.OPEN(dfType)
       def connect(dfVal: DFValOf[T], that: OPEN)(using DFC): Unit =
         dfVal.connect(conv(dfVal.dfType, that))
-    given fromTC[
-        T <: DFTypeAny,
-        R,
-        TC <: DFVal.TC[T, R]
-    ](using tc: TC): TC_Or_OPEN_Or_Resource[T, R] with
-      type OutP = tc.OutP
+    given fromTC[T <: DFTypeAny, R, RP, TC <: DFVal.TC[T, R]](using
+        tc: TC { type OutP = RP }
+    ): TC_Or_OPEN_Or_Resource[T, R] with
+      type OutP = RP
       def conv(dfType: T, from: R)(using DFC): Out = tc(dfType, from)
       def connect(dfVal: DFValOf[T], that: R)(using DFC): Unit =
         dfVal.connect(conv(dfVal.dfType, that))
@@ -1110,7 +1175,13 @@ object DFVal extends DFValLP:
             "`."
         )
       ]
-    given sameValType[T <: DFTypeAny, P, R <: DFValTP[T, P], Op <: FuncOp, C <: Boolean](using
+    given sameValType[
+        T <: DFTypeAny,
+        P,
+        R <: DFValTP[T, P],
+        Op <: FuncOp.===.type | FuncOp.=!=.type,
+        C <: Boolean
+    ](using
         ValueOf[Op],
         ValueOf[C]
     ): Compare[T, R, Op, C] with
@@ -1123,8 +1194,11 @@ object DFVal extends DFValLP:
           s"Cannot compare DFHDL value type `${dfType.codeString}` with DFHDL value type `${arg.dfType.codeString}`."
         )
         arg
+    end sameValType
   end CompareLP
   object Compare extends CompareLP:
+    type Aux[T <: DFTypeAny, V, Op <: FuncOp, C <: Boolean, OutP0] =
+      Compare[T, V, Op, C] { type OutP = OutP0 }
     export DFBoolOrBit.Val.Compare.given
     export DFBits.Val.Compare.given
     export DFDecimal.Val.Compare.given
@@ -1170,10 +1244,24 @@ object DFVal extends DFValLP:
   ): RegInitCheck[I] with {}
 
   // exporting evidence for common exact operations
-  export DFBits.Val.Ops.given
+  export DFBits.Val.Ops.{
+    evOpApplyDFBits,
+    evOpApplyRangeDFBits,
+    evOpAsDFBits,
+    evOpLogicReduceDFBits,
+    evOpShift
+  }
+  export DFBoolOrBit.Val.Ops.given
   export DFTuple.Val.Ops.given
   export DFVector.Val.Ops.given
-  export DFXInt.Val.Ops.evOpArithIntDFInt32
+  export DFXInt.Val.Ops.{
+    evOpArithIntDFInt32,
+    evOpApplyDFXInt,
+    evOpApplyRangeDFXInt,
+    evOpShiftOrPowerInt,
+    evOpCarryAddSubDFXInt,
+    evOpCarryMulDFXInt
+  }
   export DFPhysical.Val.Ops.given
   export TDFDouble.Val.Ops.given
   export DFEnum.Val.Ops.given
@@ -1181,9 +1269,30 @@ object DFVal extends DFValLP:
   export TDFString.Val.Ops.given
   export ConnectOps.given
 
+  given evOpCompare[LT <: DFTypeAny, LP, L <: DFValTP[LT, LP], R, Op <: FuncOp, RP](using
+      tc: Compare.Aux[LT, R, Op, false, RP],
+      op: ValueOf[Op]
+  ): ExactOp2Aux[Op, DFC, DFValOf[DFBool], L, R, DFValTP[DFBool, LP | RP]] =
+    new ExactOp2[Op, DFC, DFValOf[DFBool], L, R]:
+      type Out = DFValTP[DFBool, LP | RP]
+      def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
+        tc(lhs, rhs)
+      }(using dfc, CTName(op.value.toString))
+
+  given evOpCompareCastled[L, LP, RT <: DFTypeAny, RP, R <: DFValTP[RT, RP], Op <: FuncOp](using
+      tc: Compare.Aux[RT, L, Op, true, LP],
+      op: ValueOf[Op]
+  ): ExactOp2Aux[Op, DFC, DFValOf[DFBool], L, R, DFValTP[DFBool, LP | RP]] =
+    new ExactOp2[Op, DFC, DFValOf[DFBool], L, R]:
+      type Out = DFValTP[DFBool, LP | RP]
+      def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
+        tc(rhs, lhs)
+      }(using dfc, CTName(op.value.toString))
+
   object Ops:
     protected type SupportedValue =
-      DFValAny | Int | Long | Double | NonEmptyTuple | Iterable[DFValAny] | SameElementsVector[?]
+      DFValAny | Boolean | Int | Long | Double | NonEmptyTuple | Iterable[DFValAny] |
+        SameElementsVector[?] | BoolSelWrapper[?, ?, ?]
     extension (inline lhs: DFValAny)
       transparent inline def apply(inline idx: Any)(using DFCG): DFValAny =
         exactOp2["apply", DFC, DFValAny](lhs, idx)
@@ -1230,6 +1339,42 @@ object DFVal extends DFValLP:
             exactOp2[FuncOp.min.type, DFC, DFValAny](lhs, rhs)(using
               compiletime.summonInline[DFCG]
             )
+      transparent inline def |(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.|.type, DFC, DFValAny](lhs, rhs)
+      transparent inline def &(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.&.type, DFC, DFValAny](lhs, rhs)
+      transparent inline def ^(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.^.type, DFC, DFValAny](lhs, rhs)
+      transparent inline def |(using DFCG): DFValAny =
+        exactOp1[FuncOp.|.type, DFC, DFValAny](lhs)
+      transparent inline def &(using DFCG): DFValAny =
+        exactOp1[FuncOp.&.type, DFC, DFValAny](lhs)
+      transparent inline def ^(using DFCG): DFValAny =
+        exactOp1[FuncOp.^.type, DFC, DFValAny](lhs)
+      transparent inline def ++(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.++.type, DFC, DFValAny](lhs, rhs)
+      transparent inline def >>(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.>>.type, DFC, DFValAny](lhs, rhs)
+      transparent inline def <<(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.<<.type, DFC, DFValAny](lhs, rhs)
+      transparent inline def **(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[FuncOp.**.type, DFC, DFValAny](lhs, rhs)
+    end extension
+    protected[core] trait BoolOnlyOp[Op <: FuncOp]
+    extension (inline lhs: SupportedValue)
+      transparent inline def ||(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[BoolOnlyOp[FuncOp.|.type], DFC, DFValAny](lhs, rhs)
+      transparent inline def &&(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[BoolOnlyOp[FuncOp.&.type], DFC, DFValAny](lhs, rhs)
+    end extension
+    protected[core] trait CarryOp[Op <: FuncOp]
+    extension (inline lhs: SupportedValue)
+      transparent inline def +^(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[CarryOp[FuncOp.+.type], DFC, DFValAny](lhs, rhs)
+      transparent inline def -^(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[CarryOp[FuncOp.-.type], DFC, DFValAny](lhs, rhs)
+      transparent inline def *^(inline rhs: SupportedValue)(using DFCG): DFValAny =
+        exactOp2[CarryOp[FuncOp.`*`.type], DFC, DFValAny](lhs, rhs)
     end extension
     extension (inline lhs: SupportedValue)
       transparent inline def as(inline aliasType: DFType.Supported)(using DFCG): DFValAny =
@@ -1262,6 +1407,72 @@ object DFVal extends DFValLP:
         // on the bothWays flag for all other cases
         else exactOp2["<>", DFC, Any](lhs, rhs, bothWays = true)
     end extension
+
+    extension [L](inline lhs: L)
+      transparent inline def <[R](inline rhs: R)(using DFCG): DFValOf[DFBool] =
+        compare[FuncOp.<.type, L, R](lhs, rhs)
+      transparent inline def <=[R](inline rhs: R)(using DFCG): DFValOf[DFBool] =
+        compare[FuncOp.<=.type, L, R](lhs, rhs)
+      transparent inline def >[R](inline rhs: R)(using DFCG): DFValOf[DFBool] =
+        compare[FuncOp.>.type, L, R](lhs, rhs)
+      transparent inline def >=[R](inline rhs: R)(using DFCG): DFValOf[DFBool] =
+        compare[FuncOp.>=.type, L, R](lhs, rhs)
+    end extension
+
+    private[core] transparent inline def compare[Op <: FuncOp, L, R](
+        inline lhs: L,
+        inline rhs: R
+    )(using DFC, ValueOf[Op]): DFValOf[DFBool] =
+      inline val lhsIsDFVal = inline compiletime.erasedValue[L] match
+        case _: DFValAny => true
+        case _           => false
+      inline val rhsIsDFVal = inline compiletime.erasedValue[R] match
+        case _: DFValAny => true
+        case _           => false
+      inline if (lhsIsDFVal && rhsIsDFVal)
+        inline lhs match
+          case lhs: DFValTP[lt, lp] => inline rhs match
+              case rhs: DFValTP[rt, rp] =>
+                specialCompare[Op, lt, lp, rt, rp](lhs, rhs)
+      else exactOp2[Op, DFC, DFValOf[DFBool]](lhs, rhs)
+    end compare
+
+    private transparent inline def specialCompare[
+        Op <: FuncOp,
+        LT <: DFTypeAny,
+        LP,
+        RT <: DFTypeAny,
+        RP
+    ](
+        inline lhs: DFValTP[LT, LP],
+        inline rhs: DFValTP[RT, RP]
+    )(using dfc: DFC, op: ValueOf[Op]): DFValTP[DFBool, LP | RP] =
+      val dualSummon = compiletime.summonInline[DualSummonTrapError[
+        DFVal.Compare[LT, DFValTP[RT, RP], Op, false],
+        DFVal.Compare[RT, DFValTP[LT, LP], Op, true]
+      ]]
+      specialCompareRuntime[Op, LT, LP, RT, RP](lhs, rhs, dualSummon)
+    end specialCompare
+
+    private def specialCompareRuntime[Op <: FuncOp, LT <: DFTypeAny, LP, RT <: DFTypeAny, RP](
+        lhs: DFValTP[LT, LP],
+        rhs: DFValTP[RT, RP],
+        dualSummon: DualSummonTrapError[
+          DFVal.Compare[LT, DFValTP[RT, RP], Op, false],
+          DFVal.Compare[RT, DFValTP[LT, LP], Op, true]
+        ]
+    )(using dfc: DFC, op: ValueOf[Op]): DFValTP[DFBool, LP | RP] = trydf {
+      (dualSummon.valueL, dualSummon.valueR).runtimeChecked match
+        case (Some(tcL), Some(tcR)) =>
+          try tcL(lhs, rhs)
+          catch
+            case eL: Throwable =>
+              try tcR(rhs, lhs)
+              catch case eR: Throwable => throw eL
+        case (Some(tcL), None) => tcL(lhs, rhs)
+        case (None, Some(tcR)) => tcR(rhs, lhs)
+      end match
+    }(using dfc, CTName(op.value.toString)).asValTP[DFBool, LP | RP]
 
     extension [T <: DFTypeAny, A, C, I, S <: Int, V](dfVal: DFVal[T, Modifier[A, C, I, Any]])
       def prev(step: Inlined[S], init: InitValue[T])(using
@@ -1618,44 +1829,58 @@ object ConnectOps:
 end ConnectOps
 
 extension (dfVal: ir.DFVal)
-  protected[dfhdl] def isUnreachable(using dfc: DFC): Boolean =
+  protected[core] def isUnreachable(using dfc: DFC): Boolean =
     import dfc.getSet
     !dfVal.isGlobal && dfVal.getOwnerDesign.ownerRef != dfc.owner.asIR.getThisOrOwnerDesign.ownerRef
-
-  protected[dfhdl] def cloneUnreachable(using dfc: DFC): ir.DFVal =
+  private def cloneUnreachableWithNewRefs(using dfc: DFC): ir.DFVal =
     import dfc.getSet
     given ir.RefGen = dfc.refGen
     val currentOwner = dfc.owner.asIR
+    val newDFVal = dfVal.copyWithNewRefs
+    dfVal.getRefs.lazyZip(newDFVal.getRefs).foreach { case (oldRef, newRef) =>
+      dfc.mutableDB.newRefFor(
+        newRef,
+        oldRef.get match
+          case dfVal: ir.DFVal => dfVal.cloneUnreachable
+          case m               => m
+      )
+    }
+    dfc.mutableDB.newRefFor(newDFVal.ownerRef, currentOwner)
+    dfc.mutableDB.addMember(newDFVal)
+    newDFVal
+  end cloneUnreachableWithNewRefs
+
+  protected[core] def cloneUnreachable(using dfc: DFC): ir.DFVal =
     if (dfVal.isUnreachable)
-      dfVal match
-        case _
-            if !dfVal.isAnonymous &&
-              currentOwner.getThisOrOwnerDesign.isInsideOwner(dfVal.getOwnerDesign) =>
-          dfc.mutableDB.DesignContext.getReachableNamedValue(
-            dfVal, {
-              DFVal.DesignParam(dfVal.asValAny)(using dfc.setMeta(dfVal.meta)).asIR
-            }
-          )
-        case ir.DFVal.DesignParam(dfValRef = ir.DFRef(of)) =>
-          of.cloneUnreachable
-        case _ =>
-          def cloning: ir.DFVal =
-            val newDFVal = dfVal.copyWithNewRefs
-            dfVal.getRefs.lazyZip(newDFVal.getRefs).foreach { case (oldRef, newRef) =>
-              dfc.mutableDB.newRefFor(
-                newRef,
-                oldRef.get match
-                  case dfVal: ir.DFVal => dfVal.cloneUnreachable
-                  case m               => m
-              )
-            }
-            dfc.mutableDB.newRefFor(newDFVal.ownerRef, currentOwner)
-            dfc.mutableDB.addMember(newDFVal)
-            newDFVal
-          end cloning
-          if (dfVal.isAnonymous) cloning
-          else dfc.mutableDB.DesignContext.getReachableNamedValue(dfVal, cloning)
+      import dfc.getSet
+      val currentDesign = dfc.owner.asIR.getThisOrOwnerDesign
+      val dfValDesign = dfVal.getOwnerDesign
+      // anonymous cloning
+      if (dfVal.isAnonymous) cloneUnreachableWithNewRefs
+      // named value cloning
+      else
+        dfc.mutableDB.DesignContext.getReachableNamedValue(
+          dfVal,
+          // when the current design is within the value's owner design,
+          // create a design parameter to propagate the named value into the design.
+          if (currentDesign.isInsideOwner(dfValDesign))
+            DFVal.DesignParam(dfVal.asValAny)(using dfc.setMeta(dfVal.meta)).asIR
+          // when the current design is outside the value's owner design
+          else
+            dfVal match
+              // design parameter, so recurse on the referenced value
+              case ir.DFVal.DesignParam(dfValRef = ir.DFRef(of)) =>
+                of.cloneUnreachable
+              // named constant, so clone under a new name within relation to the current design
+              case _ =>
+                val newMeta =
+                  dfVal.meta.setName(dfVal.getRelativeName(currentDesign).replaceAll("\\.", "_"))
+                dfVal.cloneUnreachableWithNewRefs.setMeta(_ => newMeta)
+        )
+      end if
+    // reachable value, so no need to clone
     else dfVal
+    end if
   end cloneUnreachable
 
   protected[dfhdl] def cloneAnonValueAndDepsHere(using dfc: DFC): ir.DFVal =
@@ -1677,12 +1902,12 @@ extension (dfVal: ir.DFVal)
               DFVal.Alias.AsIs(dfType, clonedRelVal, forceNewAlias = true)(using dfcForClone)
             case alias: ir.DFVal.Alias.ApplyRange =>
               def cloneIntParam(intParam: IntParam[Int]): IntParam[Int] =
-                val ret = (intParam: @unchecked) match
-                  case int: Int            => int
-                  case const: DFConstInt32 => const.asIR.cloneAnonValueAndDepsHere
+                val ret = intParam.runtimeChecked match
+                  case int: Int                       => int
+                  case const: DFConstInt32 @unchecked => const.asIR.cloneAnonValueAndDepsHere
                 ret.asInstanceOf[IntParam[Int]]
               DFVal.Alias.ApplyRange(
-                clonedRelVal.asValOf[DFBits[Int]],
+                clonedRelVal.asValOf[DFBits[Int]], // this is OK even for UInt/SInt
                 cloneIntParam(alias.idxHighRef.get),
                 cloneIntParam(alias.idxLowRef.get)
               )(using dfcForClone)

@@ -385,12 +385,12 @@ class PrintVHDLCodeSpec extends StageSpec:
          |    if rising_edge(clk) then
          |      if rst = '1' then
          |        led <= '1';
-         |        cnt <= resize(d"0", clog2(HALF_PERIOD));
+         |        cnt <= resize(2d"0", clog2(HALF_PERIOD));
          |      else
          |        if cnt = to_unsigned(HALF_PERIOD - 1, clog2(HALF_PERIOD)) then
-         |          cnt <= resize(d"0", clog2(HALF_PERIOD));
+         |          cnt <= resize(2d"0", clog2(HALF_PERIOD));
          |          led <= not led;
-         |        else cnt <= cnt + resize(d"1", clog2(HALF_PERIOD));
+         |        else cnt <= cnt + resize(2d"1", clog2(HALF_PERIOD));
          |        end if;
          |      end if;
          |    end if;
@@ -1500,6 +1500,35 @@ class PrintVHDLCodeSpec extends StageSpec:
          |  );
          |  ip_x <= x;
          |  y <= ip_y;
+         |end Foo_arch;""".stripMargin
+    )
+  }
+
+  test("abs function") {
+    class Foo extends RTDesign:
+      val x = SInt(8) <> IN
+      val y = SInt(8) <> OUT
+      y := abs(x)
+    end Foo
+    val top = (new Foo).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|library ieee;
+         |use ieee.std_logic_1164.all;
+         |use ieee.numeric_std.all;
+         |use work.dfhdl_pkg.all;
+         |use work.Foo_pkg.all;
+         |
+         |entity Foo is
+         |port (
+         |  x : in signed(7 downto 0);
+         |  y : out signed(7 downto 0)
+         |);
+         |end Foo;
+         |
+         |architecture Foo_arch of Foo is
+         |begin
+         |  y <= abs(x);
          |end Foo_arch;""".stripMargin
     )
   }

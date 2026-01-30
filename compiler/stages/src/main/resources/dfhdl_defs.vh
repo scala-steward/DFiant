@@ -23,15 +23,43 @@
 //  OTHER DEALINGS IN THE SOFTWARE.
 //  
 //  For more information, please refer to <http://unlicense.org/>
-
-`define MAX(a,b) ((a) > (b) ? (a) : (b))
-`define MIN(a,b) ((a) < (b) ? (a) : (b))
-`define TO_VEC_HEX(hex, hw, vw) \
-    {{(vw - hw){1'b0}}, hw'h``hex}
-`define TO_UNSIGNED(n, nw, vw) \
-    {{(vw - nw){1'b0}}, nw'd``n}
-`define TO_SIGNED_NEG(n, nw, vw) \
-    {{(vw - nw){1'b1}}, -nw'd``n}
+//
+// TODO: remove UNUSEDSIGNAL lint-off after 
+// https://github.com/verilator/verilator/issues/6893 is fixed
+`define MAX(a, b) ((a) > (b) ? (a) : (b))
+`define MIN(a, b) ((a) < (b) ? (a) : (b))
+`define ABS(a) ((a) < 0 ? -(a) : (a))
+`define hPW(hex, hw, vw) \
+    /* verilator lint_off WIDTH */ \
+    ((vw) == (hw) ? hw'h``hex : {{(vw - hw){1'b0}}, hw'h``hex}) \
+    /* verilator lint_on WIDTH */
+`define dPW(dec, dw, vw) \
+    /* verilator lint_off WIDTH */ \
+    ((vw) == (dw) ? dw'd``dec : {{(vw - dw){1'b0}}, dw'd``dec}) \
+    /* verilator lint_on WIDTH */
+`define sdPPW(dec, dw, vw) \
+    /* verilator lint_off WIDTH */ \
+    $signed((vw) == (dw) ? dw'sd``dec : {{(vw - dw){1'b0}}, dw'sd``dec}) \
+    /* verilator lint_on WIDTH */
+`define sdNPW(dec, dw, vw) \
+    /* verilator lint_off WIDTH */ \
+    $signed((vw) == (dw) ? -dw'sd``dec : {{(vw - dw){1'b1}}, -dw'sd``dec}) \
+    /* verilator lint_on WIDTH */
+`define sdNPW_V95(dec, dw, vw) \
+    /* verilator lint_off WIDTH */ \
+    ((vw) == (dw) ? -dw'd``dec : {{(vw - dw){1'b1}}, -dw'd``dec}) \
+    /* verilator lint_on WIDTH */
+`define TRUNCATE(vec, toW) \
+    vec[toW - 1:0] 
+`define EXTEND_U(vec, fromW, toW) \
+    /* verilator lint_off WIDTH */ \
+    ((toW) == (fromW) ? vec : {{((toW) - (fromW)){1'b0}}, vec}) \
+    /* verilator lint_on WIDTH */
+`define EXTEND_S_V95(vec, fromW, toW) \
+    /* verilator lint_off WIDTH */ \
+    ((toW) == (fromW) ? vec : {{((toW) - (fromW)){vec[fromW - 1]}}, vec}) \
+    /* verilator lint_on WIDTH */
+`define EXTEND_S(vec, fromW, toW) $signed(`EXTEND_S_V95(vec, fromW, toW))
 `define SIGNED_GREATER_THAN(a, b, width)  \
     ((a[width-1] && !b[width-1]) ? 1'b0 : /* a is negative, b is positive */ \
      (!a[width-1] && b[width-1]) ? 1'b1 : /* a is positive, b is negative */ \
@@ -47,6 +75,7 @@
 `define SIGNED_SHIFT_RIGHT(data, shift, width) \
     ((data[width-1] == 1'b1) ? ((data >> shift) | ({width{1'b1}} << (width - shift))) : (data >> shift))
 function integer clog2;
+/* verilator lint_off UNUSEDSIGNAL */
 input integer n;
 integer result, temp;
 begin
@@ -57,10 +86,12 @@ begin
     result = result + 1;
   end
   clog2 = result;
+/* verilator lint_on UNUSEDSIGNAL */
 end
 endfunction
 // Function to perform base raised to the power of exp (base ** exp)
 function integer power;
+/* verilator lint_off UNUSEDSIGNAL */
 input integer base;
 input integer exp;
 integer i;  // Loop variable
@@ -73,6 +104,7 @@ begin
       power = power * base;
     end
   end
+/* verilator lint_on UNUSEDSIGNAL */
 end
 endfunction
 

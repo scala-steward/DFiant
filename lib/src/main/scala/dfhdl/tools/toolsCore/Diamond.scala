@@ -222,9 +222,10 @@ class DiamondProjectPhysicalConstraintsPrinter(using
       config.interface match
         case SlaveSMAP(_) => "ENABLE"
         case _            => "DISABLE"
-    val mcclkFreq = config.masterRate match
-      case None             => ""
-      case rate: RateNumber => s" MCCLK_FREQ=${(rate.to_freq / 1.MHz).value.toInt}"
+    val mcclkFreq =
+      config.masterRate.toOption.map(rate =>
+        s" MCCLK_FREQ=${(rate.to_freq / 1.MHz).value.toInt}"
+      ).getOrElse("")
     s"""SYSCONFIG CONFIG_IOVOLTAGE=3.3$mcclkFreq COMPRESS_CONFIG=$compress MASTER_SPI_PORT=$masterSPI SLAVE_SPI_PORT=$slaveSPI SLAVE_PARALLEL_PORT=$slaveParallel;"""
   end sysConfig
 
@@ -264,7 +265,7 @@ class DiamondProjectTimingConstraintsPrinter(using getSet: MemberGetSet, co: Com
                 statements += s"set_false_path $dir [get_ports ${port.getName}[$i]]\n"
             case bitIdx =>
               statements += s"set_false_path $dir [get_ports ${port.getName}[$bitIdx]]\n"
-    (port.modifier.dir: @unchecked) match
+    port.modifier.dir.runtimeChecked match
       case DFVal.Modifier.IN  => add_set_false_path("-from")
       case DFVal.Modifier.OUT => add_set_false_path("-to")
       // TODO: for INOUT, also check that its actually used in both directions by the design

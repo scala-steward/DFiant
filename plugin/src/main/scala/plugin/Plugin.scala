@@ -18,6 +18,5 @@ class Plugin extends StandardPlugin:
       MetaContextDelegatePhase(setting) ::
       MetaContextGenPhase(setting) ::
       OnCreateEventsPhase(setting) ::
-      FixInterpDFValPhase(setting) ::
       Nil
 end Plugin

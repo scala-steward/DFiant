@@ -32,6 +32,7 @@ class DFBoolOrBitSpec extends DFSpec:
       bl := false
     }
   }
+
   test("Logical Ops") {
     val bt = Bit <> VAR
     val bl = Boolean <> VAR
@@ -39,6 +40,9 @@ class DFBoolOrBitSpec extends DFSpec:
       """|val t1 = bt && bl.bit
          |val t2 = bt ^ 1
          |val t3 = bl || false
+         |val t4a = 0 ^ bt
+         |val t4b = 1 || bl.bit
+         |val t4c = 0 && bt
          |val t5 = bt && 1
          |val t6 = bl || bt.bool
          |val t7 = (bl ^ false) || (!bt).bool
@@ -56,27 +60,9 @@ class DFBoolOrBitSpec extends DFSpec:
       val t1 = bt && bl
       val t2 = bt ^ 1
       val t3 = bl || false
-      assertCompileError(
-        """|Unsupported Scala BitNum/Boolean primitive at the LHS of `^` with a DFHDL value.
-           |Consider switching positions of the arguments.
-           |""".stripMargin
-      )(
-        """val t4 = 0 ^ bt"""
-      )
-      assertCompileError(
-        """|Unsupported Scala BitNum/Boolean primitive at the LHS of `||` with a DFHDL value.
-           |Consider switching positions of the arguments.
-           |""".stripMargin
-      )(
-        """val t4 = 1 || bl"""
-      )
-      assertCompileError(
-        """|Unsupported Scala BitNum/Boolean primitive at the LHS of `&&` with a DFHDL value.
-           |Consider switching positions of the arguments.
-           |""".stripMargin
-      )(
-        """val t4 = 0 && bt"""
-      )
+      val t4a = 0 ^ bt
+      val t4b = 1 || bl
+      val t4c = 0 && bt
       val t5 = bt && true
       val t6 = bl | bt
       val t7 = bl ^ 0 || !bt
@@ -107,6 +93,30 @@ class DFBoolOrBitSpec extends DFSpec:
       )(
         """t1.toScalaBoolean"""
       )
+    }
+  }
+
+  test("selection operation") {
+    val bl = Boolean <> VAR
+    val c1: Int <> CONST = 1
+    val c2: Int <> CONST = 2
+    assertCodeString(
+      """|val t1 = bl.sel(d"4'11", d"4'12")
+         |val t2 = bl.sel(d"4'12", d"4'11")
+         |val t3 = bl.sel(d"4'1", d"4'13")
+         |val t4 = bl.sel(d"4'13", d"4'1")
+         |val t5 = bl.sel(c1, c2)
+         |val t6 = bl.sel(d"4'${c1}", d"4'12")
+         |val t7 = bl.sel(d"4'12", d"4'${c2}")
+         |""".stripMargin
+    ) {
+      val t1 = bl.sel(11, d"4'12")
+      val t2 = bl.sel(d"4'12", 11)
+      val t3 = bl.sel(1, d"4'13")
+      val t4 = bl.sel(d"4'13", 1)
+      val t5 = bl.sel(c1, c2)
+      val t6 = bl.sel(c1, d"4'12")
+      val t7 = bl.sel(d"4'12", c2)
     }
   }
 end DFBoolOrBitSpec

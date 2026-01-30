@@ -12,6 +12,10 @@ def dataConversion[TT <: DFType, FT <: DFType](toType: TT, fromType: FT)(
     case (DFSInt(Int(tWidth)), DFUInt(Int(fWidth))) =>
       assert(tWidth == fWidth + 1)
       fromData
+    // signed to unsigned conversion
+    case (DFUInt(Int(tWidth)), DFSInt(Int(fWidth))) =>
+      assert(tWidth == fWidth - 1)
+      fromData
     // Double to Bits conversion
     case (DFBits(Int(tWidth)), DFDouble) =>
       assert(tWidth == 64)
@@ -35,10 +39,19 @@ def dataConversion[TT <: DFType, FT <: DFType](toType: TT, fromType: FT)(
       if (tWidth > fWidth) fromData
       else
         fromData.asInstanceOf[Option[BigInt]].map(_.truncateAsUnsigned(tWidth).asSigned(tWidth))
+    // Casting from DFInt32 to UInt
+    case (DFUInt(Int(fWidth)), DFInt32) =>
+      assert(fWidth <= 31)
+      fromData.asInstanceOf[Option[BigInt]].map(_.truncateAsUnsigned(fWidth))
     // Casting from UInt to DFInt32
     case (DFInt32, DFUInt(Int(fWidth))) =>
       assert(fWidth <= 31)
       fromData
+    // Conversion from BoolOrBit to Bits
+    case (DFBits(Int(tWidth)), DFBit | DFBool) =>
+      fromData.asInstanceOf[Option[Boolean]]
+        .map(x => (BitVector.bit(x).resize(tWidth), BitVector.low(tWidth)))
+        .getOrElse((BitVector.low(tWidth), BitVector.high(tWidth)))
     // Casting from any data to Bits
     case (DFBits(Int(tWidth)), _) =>
       assert(tWidth == fromType.width)
@@ -47,6 +60,9 @@ def dataConversion[TT <: DFType, FT <: DFType](toType: TT, fromType: FT)(
     case (_, DFBits(Int(fWidth))) =>
       assert(fWidth == toType.width)
       toType.bitsDataToData(fromData.asInstanceOf[(BitVector, BitVector)])
+    // Casting from BoolOrBit to UInt/SInt
+    case (DFUInt(_) | DFSInt(_), DFBit | DFBool) =>
+      fromData.asInstanceOf[Option[Boolean]].map(if (_) BigInt(1) else BigInt(0))
     case (DFInt32, DFNumber) =>
       Some(fromData.asInstanceOf[DFNumber.Data].value.toBigInt)
     case (DFDouble, DFNumber) =>
@@ -69,7 +85,7 @@ def selRangeData(
     fromData: Any,
     relBitHigh: Int,
     relBitLow: Int
-): Any = ((dfType, fromData): @unchecked) match
+)(using MemberGetSet): Any = (dfType, fromData).runtimeChecked match
   case (_: DFBits, (valueBits: BitVector, bubbleBits: BitVector)) =>
     assert(relBitHigh >= 0 && relBitHigh < valueBits.length)
     assert(relBitLow >= 0 && relBitLow < valueBits.length)
@@ -77,6 +93,11 @@ def selRangeData(
     val selValueBits = valueBits.bits(relBitHigh.toLong, relBitLow.toLong)
     val selBubbleBits = bubbleBits.bits(relBitHigh.toLong, relBitLow.toLong)
     (selValueBits, selBubbleBits)
+  case (
+        DFXInt(signed, Int(width), DFDecimal.NativeType.BitAccurate),
+        data: Option[BigInt] @unchecked
+      ) =>
+    data.map(_.toBitVector(width).bits(relBitHigh, relBitLow).toBigInt(signed))
   case (_: DFVector, data: Vector[Any]) =>
     data.slice(relBitLow, relBitHigh + 1)
 end selRangeData
@@ -152,7 +173,7 @@ def calcFuncData[OT <: DFType](
         op match
           case FuncOp.++     => argData.toVector.asInstanceOf[outType.Data]
           case FuncOp.repeat =>
-            val Some(cnt: BigInt) = argData(1): @unchecked
+            val Some(cnt: BigInt) = argData(1).runtimeChecked
             Vector.fill(cnt.toInt)(argData.head).asInstanceOf[outType.Data]
           case x =>
             println(x)
@@ -262,14 +283,16 @@ def calcFuncData[OT <: DFType](
               case FuncOp.| => valueBits.toIndexedSeq.exists(identity)
               case FuncOp.^ => valueBits.populationCount % 2L != 0
             Some(data)
-          // Arithmetic Negation
+          // Arithmetic Negation and Absolute Value
           case (
                 _: DFDecimal,
-                FuncOp.unary_-,
+                op @ (FuncOp.unary_- | FuncOp.abs),
                 (_: DFDecimal) :: Nil,
                 Some(data: BigInt) :: Nil
               ) =>
-            Some(-data)
+            op match
+              case FuncOp.unary_- => Some(-data)
+              case FuncOp.abs     => Some(data.abs)
           // Arithmetic CLog2
           case (
                 DFXInt(_),

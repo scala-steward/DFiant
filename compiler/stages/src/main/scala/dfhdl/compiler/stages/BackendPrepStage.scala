@@ -23,10 +23,10 @@ case object BackendPrepStage
       DropLocalDcls,
       DropOutportRead,
       GlobalizePortVectorParams,
-      LocalToDesignParams,
-      DropDesignParamDeps,
       DropBAssignFromSeqProc,
       DropProcessAll,
       SimpleOrderMembers,
+      LocalToDesignParams,
+      DropDesignParamDeps,
       ViaConnection
     )

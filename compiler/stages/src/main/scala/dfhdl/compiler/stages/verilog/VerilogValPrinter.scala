@@ -109,11 +109,19 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
     printer.dialect match
       case VerilogDialect.v95 => false
       case _                  => true
+  val allowNativeMathFunctions: Boolean =
+    printer.dialect match
+      case VerilogDialect.v95 | VerilogDialect.v2001 => false
+      case _                                         => true
   def csDFValFuncExpr(dfVal: Func, typeCS: Boolean): String =
     def commonOpStr: String =
       dfVal.op match
-        case Func.Op.max                               => "`MAX"
-        case Func.Op.min                               => "`MIN"
+        case Func.Op.max =>
+          if (allowNativeMathFunctions && !dfVal.isConst) "$max"
+          else "`MAX"
+        case Func.Op.min =>
+          if (allowNativeMathFunctions && !dfVal.isConst) "$min"
+          else "`MIN"
         case Func.Op.** if !allowDoubleStarPowerSyntax => "power"
         case op                                        => op.toString()
     dfVal.args match
@@ -177,6 +185,7 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
           case Func.Op.&       => s"&$argStrB"
           case Func.Op.|       => s"|$argStrB"
           case Func.Op.^       => s"^$argStrB"
+          case Func.Op.abs     => s"`ABS($argStr)"
           case Func.Op.clog2   =>
             val internalLog = printer.dialect match
               case VerilogDialect.v95 | VerilogDialect.v2001 => ""
@@ -219,6 +228,15 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
         val extended = s"{1'b0, $relValStr}"
         if (printer.allowSignedKeywordAndOps) s"$$signed($extended)"
         else extended
+      case (DFUInt(tr @ Int(tWidth)), DFSInt(Int(fWidth))) =>
+        assert(tWidth == fWidth - 1)
+        val truncated =
+          if (printer.allowWidthCastSyntax)
+            s"${tr.refCodeString.applyBrackets()}'($relValStr)"
+          else
+            s"$relValStr[${tr.uboundCS}:0]"
+        if (printer.allowSignedKeywordAndOps) s"$$unsigned($truncated)"
+        else truncated
       case (DFUInt(Int(tWidth)), DFBits(Int(fWidth))) =>
         assert(tWidth == fWidth)
         relValStr
@@ -230,17 +248,23 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
         if (printer.allowSignedKeywordAndOps) s"$$signed($relValStr)"
         else relValStr
       case (DFBits(tr @ Int(tWidth)), DFBits(fr @ Int(fWidth))) =>
-        if (tWidth == fWidth) relValStr
-        else if (tWidth < fWidth) s"${relValStr.applyBrackets()}[${tr.uboundCS}:0]"
-        else s"{{(${tr.refCodeString}-${fr.refCodeString}){1'b0}}, $relValStr}"
+        if (printer.allowWidthCastSyntax)
+          s"${tr.refCodeString.applyBrackets()}'($relValStr)"
+        else
+          if (tWidth < fWidth) s"`TRUNCATE($relValStr, ${tr.refCodeString})"
+          else
+            s"`EXTEND_U($relValStr, ${fr.refCodeString}, ${tr.refCodeString})"
       case (t, DFOpaque(actualType = ot)) if ot =~ t =>
         relValStr
       case (DFOpaque(_, _, _, _), _) =>
         relValStr
       case (DFUInt(tr @ Int(tWidth)), DFUInt(fr @ Int(fWidth))) =>
-        if (tWidth == fWidth) relValStr
-        else if (tWidth < fWidth) s"${relValStr.applyBrackets()}[${tr.uboundCS}:0]"
-        else s"{{(${tr.refCodeString}-${fr.refCodeString}){1'b0}}, $relValStr}"
+        if (printer.allowWidthCastSyntax)
+          s"${tr.refCodeString.applyBrackets()}'($relValStr)"
+        else
+          if (tWidth < fWidth) s"`TRUNCATE($relValStr, ${tr.refCodeString})"
+          else
+            s"`EXTEND_U($relValStr, ${fr.refCodeString}, ${tr.refCodeString})"
       case (DFUInt(tWidthParamRef), DFInt32) =>
         if (printer.allowWidthCastSyntax)
           s"${tWidthParamRef.refCodeString.applyBrackets()}'($relValStr)"
@@ -249,10 +273,30 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
         if (printer.allowWidthCastSyntax)
           s"${tWidthParamRef.refCodeString.applyBrackets()}'($relValStr)"
         else relValStr
-      case (DFSInt(tWidthParamRef), DFSInt(_)) =>
+      case (DFSInt(tr @ Int(tWidth)), DFSInt(fr @ Int(fWidth))) =>
+        if (printer.allowWidthCastSyntax)
+          s"${tr.refCodeString.applyBrackets()}'($relValStr)"
+        else
+          if (tWidth < fWidth) s"`TRUNCATE($relValStr, ${tr.refCodeString})"
+          else
+            if (printer.allowSignedKeywordAndOps)
+              s"`EXTEND_S($relValStr, ${fr.refCodeString}, ${tr.refCodeString})"
+            else
+              s"`EXTEND_S_V95($relValStr, ${fr.refCodeString}, ${tr.refCodeString})"
+      case (DFUInt(tWidthParamRef), DFBit | DFBool) =>
         if (printer.allowWidthCastSyntax)
           s"${tWidthParamRef.refCodeString.applyBrackets()}'($relValStr)"
-        else s"{$relValStr}[${tWidthParamRef.refCodeString.applyBrackets()} - 1:0]"
+        else
+          s"`EXTEND_U($relValStr, 1, ${tWidthParamRef.refCodeString})"
+      case (DFSInt(tWidthParamRef), DFBit | DFBool) =>
+        val extended =
+          if (printer.allowWidthCastSyntax)
+            s"${tWidthParamRef.refCodeString.applyBrackets()}'($relValStr)"
+          else
+            s"`EXTEND_U($relValStr, 1, ${tWidthParamRef.refCodeString})"
+        if (printer.allowSignedKeywordAndOps)
+          s"$$signed($extended)"
+        else extended
       case (DFInt32, DFUInt(_) | DFSInt(_))               => relValStr
       case (DFBit, DFBool | DFEnum(widthParam = 1))       => relValStr
       case (DFBool, DFBit | DFEnum(widthParam = 1))       => relValStr
@@ -296,6 +340,11 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
         end from_vector_conv
         assert(tWidth == fromType.width)
         from_vector_conv(fromVector, "")
+      case (DFBits(tWidthParamRef), DFBit | DFBool) =>
+        if (printer.allowWidthCastSyntax)
+          s"${tWidthParamRef.refCodeString.applyBrackets()}'($relValStr)"
+        else
+          s"`EXTEND_U($relValStr, 1, ${tWidthParamRef.refCodeString})"
       case (DFBits(Int(tWidth)), _) =>
         assert(tWidth == fromType.width)
         s"{$relValStr}"
@@ -306,7 +355,7 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
   end csDFValAliasAsIs
   def csDFValAliasApplyRange(dfVal: Alias.ApplyRange): String =
     dfVal.dfType match
-      case DFBits(_) =>
+      case DFBits(_) | DFUInt(_) | DFSInt(_) =>
         s"${dfVal.relValCodeString}[${dfVal.idxHighRef.refCodeString}:${dfVal.idxLowRef.refCodeString}]"
       case _ =>
         s"${dfVal.relValCodeString}[${dfVal.idxLowRef.refCodeString}:${dfVal.idxHighRef.refCodeString}]"
@@ -318,7 +367,7 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
   // field selections changes from `dv._${idx+1}` to `dv($idx)`
   val TUPLE_MIN_INDEXING = 3
   def csDFValAliasSelectField(dfVal: Alias.SelectField): String =
-    val dfType @ DFStruct(structName, fieldMap) = dfVal.relValRef.get.dfType: @unchecked
+    val dfType @ DFStruct(structName, fieldMap) = dfVal.relValRef.get.dfType.runtimeChecked
     val fieldSel =
       if (dfType.isTuple)
         if (fieldMap.size > TUPLE_MIN_INDEXING)

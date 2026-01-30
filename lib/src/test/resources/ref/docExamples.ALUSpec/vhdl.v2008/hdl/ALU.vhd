@@ -24,8 +24,8 @@ begin
       when ALUSel_AND   => aluOut <= op1 and op2;
       when ALUSel_OR    => aluOut <= op1 or op2;
       when ALUSel_XOR   => aluOut <= op1 xor op2;
-      when ALUSel_SLT   => aluOut <= resize(to_slv(signed(op1) < signed(op2)), 32);
-      when ALUSel_SLTU  => aluOut <= resize(to_slv(unsigned(op1) < unsigned(op2)), 32);
+      when ALUSel_SLT   => aluOut <= to_slv(signed(op1) < signed(op2), 32);
+      when ALUSel_SLTU  => aluOut <= to_slv(unsigned(op1) < unsigned(op2), 32);
       when ALUSel_SLL   => aluOut <= slv_sll(op1, to_integer(unsigned(shamt)));
       when ALUSel_SRL   => aluOut <= slv_srl(op1, to_integer(unsigned(shamt)));
       when ALUSel_SRA   => aluOut <= to_slv(signed_sra(signed(op1), to_integer(unsigned(shamt))));

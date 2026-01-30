@@ -233,7 +233,8 @@ class VerilogPrinter(val dialect: VerilogDialect)(using
       // align enum constants
       .align("[ ]*[a-zA-Z]+[a-zA-Z0-9_.]*[ ]*", "=", "[ ]*[0-9]+,?")
       // align cases
-      .align("[ ]*[a-zA-Z]+[a-zA-Z0-9_.]*[ ]*:", "", ".*")
+      .align("[ ]*[a-zA-Z]+[a-zA-Z0-9_.]*[ ]*:[ ]*", "", ".*")
+  end alignCode
 
   val verilogKW: Set[String] = Set(
     "module", "input", "output", "inout", "endmodule", "always", "always_comb", "always_ff",
@@ -244,7 +245,7 @@ class VerilogPrinter(val dialect: VerilogDialect)(using
   )
   val verilogOps: Set[String] = Set("=", "<=")
   val verilogTypes: Set[String] = Set(
-    "wire", "reg", "logic", "wire", "signed", "int", "integer", "string"
+    "wire", "reg", "logic", "wire", "signed", "unsigned", "int", "integer", "string"
   )
   def colorCode(cs: String): String =
     cs

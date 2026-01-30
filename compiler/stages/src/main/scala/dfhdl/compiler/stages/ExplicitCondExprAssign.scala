@@ -31,7 +31,7 @@ case object ExplicitCondExprAssign extends Stage:
               ident,
               Patch.Add.Config.ReplaceWithLast(Patch.Replace.Config.FullReplacement)
             ):
-              (op: @unchecked) match
+              op.runtimeChecked match
                 case DFNet.Op.Assignment =>
                   headerVar.asVarAny.:=(underlying.asValAny)(using
                     dfc.setMetaAnon(ident.meta.position)

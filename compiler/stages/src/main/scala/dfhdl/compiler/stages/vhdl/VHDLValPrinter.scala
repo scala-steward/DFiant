@@ -55,10 +55,12 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
       case argL :: argR :: Nil if dfVal.op != Func.Op.++ =>
         var infix = true
         val opStr = dfVal.op match
-          case Func.Op.=== => "="
-          case Func.Op.=!= => "/="
-          case Func.Op.>=  => "=>"
-          case Func.Op.<<  =>
+          case Func.Op.===               => "="
+          case Func.Op.=!=               => "/="
+          case Func.Op.max | Func.Op.min =>
+            infix = false
+            dfVal.op.toString
+          case Func.Op.<< =>
             argL.get.dfType match
               case DFSInt(_) => "sla"
               case DFUInt(_) => "sll"
@@ -103,8 +105,10 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
           case Func.Op.&       => s"and reduce $argStrB"
           case Func.Op.|       => s"or reduce $argStrB"
           case Func.Op.^       => s"xor reduce $argStrB"
+          case Func.Op.abs     => s"abs($argStr)"
           case Func.Op.clog2   => s"clog2($argStr)"
           case _               => printer.unsupported
+        end match
       // multiarg func
       case args =>
         dfVal.op match
@@ -183,15 +187,20 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
     val fromType = relVal.dfType
     val toType = dfVal.dfType
     (toType, fromType) match
-      case (t, f) if t == f                           => relValStr
-      case (DFSInt(Int(tWidth)), DFUInt(Int(fWidth))) =>
+      case (t, f) if t == f                                => relValStr
+      case (DFSInt(tr @ Int(tWidth)), DFUInt(Int(fWidth))) =>
         assert(tWidth == fWidth + 1)
-        s"signed($relValStr)"
+        s"signed(resize($relValStr, ${tr.refCodeString}))"
+      case (DFUInt(tr @ Int(tWidth)), DFSInt(Int(fWidth))) =>
+        assert(tWidth == fWidth - 1)
+        s"resize(unsigned($relValStr), ${tr.refCodeString})"
       case (DFBits(tWidthParamRef), DFBits(_)) =>
         s"resize($relValStr, ${tWidthParamRef.refCodeString})"
       case (toType: DFType, fromType: DFBits) =>
         assert(toType.width == fromType.width)
         csBitsToType(toType, relValStr)
+      case (DFBits(tWidthParamRef), DFBit | DFBool) =>
+        s"to_slv($relValStr, ${tWidthParamRef.refCodeString})"
       case (DFBits(Int(tWidth)), fromType: DFType) =>
         assert(tWidth == fromType.width)
         csToSLV(fromType, relValStr)
@@ -213,6 +222,10 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
         s"to_unsigned($relValStr, ${tWidthParamRef.refCodeString})"
       case (DFSInt(tWidthParamRef), DFInt32) =>
         s"to_signed($relValStr, ${tWidthParamRef.refCodeString})"
+      case (DFUInt(tWidthParamRef), DFBit | DFBool) =>
+        s"to_unsigned($relValStr, ${tWidthParamRef.refCodeString})"
+      case (DFSInt(tWidthParamRef), DFBit | DFBool) =>
+        s"to_signed($relValStr, ${tWidthParamRef.refCodeString})"
       case (DFInt32, DFUInt(_) | DFSInt(_)) =>
         s"to_integer($relValStr)"
       case _ => printer.unsupported
@@ -220,7 +233,7 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
   end csDFValAliasAsIs
   def csDFValAliasApplyRange(dfVal: Alias.ApplyRange): String =
     dfVal.dfType match
-      case DFBits(_) =>
+      case DFBits(_) | DFUInt(_) | DFSInt(_) =>
         s"${dfVal.relValCodeString}(${dfVal.idxHighRef.refCodeString} downto ${dfVal.idxLowRef.refCodeString})"
       case _ =>
         s"${dfVal.relValCodeString}(${dfVal.idxLowRef.refCodeString} to ${dfVal.idxHighRef.refCodeString})"
@@ -232,7 +245,7 @@ protected trait VHDLValPrinter extends AbstractValPrinter:
   // field selections changes from `dv._${idx+1}` to `dv($idx)`
   val TUPLE_MIN_INDEXING = 3
   def csDFValAliasSelectField(dfVal: Alias.SelectField): String =
-    val dfType @ DFStruct(structName, fieldMap) = dfVal.relValRef.get.dfType: @unchecked
+    val dfType @ DFStruct(structName, fieldMap) = dfVal.relValRef.get.dfType.runtimeChecked
     val fieldSel =
       if (dfType.isTuple)
         if (fieldMap.size > TUPLE_MIN_INDEXING)

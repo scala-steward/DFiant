@@ -16,9 +16,12 @@ object ControlledMacroError:
   def report(msg: String)(using Quotes): Expr[Nothing] =
     import quotes.reflect.report as macroReport
     val key = getKey
-    if (positionError.contains(key))
-      positionError += key -> msg
-      macroReport.errorAndAbort(msg)
-    else
-      '{ compiletime.error(${ Expr(msg) }) }
+    positionError.get(key) match
+      case Some("") =>
+        positionError += key -> msg
+        macroReport.errorAndAbort(msg)
+      case Some(existingMsg) =>
+        macroReport.errorAndAbort(existingMsg)
+      case _ =>
+        '{ compiletime.error(${ Expr(msg) }) }
 end ControlledMacroError

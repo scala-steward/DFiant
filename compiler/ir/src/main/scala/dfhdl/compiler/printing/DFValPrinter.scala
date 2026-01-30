@@ -32,8 +32,32 @@ extension (list: List[String])
     val rowCnt = (list.length - 1) / colCnt + 1
     if (rowCnt == 1) list.mkString(open, sep + " ", close)
     else
-      val csVecData = list.grouped(colCnt).map(_.mkString(sep + " ")).mkString(sep + "\n").hindent
+      // Create a grid: rows x columns
+      val grid = list.grouped(colCnt).toList
+      // Calculate max width for each column
+      val colWidths = (0 until colCnt).map { colIdx =>
+        grid.view
+          .flatMap(row => row.lift(colIdx))
+          .map(_.length)
+          .maxOption
+          .getOrElse(0)
+      }
+      // Format each row with aligned columns
+      val csVecData = grid
+        .map { row =>
+          row.zipWithIndex
+            .map { case (elem, colIdx) =>
+              if (colIdx < row.length - 1)
+                (elem + sep).padTo(colWidths(colIdx) + sep.length, ' ')
+              else
+                elem
+            }
+            .mkString(" ")
+        }
+        .mkString(sep + "\n")
+        .hindent
       s"$open\n${csVecData}\n$close"
+    end if
 end extension
 
 extension (intParamRef: IntParamRef)
@@ -59,7 +83,7 @@ extension (intParamRef: IntParamRef)
       //     if (int == 1) csArg
       //     else s"$csArg $op ${int - 1}"
       //   case _ =>
-      s"${printer.csRef(ref, false)} - 1"
+      s"${printer.csRef(ref, false).applyBrackets()} - 1"
     case int: Int => (int - 1).toString
 end extension
 
@@ -218,6 +242,9 @@ protected trait DFValPrinter extends AbstractValPrinter:
           case Func.Op.clog2 =>
             if (typeCS) s"CLog2[$csArg]"
             else s"clog2($csArg)"
+          case Func.Op.abs =>
+            if (typeCS) s"Abs[$csArg]"
+            else s"abs($csArg)"
           case _ => s"${csArg.applyBrackets()}.${opStr}"
       // multiarg func
       case args =>
@@ -269,6 +296,9 @@ protected trait DFValPrinter extends AbstractValPrinter:
       case (DFSInt(Int(tWidth)), DFUInt(Int(fWidth))) =>
         assert(tWidth == fWidth + 1)
         s"${relValStr}.signed"
+      case (DFUInt(Int(tWidth)), DFSInt(Int(fWidth))) =>
+        assert(tWidth == fWidth - 1)
+        s"${relValStr}.unsigned"
       case (DFUInt(Int(tWidth)), DFBits(Int(fWidth))) =>
         assert(tWidth == fWidth)
         s"${relValStr}.uint"
@@ -277,6 +307,8 @@ protected trait DFValPrinter extends AbstractValPrinter:
         s"${relValStr}.sint"
       case (DFBits(tWidthParamRef), DFBits(_)) =>
         s"${relValStr}.resize(${tWidthParamRef.refCodeString})"
+      case (DFBits(tWidthParamRef), DFBit | DFBool) =>
+        s"${relValStr}.toBits(${tWidthParamRef.refCodeString})"
       case (DFBits(Int(tWidth)), _) =>
         assert(tWidth == fromType.width)
         s"${relValStr}.bits"
@@ -302,6 +334,10 @@ protected trait DFValPrinter extends AbstractValPrinter:
         s"""sd"${printer.csWidthInterp(tWidthParamRef)}'$${${relValStr}}""""
       case (DFInt32, DFUInt(_) | DFSInt(_)) =>
         s"${relValStr}.toInt"
+      case (DFUInt(tWidthParamRef), DFBit | DFBool) =>
+        s"${relValStr}.toUInt(${tWidthParamRef.refCodeString})"
+      case (DFSInt(tWidthParamRef), DFBit | DFBool) =>
+        s"${relValStr}.toSInt(${tWidthParamRef.refCodeString})"
       case (DFNumber, DFInt32 | DFDouble) =>
         s"${relValStr}.toNumber"
       case (DFInt32, DFNumber) =>
@@ -314,7 +350,7 @@ protected trait DFValPrinter extends AbstractValPrinter:
   end csDFValAliasAsIs
   def csDFValAliasApplyRange(dfVal: Alias.ApplyRange): String =
     dfVal.dfType match
-      case DFBits(_) =>
+      case DFBits(_) | DFUInt(_) | DFSInt(_) =>
         s"${dfVal.relValCodeString}(${dfVal.idxHighRef.refCodeString}, ${dfVal.idxLowRef.refCodeString})"
       case _ =>
         s"${dfVal.relValCodeString}(${dfVal.idxLowRef.refCodeString}, ${dfVal.idxHighRef.refCodeString})"
@@ -326,7 +362,7 @@ protected trait DFValPrinter extends AbstractValPrinter:
   // field selections changes from `dv._${idx+1}` to `dv($idx)`
   val TUPLE_MIN_INDEXING = 3
   def csDFValAliasSelectField(dfVal: Alias.SelectField): String =
-    val dfType @ DFStruct(structName, fieldMap) = dfVal.relValRef.get.dfType: @unchecked
+    val dfType @ DFStruct(structName, fieldMap) = dfVal.relValRef.get.dfType.runtimeChecked
     val fieldSel =
       if (dfType.isTuple)
         if (fieldMap.size > TUPLE_MIN_INDEXING)

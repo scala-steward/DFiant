@@ -39,9 +39,9 @@ class LocalToDesignParamsSpec extends StageSpec:
     end Inner
     class Outer extends RTDesign:
       val width: Int <> CONST = 8
-      val inner               = Inner(width)
       val x                   = Bits(width) <> IN
       val y                   = Bits(width) <> OUT
+      val inner               = Inner(width)
       inner.x <> x
       y       <> inner.y
     end Outer
@@ -55,9 +55,9 @@ class LocalToDesignParamsSpec extends StageSpec:
          |end Inner
          |
          |class Outer(val width: Int <> CONST = 8) extends RTDesign:
-         |  val inner = Inner(width = width)
          |  val x = Bits(width) <> IN
          |  val y = Bits(width) <> OUT
+         |  val inner = Inner(width = width)
          |  inner.x <> x
          |  y <> inner.y
          |end Outer
@@ -178,4 +178,38 @@ class LocalToDesignParamsSpec extends StageSpec:
          |""".stripMargin
     )
 
+  test("constant parameter regression"):
+    given options.CompilerOptions.Backend = backends.vhdl.v2008
+    class PrimeDiv(
+        val primeDivisor: Int <> CONST
+    ) extends RTDesign:
+      val DIVIDEND_WIDTH = primeDivisor + 1
+      val dividend       = UInt(DIVIDEND_WIDTH) <> IN
+    end PrimeDiv
+
+    class PrimeDiv5 extends RTDesign:
+      val dividend  = UInt(6) <> VAR.REG init 0
+      val primeDiv5 = PrimeDiv(5)
+      primeDiv5.dividend <> dividend
+
+    val top = (new PrimeDiv5).localToDesignParams
+    assertCodeString(
+      top,
+      """|class PrimeDiv(
+         |    val primeDivisor: Int <> CONST,
+         |    val DIVIDEND_WIDTH: Int <> CONST = primeDivisor + 1
+         |) extends RTDesign:
+         |  val dividend = UInt(DIVIDEND_WIDTH) <> IN
+         |end PrimeDiv
+         |
+         |class PrimeDiv5 extends RTDesign:
+         |  val primeDiv5_DIVIDEND_WIDTH: Int <> CONST = 5 + 1
+         |  val dividend = UInt(6) <> VAR.REG init d"6'0"
+         |  val primeDiv5 = PrimeDiv(
+         |      primeDivisor = 5,
+         |      DIVIDEND_WIDTH = primeDiv5_DIVIDEND_WIDTH
+         |  )
+         |  primeDiv5.dividend <> dividend
+         |end PrimeDiv5""".stripMargin
+    )
 end LocalToDesignParamsSpec

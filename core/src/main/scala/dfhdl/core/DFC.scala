@@ -140,7 +140,7 @@ object DFC:
   end Scope
 end DFC
 
-opaque type DFCG <: DFC = DFC
+into opaque type DFCG <: DFC = DFC
 protected trait DFCGLP:
   // DFCG given must be inline to force new DFC is generated for every missing DFC summon.
   inline given DFCG = DFCG()

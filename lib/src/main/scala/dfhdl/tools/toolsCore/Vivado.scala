@@ -14,6 +14,7 @@ import dfhdl.compiler.stages.vhdl.VHDLDialect
 import dfhdl.compiler.ir.constraints
 import dfhdl.compiler.ir.RateNumber
 import dfhdl.compiler.ir.PhysicalNumber.Ops.MHz
+import dfhdl.compiler.printing.hindent
 
 object Vivado extends Builder, Programmer:
   val toolName: String = "Vivado"
@@ -36,7 +37,7 @@ object Vivado extends Builder, Programmer:
         new BuilderProjectTimingConstraintsPrinter("_timing.xdc")(using
           cd.stagedDB.getSet
         ).getSourceFile
-      )
+      ) ++ new VivadoIPPrinter(using cd.stagedDB.getSet).getSourceFiles
     )
   def build(
       cd: CompiledDesign
@@ -77,6 +78,7 @@ end Vivado
 val VivadoProjectTclConfig = SourceType.Tool("Vivado", "ProjectTclConfig")
 val VivadoProjectConstraints = SourceType.Tool("Vivado", "ProjectConstraints")
 val VivadoProgramScript = SourceType.Tool("Vivado", "ProgramScript")
+val VivadoIP = SourceType.Tool("Vivado", "IP")
 
 class VivadoProjectTclConfigPrinter(using
     getSet: MemberGetSet,
@@ -113,34 +115,42 @@ class VivadoProjectTclConfigPrinter(using
       case configConstraint: constraints.DeviceConfig => configConstraint
     }.getOrElse(throw new IllegalArgumentException("No `@deviceConfig` constraint found"))
     if (bo.flash)
-      s"""\nwrite_cfgmem -format mcs -interface ${config.interface} -size ${config.sizeLimitMb / 8} -loadbit "up 0x0 ./${topName}.bit" -file ./${topName}.mcs"""
+      s"""write_cfgmem -format mcs -interface ${config.interface} -size ${config.sizeLimitMb /
+          8} -loadbit "up 0x0 ./${topName}.bit" -file ./${topName}.mcs"""
     else ""
   def configFileName: String = s"$topName.tcl"
+  def vivadoIPs: String =
+    designDB.uniqueDesignMemberList.collect {
+      case (vivadoIP: DFDesignBlock, _) if vivadoIP.isVendorIPBlackbox =>
+        s"source ips/${vivadoIP.dclName}.tcl"
+    }.mkString("\n")
   def contents: String =
-    s"""|create_project $topName . -part $part -force
-        |set_property target_language $targetLanguage [current_project]
-        |add_files -norecurse ${hdlFiles.mkString("{\n  ", "\n  ", "\n}")}
-        |set_property file_type {${fileType}} [get_files  *]
-        |set_property top $topName [current_fileset]
-        |add_files -fileset constrs_1 -norecurse {./${topName}.xdc  ./${topName}_timing.xdc}
-        |######################################################################
-        |# Suppress warnings
-        |######################################################################
-        |# the warning "Parallel synthesis criteria is not met" should not be a warning
-        |set_msg_config -id {Synth 8-7080} -new_severity {INFO}
-        |# redundant warning that default value for parameter is not defined
-        |set_msg_config -suppress -id {Synth 8-9661} 
-        |# bug in 2024.1
-        |if {[version -short] == "2024.1"} {
-        |    set_msg_config -suppress -id {Device 21-9320} -string {{WARNING: [Device 21-9320] Failed to find the Oracle tile group with name 'HSR_BOUNDARY_TOP'. This is required for Clock regions and Virtual grid.}} 
-        |    set_msg_config -suppress -id {Device 21-2174} -string {{WARNING: [Device 21-2174] Failed to initialize Virtual grid.}} 
-        |}
-        |######################################################################
-        |launch_runs impl_1
-        |wait_on_run impl_1
-        |open_run impl_1
-        |write_bitstream -file ./$topName.bit -force$flashCmd
-        |""".stripMargin
+    sn"""|create_project $topName . -part $part -force
+         |set_property target_language $targetLanguage [current_project]
+         |add_files -norecurse ${hdlFiles.mkString("{\n  ", "\n  ", "\n}")}
+         |set_property file_type {${fileType}} [get_files  *]
+         |set_property top $topName [current_fileset]
+         |add_files -fileset constrs_1 -norecurse {./${topName}.xdc  ./${topName}_timing.xdc}
+         |$vivadoIPs
+         |######################################################################
+         |# Suppress warnings
+         |######################################################################
+         |# the warning "Parallel synthesis criteria is not met" should not be a warning
+         |set_msg_config -id {Synth 8-7080} -new_severity {INFO}
+         |# redundant warning that default value for parameter is not defined
+         |set_msg_config -suppress -id {Synth 8-9661} 
+         |# bug in 2024.1
+         |if {[version -short] == "2024.1"} {
+         |    set_msg_config -suppress -id {Device 21-9320} -string {{WARNING: [Device 21-9320] Failed to find the Oracle tile group with name 'HSR_BOUNDARY_TOP'. This is required for Clock regions and Virtual grid.}} 
+         |    set_msg_config -suppress -id {Device 21-2174} -string {{WARNING: [Device 21-2174] Failed to initialize Virtual grid.}} 
+         |}
+         |######################################################################
+         |launch_runs impl_1
+         |wait_on_run impl_1
+         |open_run impl_1
+         |write_bitstream -file ./$topName.bit -force
+         |$flashCmd
+         |"""
   def getSourceFile: SourceFile =
     SourceFile(SourceOrigin.Compiled, VivadoProjectTclConfig, configFileName, contents)
 end VivadoProjectTclConfigPrinter
@@ -174,9 +184,8 @@ class VivadoProjectConstraintsPrinter(using
           case MasterSMAP(8)        => "M_SELECTMAP"
           case SlaveSMAP(busWidth)  => s"S_SELECTMAP$busWidth"
           case MasterSMAP(busWidth) => s"M_SELECTMAP$busWidth"
-        val configRate = constraint.masterRate match
-          case None             => None
-          case rate: RateNumber => Some((rate.to_freq / 1.MHz).value.toInt)
+        val configRate =
+          constraint.masterRate.toOption.map(rate => (rate.to_freq / 1.MHz).value.toInt)
         val compress = if (bo.compress) "TRUE" else "FALSE"
         List(
           s"set_property CONFIG_MODE $configMode [current_design]",
@@ -309,3 +318,50 @@ class VivadoProgramScriptPrinter(using
   def getSourceFile: SourceFile =
     SourceFile(SourceOrigin.Compiled, VivadoProgramScript, configFileName, contents)
 end VivadoProgramScriptPrinter
+
+class VivadoIPPrinter(using
+    getSet: MemberGetSet,
+    co: CompilerOptions,
+    bo: BuilderOptions
+):
+  import DFDesignBlock.InstMode.BlackBox
+  def contents(vivadoIP: DFDesignBlock): String =
+    val ipName = vivadoIP.dclName
+    val BlackBox(BlackBox.Source.VendorIP(_, ipType)) = vivadoIP.instMode.runtimeChecked
+    val members = vivadoIP.members(MemberView.Folded)
+    val ipVersion = members.collectFirst {
+      case param: DFVal.DesignParam if param.getName == "version" =>
+        val version = param.dfValRef.get.getConstData.get.asInstanceOf[Option[String]].get
+        if (version.nonEmpty) Some(" -version " + version) else None
+    }.flatten.getOrElse("")
+
+    // Construct the Vivado IP parameter assignment as a set_property -dict [list ...] [get_ips <ipName>] block
+    // Each DFVal.DesignParam except "version" becomes a CONFIG.<PARAM_NAME> {value} line
+    val ipConfigParams = members.collect {
+      case param: DFVal.DesignParam if param.getName != "version" =>
+        val value = param.dfValRef.get.getConstData.get.asInstanceOf[Option[Any]].get
+        s"CONFIG.${param.getName} {$value}"
+    }
+    val ipConfigBlock =
+      if ipConfigParams.nonEmpty then
+        s"""|set_property -dict [list \\
+            |${ipConfigParams.mkString(" \\\n").hindent} \\
+            |] [get_ips $ipName]""".stripMargin
+      else ""
+
+    sn"""|create_ip -name $ipType$ipVersion -module_name $ipName
+         |$ipConfigBlock
+         |"""
+  end contents
+  def getSourceFiles: List[SourceFile] =
+    getSet.designDB.uniqueDesignMemberList.collect {
+      case (vivadoIP: DFDesignBlock, _) if vivadoIP.isVendorIPBlackbox =>
+        SourceFile(
+          SourceOrigin.Compiled,
+          VivadoIP,
+          Paths.get("ips").resolve(s"${vivadoIP.dclName}.tcl").toString,
+          contents(vivadoIP)
+        )
+    }
+  end getSourceFiles
+end VivadoIPPrinter

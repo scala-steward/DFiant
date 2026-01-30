@@ -217,9 +217,26 @@ sealed trait DFVal extends DFMember.Named:
       case DFVal.DesignParam(dfValRef = DFRef(dfVal)) =>
         stripAsIsAndDesignParam(dfVal)
       case _ => dfVal
+    // TODO: maybe we need a better way to check equivalent expressions, with symbolic algebra comparison?
+    // with such comparison, it is possible to simplify expressions at least in the common cases.
     (stripAsIsAndDesignParam(this), stripAsIsAndDesignParam(that)) match
-      case (lhs: DFVal.CanBeExpr, rhs: DFVal.CanBeExpr) => lhs.protIsSimilarTo(rhs)
-      case (lhs, rhs)                                   => lhs == rhs
+      // literal constants are considered to be similar to expressions if they are
+      // at a higher level of hierarchy than the expression
+      case (lhs: DFVal.Const, rhs: DFVal.CanBeExpr)
+          if !lhs.isGlobal && !rhs.isGlobal &&
+            lhs.getOwnerDesign.isOutsideOwner(rhs.getOwnerDesign) ||
+            lhs.isGlobal && lhs.isAnonymous =>
+        lhs.dfType.isSimilarTo(rhs.dfType) && lhs.getConstData.equals(rhs.getConstData)
+      case (lhs: DFVal.CanBeExpr, rhs: DFVal.Const)
+          if !lhs.isGlobal && !rhs.isGlobal &&
+            rhs.getOwnerDesign.isOutsideOwner(lhs.getOwnerDesign) ||
+            rhs.isGlobal && rhs.isAnonymous =>
+        rhs.dfType.isSimilarTo(lhs.dfType) && rhs.getConstData.equals(lhs.getConstData)
+      case (lhs: DFVal.CanBeExpr, rhs: DFVal.CanBeExpr) =>
+        lhs.protIsSimilarTo(rhs)
+      case (lhs, rhs) => lhs == rhs
+    end match
+  end isSimilarTo
   protected def protGetConstData(using MemberGetSet): Option[Any]
   private var cachedConstDataReady: Boolean = false
   private var cachedConstData: Option[Any] = None
@@ -599,7 +616,7 @@ object DFVal:
       case >>, <<, **, ror, rol, reverse, repeat
       case unary_-, unary_~, unary_!
       case rising, falling
-      case clog2, max, min, sel
+      case clog2, max, min, abs, sel
       // special-case of initFile construct for vectors of bits
       case InitFile(format: InitFileFormat, path: String)
     object Op:
@@ -763,9 +780,9 @@ object DFVal:
         meta: Meta,
         tags: DFTags
     ) extends Partial derives ReadWriter:
-      def elementWidth(using MemberGetSet): Int = (dfType: @unchecked) match
-        case DFBits(_)                     => 1
-        case DFVector(cellType = cellType) => cellType.width
+      def elementWidth(using MemberGetSet): Int = dfType.runtimeChecked match
+        case DFBits(_) | DFUInt(_) | DFSInt(_) => 1
+        case DFVector(cellType = cellType)     => cellType.width
       protected def protIsFullyAnonymous(using MemberGetSet): Boolean =
         relValRef.get.isFullyAnonymous
       protected def protGetConstData(using MemberGetSet): Option[Any] =
@@ -789,9 +806,8 @@ object DFVal:
           case that: ApplyRange =>
             this.dfType.isSimilarTo(that.dfType) &&
             this.relValRef.get.isSimilarTo(that.relValRef.get) &&
-            this.idxHighRef.isSimilarTo(that.idxHighRef) && this.idxLowRef.isSimilarTo(
-              that.idxLowRef
-            )
+            this.idxHighRef.isSimilarTo(that.idxHighRef) &&
+            this.idxLowRef.isSimilarTo(that.idxLowRef)
           case _ => false
       protected def setMeta(meta: Meta): this.type = copy(meta = meta).asInstanceOf[this.type]
       protected def setTags(tags: DFTags): this.type = copy(tags = tags).asInstanceOf[this.type]
@@ -834,12 +850,15 @@ object DFVal:
                   val data = relValData.asInstanceOf[(BitVector, BitVector)]
                   if (data._2.bit(idxInt)) None
                   else Some(data._1.bit(idxInt))
+                case DFUInt(_) | DFSInt(_) =>
+                  relValData.asInstanceOf[Option[BigInt]].map(_.testBit(idxInt))
                 case DFVector(_, _) =>
                   relValData.asInstanceOf[Vector[?]](idxInt)
                 case _ => ???
               Some(outData)
             case Some(_: None.type) => Some(None)
             case _                  => None
+          end match
         )
       end protGetConstData
       protected def `prot_=~`(that: DFMember)(using MemberGetSet): Boolean = that match
@@ -1486,19 +1505,20 @@ object DFDesignBlock:
     case Normal, Def, Simulation
     case BlackBox(source: Source)
   object InstMode:
+    import constraints.DeviceID.Vendor
     object BlackBox:
       enum Source derives CanEqual, ReadWriter:
         case NA
         case Files(path: List[String])
         case Library(libName: String, nameSpace: String)
-        case Qsys(typeName: String)
+        case VendorIP(vendor: Vendor, typeName: String)
 
   extension (dsn: DFDesignBlock)
     def isDuplicate: Boolean = dsn.hasTagOf[DuplicateTag]
     def isBlackBox: Boolean = dsn.instMode.isInstanceOf[InstMode.BlackBox]
-    def isQsysIPBlackbox: Boolean = dsn.instMode match
-      case InstMode.BlackBox(_: InstMode.BlackBox.Source.Qsys) => true
-      case _                                                   => false
+    def isVendorIPBlackbox: Boolean = dsn.instMode match
+      case InstMode.BlackBox(_: InstMode.BlackBox.Source.VendorIP) => true
+      case _                                                       => false
     def inSimulation: Boolean = dsn.instMode == InstMode.Simulation
     def getCommonDesignWith(dsn2: DFDesignBlock)(using MemberGetSet): DFDesignBlock =
       def getOwnerDesignChain(dsn: DFDesignBlock): List[DFDesignBlock] =

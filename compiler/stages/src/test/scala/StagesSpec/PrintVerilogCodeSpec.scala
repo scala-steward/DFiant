@@ -493,10 +493,10 @@ class PrintVerilogCodeSpec extends StageSpec:
          |  `include "dfhdl_defs.svh"
          |  always_comb
          |  begin
-         |    x = `TO_VEC_HEX(3, 2, width);
-         |    x = `TO_VEC_HEX(3, 2, width);
-         |    x = `TO_VEC_HEX(3, 2, width);
-         |    x = `TO_VEC_HEX(3, 2, width);
+         |    x = width'(2'h3);
+         |    x = width'(2'h3);
+         |    x = width'(2'h3);
+         |    x = width'(2'h3);
          |    y = &x;
          |    y = |x;
          |    y = ^x;
@@ -823,16 +823,16 @@ class PrintVerilogCodeSpec extends StageSpec:
          |  `width_def
          |  parameter integer width5 = 8;
          |  parameter integer length5 = 10;
-         |  input  wire [width * length - 1:0] x1;
-         |  output wire [width * length - 1:0] y1;
-         |  input  wire [width * (length + 1) - 1:0] x2;
-         |  output wire [width * (length + 1) - 1:0] y2;
-         |  input  wire [width * 7 - 1:0] x3;
-         |  output wire [width * 7 - 1:0] y3;
-         |  input  wire [(width * 7) * length - 1:0] x4;
-         |  output wire [(width * 7) * length - 1:0] y4;
-         |  input  wire [(width5 * 7) * length5 - 1:0] x5;
-         |  output wire [(width5 * 7) * length5 - 1:0] y5;
+         |  input  wire [(width * length) - 1:0] x1;
+         |  output wire [(width * length) - 1:0] y1;
+         |  input  wire [(width * (length + 1)) - 1:0] x2;
+         |  output wire [(width * (length + 1)) - 1:0] y2;
+         |  input  wire [(width * 7) - 1:0] x3;
+         |  output wire [(width * 7) - 1:0] y3;
+         |  input  wire [((width * 7) * length) - 1:0] x4;
+         |  output wire [((width * 7) * length) - 1:0] y4;
+         |  input  wire [((width5 * 7) * length5) - 1:0] x5;
+         |  output wire [((width5 * 7) * length5) - 1:0] y5;
          |  assign y1 = x1;
          |  assign y2 = x2;
          |  assign y3 = x3;
@@ -1163,6 +1163,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |  `define MyEnum_B 1
          |  `define MyEnum_C 2
          |  function [8*8:1] MyEnum_to_string;
+         |    /* verilator lint_off UNUSEDSIGNAL */
          |    input [1:0] value;
          |    case (value)
          |      `MyEnum_A: MyEnum_to_string = "MyEnum_A";
@@ -1170,13 +1171,14 @@ class PrintVerilogCodeSpec extends StageSpec:
          |      `MyEnum_C: MyEnum_to_string = "MyEnum_C";
          |      default: MyEnum_to_string = "?";
          |    endcase
+         |    /* verilator lint_on UNUSEDSIGNAL */
          |  endfunction
          |  parameter bar = {param, "!"};
          |  parameter param2 = {2{param}};
          |  parameter [4:0] param4 = 5'd22;
          |  parameter [23:0] param5 = 24'habc123;
          |  parameter [5:0] param6 = 6'h2a;
-         |  parameter [4:0] param7 = -5'sd11;
+         |  parameter [4:0] param7 = -5'd11;
          |  parameter param8 = 1'b1;
          |  parameter param9 = 0;
          |  parameter [1:0] param10 = `MyEnum_A;
@@ -1282,7 +1284,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |  `include "Foo_defs.vh"
          |  parameter integer PORT_WIDTH = 8;
          |  parameter integer PORT_DEPTH = 4;
-         |  parameter [PORT_WIDTH * PORT_DEPTH - 1:0] initArg = {8'h01, 8'h02, 8'h03, 8'h04};
+         |  parameter [(PORT_WIDTH * PORT_DEPTH) - 1:0] initArg = {8'h01, 8'h02, 8'h03, 8'h04};
          |  reg [PORT_WIDTH - 1:0] v1 [0:PORT_DEPTH - 1];
          |  initial begin : v1_init
          |    v1[0] = 8'h01;
@@ -1467,6 +1469,56 @@ class PrintVerilogCodeSpec extends StageSpec:
          |  begin
          |    y <= y + 8'd1;
          |  end
+         |endmodule""".stripMargin
+    )
+  }
+
+  test("abs function") {
+    class Foo extends RTDesign:
+      val x = SInt(8) <> IN
+      val y = SInt(8) <> OUT
+      y := abs(x)
+    end Foo
+    val top = (new Foo).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|`default_nettype none
+         |`timescale 1ns/1ps
+         |`include "Foo_defs.svh"
+         |
+         |module Foo(
+         |  input  wire logic signed [7:0] x,
+         |  output logic signed [7:0] y
+         |);
+         |  `include "dfhdl_defs.svh"
+         |  assign y = `ABS(x);
+         |endmodule""".stripMargin
+    )
+  }
+
+  test("abs function under verilog.v95") {
+    given options.CompilerOptions.Backend = backends.verilog.v95
+    class Foo extends RTDesign:
+      val x = SInt(8) <> IN
+      val y = SInt(8) <> OUT
+      y := abs(x)
+    end Foo
+    val top = (new Foo).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|`default_nettype none
+         |`timescale 1ns/1ps
+         |`include "Foo_defs.vh"
+         |
+         |module Foo(
+         |  x,
+         |  y
+         |);
+         |  `include "dfhdl_defs.vh"
+         |  `include "Foo_defs.vh"
+         |  input  wire [7:0] x;
+         |  output wire [7:0] y;
+         |  assign y = `ABS(x);
          |endmodule""".stripMargin
     )
   }

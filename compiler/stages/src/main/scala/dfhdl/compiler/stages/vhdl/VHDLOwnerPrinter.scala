@@ -44,7 +44,7 @@ protected trait VHDLOwnerPrinter extends AbstractOwnerPrinter:
       s"${param.getName} : ${printer.csDFType(param.dfType)}$defaultValue"
     }
     val genericBlock =
-      if (designParamList.length == 0 || design.isQsysIPBlackbox) ""
+      if (designParamList.length == 0 || design.isVendorIPBlackbox) ""
       else "generic (" + designParamList.mkString("\n", ";\n", "\n").hindent(1) + ");"
     val portBlock = ports.emptyOr(v => s"""|port (
                                            |${ports.hindent}
@@ -181,7 +181,7 @@ protected trait VHDLOwnerPrinter extends AbstractOwnerPrinter:
       s"${param.getName} => ${param.dfValRef.refCodeString}"
     }
     val designParamCS =
-      if (designParamList.isEmpty || design.isQsysIPBlackbox) ""
+      if (designParamList.isEmpty || design.isVendorIPBlackbox) ""
       else " generic map (" + designParamList.mkString("\n", ",\n", "\n").hindent(1) + ")"
     // for blackboxes we use component declaration, so the header is just the entity name
     val header =

@@ -92,8 +92,8 @@ class DropDesignParamDepsSpec extends StageSpec:
     )
 
   test("Nested design parameter dependencies are inlined"):
-    // TODO: elaboration problems cause `val depth: Int <> CONST = baseWidth + 1` to be added.
-    // need to fix elaboration problems first.
+    // Note: the `inner_depth` parameter is printed because the (invisible) port selector for `inner.y` is referencing it.
+    // In later stages (namely the Via-Connection stage) this parameter will be visibly used for the `inner_y` variable.
     given options.CompilerOptions.Backend = backends.vhdl.v93
     class Inner(val width: Int <> CONST) extends RTDesign:
       val depth: Int <> CONST = width + 1
@@ -102,9 +102,9 @@ class DropDesignParamDepsSpec extends StageSpec:
       y <> x.resize(depth)
     end Inner
     class Outer(val baseWidth: Int <> CONST = 8) extends RTDesign:
-      val inner = Inner(baseWidth)
       val x     = Bits(baseWidth) <> IN
       val y     = Bits(baseWidth) <> OUT
+      val inner = Inner(baseWidth)
       inner.x <> x
       y       <> inner.y.resize(baseWidth)
     end Outer
@@ -121,14 +121,14 @@ class DropDesignParamDepsSpec extends StageSpec:
          |end Inner
          |
          |class Outer(val baseWidth: Int <> CONST = 8) extends RTDesign:
-         |  val inner = Inner(
-         |      width = baseWidth,
-         |      depth = 9
-         |  )
+         |  val inner_depth: Int <> CONST = baseWidth + 1
          |  val x = Bits(baseWidth) <> IN
          |  val y = Bits(baseWidth) <> OUT
+         |  val inner = Inner(
+         |      width = baseWidth,
+         |      depth = inner_depth
+         |  )
          |  inner.x <> x
-         |  val depth: Int <> CONST = baseWidth + 1
          |  y <> inner.y.resize(baseWidth)
          |end Outer
          |""".stripMargin

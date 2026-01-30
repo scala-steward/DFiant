@@ -1,11 +1,13 @@
 package dfhdl.compiler.ir
 import upickle.default.*
-opaque type ConfigN[T] = T | None.type
+into opaque type ConfigN[T] = T | None.type
 object ConfigN:
   given [T]: Conversion[None.type, ConfigN[T]] with
     def apply(x: None.type): ConfigN[T] = x
   given [T]: Conversion[T, ConfigN[T]] with
     def apply(x: T): ConfigN[T] = x
+  given [F, T](using conv: Conversion[F, T]): Conversion[F, ConfigN[T]] with
+    def apply(x: F): ConfigN[T] = conv(x)
   given [T1, T2](using CanEqual[T1, T2]): CanEqual[ConfigN[T1], ConfigN[T2]] = CanEqual.derived
   given [T]: CanEqual[ConfigN[T], None.type] = CanEqual.derived
   given [T]: CanEqual[None.type, ConfigN[T]] = CanEqual.derived
@@ -14,9 +16,9 @@ object ConfigN:
   given [L, R]: CanEqual[ConfigN[L], ConfigN[R]] = CanEqual.derived
   given [T](using ReadWriter[T]): ReadWriter[ConfigN[T]] = readwriter[ujson.Value].bimap(
     value =>
-      (value: @unchecked) match
-        case None     => ujson.Null
-        case value: T => writeJs(value)
+      value.runtimeChecked match
+        case None                => ujson.Null
+        case value: T @unchecked => writeJs(value)
     ,
     json =>
       json match

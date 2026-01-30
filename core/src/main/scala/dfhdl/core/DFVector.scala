@@ -119,11 +119,12 @@ object DFVector:
           D1 <: IntP,
           E,
           R <: Iterable[E],
+          RP,
           TCE <: TC[T, E]
       ](using
-          tc: TCE
+          tc: TCE { type OutP = RP }
       ): TC[DFVector[T, Tuple1[D1]], R] with
-        type OutP = tc.OutP
+        type OutP = RP
         def conv(dfType: DFVector[T, Tuple1[D1]], arg: R)(using DFC): Out =
           val dfVals = arg.view.map(tc.conv(dfType.cellType, _)(using dfc.anonymize)).toList
           val check = summon[`LL == RL`.Check[Int, Int]]
@@ -135,11 +136,12 @@ object DFVector:
           D1 <: IntP,
           E,
           R <: SameElementsVector[E],
+          RP,
           TCE <: TC[T, E]
       ](using
-          tc: TCE
+          tc: TCE { type OutP = RP }
       ): TC[DFVector[T, Tuple1[D1]], R] with
-        type OutP = tc.OutP
+        type OutP = RP
         def conv(dfType: DFVector[T, Tuple1[D1]], arg: R)(using DFC): Out =
           val elem = tc.conv(dfType.cellType, arg.value)(using dfc.anonymize)
           val repeatCnt = dfType.lengthIntParam.toDFConst
@@ -153,12 +155,13 @@ object DFVector:
       given DFVectorValFromDFValVectorConv[
           T <: DFTypeAny,
           E,
+          RP,
           R <: Iterable[E],
           TCE <: TCConv[T, E]
       ](using
-          tc: TCE
+          tc: TCE { type OutP = RP }
       ): TCConv[DFVector[T, Tuple1[Int]], R] with
-        type OutP = tc.OutP
+        type OutP = RP
         def apply(arg: R)(using DFC): Out =
           val dfVals = arg.view.map(tc(_)(using dfc.anonymize)).toList
           val dfType = DFVector(dfVals.head.dfType, List(dfVals.length))
@@ -204,13 +207,14 @@ object DFVector:
           R <: Iterable[E],
           Op <: FuncOp,
           C <: Boolean,
+          RP,
           TC <: Compare[T, E, Op, C]
       ](using
-          tc: TC,
+          tc: TC { type OutP = RP },
           op: ValueOf[Op],
           castle: ValueOf[C]
       ): Compare[DFVector[T, Tuple1[D1]], R, Op, C] with
-        type OutP = tc.OutP
+        type OutP = RP
         def conv(dfType: DFVector[T, Tuple1[D1]], arg: R)(using DFC): Out =
           val dfVals = arg.view.map(tc.conv(dfType.cellType, _)(using dfc.anonymize)).toList
           val check = summon[`LL == RL`.Check[Int, Int]]

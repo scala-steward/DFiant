@@ -23,6 +23,8 @@ object DFBoolOrBit:
       def conv(from: R)(using DFC): Out = apply(from)
       def apply(arg: R)(using DFC): Out
     object Candidate:
+      type Types = DFValOf[DFBoolOrBit] | Boolean | BitNum
+      type Aux[R, T <: DFBoolOrBit, P] = Candidate[R] { type OutT = T; type OutP = P }
       type Exact = Exact0[DFC, Candidate]
       given fromBoolean[R <: Boolean]: Candidate[R] with
         type OutT = DFBool
@@ -57,31 +59,95 @@ object DFBoolOrBit:
 
     object TC:
       import DFVal.TC
-      given DFBoolOrBitFromCandidate[T <: DFBoolOrBit, R, IC <: Candidate[R]](using
-          ic: IC
+      given DFBoolOrBitFromCandidate[T <: DFBoolOrBit, R, RP, IC <: Candidate[R]](using
+          ic: IC { type OutP = RP }
       ): TC[T, R] with
-        type OutP = ic.OutP
+        type OutP = RP
         def conv(dfType: T, arg: R)(using DFC): Out = b2b(dfType, arg)
     end TC
 
     object Compare:
       import DFVal.Compare
-      given DFBoolOrBitCompare[T <: DFBoolOrBit, R, IC <: Candidate[R], Op <: FuncOp, C <: Boolean](
+      given DFBoolOrBitCompare[
+          T <: DFBoolOrBit,
+          R,
+          RP,
+          IC <: Candidate[R],
+          Op <: FuncOp.===.type | FuncOp.=!=.type,
+          C <: Boolean
+      ](
           using
-          ic: IC,
+          ic: IC { type OutP = RP },
           op: ValueOf[Op],
           castling: ValueOf[C]
       ): Compare[T, R, Op, C] with
-        type OutP = ic.OutP
+        type OutP = RP
         def conv(dfType: T, arg: R)(using DFC): Out =
           b2b(dfType, arg)
+      end DFBoolOrBitCompare
+    end Compare
 
     object Ops:
+      import DFDecimal.Constraints
+      import DFVal.Ops.BoolOnlyOp
+      given evLogicOpDFBoolOrBit[
+          Op <: FuncOp.|.type | FuncOp.&.type | FuncOp.^.type,
+          L <: Candidate.Types,
+          LT <: DFBoolOrBit,
+          LP,
+          R <: Candidate.Types,
+          RT <: DFBoolOrBit,
+          RP
+      ](using
+          icL: Candidate.Aux[L, LT, LP],
+          icR: Candidate.Aux[R, RT, RP],
+          op: ValueOf[Op]
+      ): ExactOp2Aux[Op, DFC, DFValAny, L, R, DFValTP[LT, LP | RP]] =
+        new ExactOp2[Op, DFC, DFValAny, L, R]:
+          type Out = DFValTP[LT, LP | RP]
+          def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
+            val lhsVal = icL(lhs)
+            val rhsVal = b2b(lhsVal.dfType, icR(rhs))
+            DFVal.Func(lhsVal.dfType, op.value, List(lhsVal, rhsVal))
+          }
+      end evLogicOpDFBoolOrBit
+      given evLogicOpDFBoolOrBit2[
+          Op <: FuncOp.|.type | FuncOp.&.type,
+          L <: Candidate.Types,
+          R <: Candidate.Types,
+          O <: DFValAny
+      ](using
+          ic: ExactOp2Aux[Op, DFC, DFValAny, L, R, O]
+      ): ExactOp2Aux[BoolOnlyOp[Op], DFC, DFValAny, L, R, O] =
+        new ExactOp2[BoolOnlyOp[Op], DFC, DFValAny, L, R]:
+          type Out = O
+          def apply(lhs: L, rhs: R)(using DFC): Out = ic(lhs, rhs)
+      end evLogicOpDFBoolOrBit2
+
       extension [P](lhs: DFValTP[DFBoolOrBit, P])
         def toScalaBoolean(using DFC, DFVal.ConstCheck[P]): Boolean =
           lhs.toScalaValue
         def toScalaBitNum(using DFC, DFVal.ConstCheck[P]): BitNum =
           if (lhs.toScalaBoolean) 1 else 0
+        def toBits[W <: IntP](width: IntParam[W])(using
+            DFCG,
+            Constraints.Width.CheckNUB[false, W]
+        ): DFValTP[DFBits[W], P] = trydf {
+          DFVal.Alias.AsIs(DFBits(width), lhs)
+        }
+        def toUInt[W <: IntP](width: IntParam[W])(using
+            DFCG,
+            Constraints.Width.CheckNUB[false, W]
+        ): DFValTP[DFUInt[W], P] = trydf {
+          DFVal.Alias.AsIs(DFUInt(width), lhs)
+        }
+        def toSInt[W <: IntP](width: IntParam[W])(using
+            DFCG,
+            Constraints.Width.CheckNUB[true, W]
+        ): DFValTP[DFSInt[W], P] = trydf {
+          DFVal.Alias.AsIs(DFSInt(width), lhs)
+        }
+      end extension
       extension [P](lhs: DFValTP[DFBit, P])
         def rising(using DFC): DFValOf[DFBool] = trydf {
           DFVal.Func(DFBool, FuncOp.rising, List(lhs))
@@ -110,54 +176,52 @@ object DFBoolOrBit:
         @targetName("not2OfDFBool")
         inline def unary_~(using DFCG) = lhs.unary_!
 
-      private def logicOp[T <: DFBoolOrBit, P, RP](
-          dfVal: DFValTP[T, P],
-          arg: DFValTP[DFBoolOrBit, RP],
-          op: FuncOp,
-          castle: Boolean
-      )(using DFC): DFValTP[T, P | RP] =
-        val dfValArg = b2b(dfVal.dfType, arg)
-        val (lhs, rhs) = if (castle) (dfValArg, dfVal) else (dfVal, dfValArg)
-        DFVal.Func(lhs.dfType.asFE[T], op, List(lhs, rhs))
       extension [T <: DFBoolOrBit, P](lhs: DFValTP[T, P])
         @targetName("notOfDFBoolOrBit")
         private[core] def not(using DFC): DFValTP[T, P] = trydf {
           DFVal.Func(lhs.dfType, FuncOp.unary_!, List(lhs))
         }
-        def ||(rhs: Candidate.Exact)(using DFCG): DFValTP[T, P | rhs.tc.OutP] =
-          trydf { logicOp(lhs, rhs(), FuncOp.|, false) }
-        @targetName("orOfDFBoolOrBit")
-        inline def |(rhs: Candidate.Exact)(using DFCG) = lhs || rhs
-        def &&(rhs: Candidate.Exact)(using DFCG): DFValTP[T, P | rhs.tc.OutP] =
-          trydf { logicOp(lhs, rhs(), FuncOp.&, false) }
-        @targetName("andOfDFBoolOrBit")
-        inline def &(rhs: Candidate.Exact)(using DFCG) = lhs && rhs
-        def ^(rhs: Candidate.Exact)(using DFC): DFValTP[T, P | rhs.tc.OutP] =
-          trydf { logicOp(lhs, rhs(), FuncOp.^, false) }
-        inline def sel[OT, OF](inline onTrue: OT, inline onFalse: OF)(using
+        transparent inline def sel[OT, OF](inline onTrue: OT, inline onFalse: OF)(using
             dfc: DFCG
-        ): BoolSelWrapper[P, OT, OF] = BoolSelWrapper[P, OT, OF](lhs, onTrue, onFalse)
-
-      end extension
-      extension [L](lhs: L)
-        inline def ||[RT <: DFBoolOrBit, RP](
-            rhs: DFValTP[RT, RP]
-        )(using es: Exact.Summon[L, lhs.type])(using Candidate[es.Out]): Nothing =
-          compiletime.error(
-            "Unsupported Scala BitNum/Boolean primitive at the LHS of `||` with a DFHDL value.\nConsider switching positions of the arguments."
-          )
-        inline def &&[RT <: DFBoolOrBit, RP](
-            rhs: DFValTP[RT, RP]
-        )(using es: Exact.Summon[L, lhs.type])(using Candidate[es.Out]): Nothing =
-          compiletime.error(
-            "Unsupported Scala BitNum/Boolean primitive at the LHS of `&&` with a DFHDL value.\nConsider switching positions of the arguments."
-          )
-        inline def ^[RT <: DFBoolOrBit, RP](
-            rhs: DFValTP[RT, RP]
-        )(using es: Exact.Summon[L, lhs.type])(using Candidate[es.Out]): Nothing =
-          compiletime.error(
-            "Unsupported Scala BitNum/Boolean primitive at the LHS of `^` with a DFHDL value.\nConsider switching positions of the arguments."
-          )
+        ): Any =
+          inline val onTrueIsDFVal = inline compiletime.erasedValue[OT] match
+            case _: DFValAny => true
+            case _           => false
+          inline val onTrueIsDFConstInt32 = inline compiletime.erasedValue[OT] match
+            case _: DFConstInt32 => true
+            case _               => false
+          inline val onFalseIsDFVal = inline compiletime.erasedValue[OF] match
+            case _: DFValAny => true
+            case _           => false
+          inline val onFalseIsDFConstInt32 = inline compiletime.erasedValue[OF] match
+            case _: DFConstInt32 => true
+            case _               => false
+          // onTrue type has priority, except when onTrue is a DFHDL Int parameter while onFalse is not
+          inline if (onTrueIsDFVal && !(onTrueIsDFConstInt32 && !onFalseIsDFConstInt32))
+            inline onTrue match
+              case onTrueDFVal: DFValTP[tt, tp] =>
+                val tc = compiletime.summonInline[DFVal.TC[tt, OF]]
+                val dfType = onTrueDFVal.dfType
+                inline if (isConstCheck[OF])
+                  DFVal.Func(dfType, FuncOp.sel, List(lhs, onTrueDFVal, tc(dfType, onFalse)))
+                    .asValTP[tt, P | tp]
+                else
+                  DFVal.Func(dfType, FuncOp.sel, List(lhs, onTrueDFVal, tc(dfType, onFalse)))
+                    .asValOf[tt]
+          else if (onFalseIsDFVal)
+            inline onFalse match
+              case onFalseDFVal: DFValTP[ft, fp] =>
+                val tc = compiletime.summonInline[DFVal.TC[ft, OT]]
+                val dfType = onFalseDFVal.dfType
+                inline if (isConstCheck[OT])
+                  DFVal.Func(dfType, FuncOp.sel, List(lhs, tc(dfType, onTrue), onFalseDFVal))
+                    .asValTP[ft, P | fp]
+                else
+                  DFVal.Func(dfType, FuncOp.sel, List(lhs, tc(dfType, onTrue), onFalseDFVal))
+                    .asValOf[ft]
+          else
+            BoolSelWrapper[P, OT, OF](lhs, onTrue, onFalse)
+        end sel
       end extension
     end Ops
   end Val

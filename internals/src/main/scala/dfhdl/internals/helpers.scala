@@ -30,7 +30,7 @@ def errorExpr(msg: String)(using Quotes): Expr[Nothing] =
 
 def showTreeMacro[T](arg: Expr[T])(using Quotes, Type[T]): Expr[Unit] =
   import quotes.reflect.*
-  val Inlined(_, _, term) = arg.asTerm: @unchecked
+  val Inlined(_, _, term) = arg.asTerm.runtimeChecked
   println(term.show)
   println(term)
   println(TypeRepr.of[T].show)
@@ -167,11 +167,11 @@ extension (using quotes: Quotes)(sc: Expr[StringContext])
     val interp = sc.asTerm.underlying match
       case TypeApply(Select(Apply(func, List(interp)), _), _) => interp
       case interp                                             => interp
-    val '{ StringContext(${ Varargs(partsExprs) }*) } = interp.asExpr: @unchecked
+    val '{ StringContext(${ Varargs(partsExprs) }*) } = interp.asExpr.runtimeChecked
     partsExprs
   def scPartsWithArgs(args: Expr[Seq[Any]]): quotes.reflect.Term =
     import quotes.reflect.*
-    val Varargs(argsExprs) = args: @unchecked
+    val Varargs(argsExprs) = args.runtimeChecked
     sc.parts.scPartsWithArgs(argsExprs)
 end extension
 
@@ -188,7 +188,7 @@ object ValueOfTuple:
     def recur(tpe: TypeRepr): Term =
       tpe.asTypeOf[Any] match
         case '[NonEmptyTuple] =>
-          val AppliedType(fun, args) = tpe: @unchecked
+          val AppliedType(fun, args) = tpe.runtimeChecked
           Expr.ofTupleFromSeq(args.map(a => recur(a).asExprOf[Any])).asTerm
         case '[x] =>
           '{ compiletime.summonInline[ValueOf[x]].value }.asTerm
@@ -271,7 +271,7 @@ object AssertGiven:
               Expr.summon[x].nonEmpty
     if (recur(TypeRepr.of[G])) '{ Success.asInstanceOf[AssertGiven[G, M]] }
     else
-      val ConstantType(StringConstant(msg)) = TypeRepr.of[M].dealias: @unchecked
+      val ConstantType(StringConstant(msg)) = TypeRepr.of[M].dealias.runtimeChecked
       ControlledMacroError.report(msg)
   end macroImpl
 end AssertGiven
@@ -301,10 +301,20 @@ object GivenOrError:
     Expr.summon[T] match
       case Some(t) => '{ apply[T, Msg]($t) }
       case None    =>
-        val ConstantType(StringConstant(msg)) = TypeRepr.of[Msg].dealias: @unchecked
+        val ConstantType(StringConstant(msg)) = TypeRepr.of[Msg].dealias.runtimeChecked
         ControlledMacroError.report(msg)
   end givenOrErrorMacro
 end GivenOrError
+
+trait IsGiven[T]:
+  type Out <: Boolean
+trait IsGivenLP:
+  given notGiven[T]: IsGiven[T] with
+    type Out = false
+object IsGiven extends IsGivenLP:
+  given isGiven[T](using t: T): IsGiven[T] with
+    type Out = true
+end IsGiven
 
 //from Map[K,V] to Map[V,Set[K]], traverse the input only once
 //From: https://stackoverflow.com/a/51356499/3845175
@@ -569,9 +579,9 @@ def debugMacro(msg: => Any, fileName: String = "lib\\src\\test\\scala\\Playgroun
 //       Quotes
 //   ): Expr[CompiletimeErrorPos[M, S, E]] =
 //     import quotes.reflect.*
-//     val ConstantType(StringConstant(msg)) = TypeRepr.of[M]: @unchecked
-//     val ConstantType(IntConstant(start)) = TypeRepr.of[S]: @unchecked
-//     val ConstantType(IntConstant(end)) = TypeRepr.of[E]: @unchecked
+//     val ConstantType(StringConstant(msg)) = TypeRepr.of[M].runtimeChecked
+//     val ConstantType(IntConstant(start)) = TypeRepr.of[S].runtimeChecked
+//     val ConstantType(IntConstant(end)) = TypeRepr.of[E].runtimeChecked
 //     val updatedPos = Position(Position.ofMacroExpansion.sourceFile, start, end)
 //     report.errorAndAbort(msg, updatedPos)
 

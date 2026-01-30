@@ -47,7 +47,7 @@ object r__For_Plugin:
         )
       case (dt: ir.DFDecimal, v: Int) =>
         // removing width as a parameter in patterns
-        val dfType = (dt: @unchecked) match
+        val dfType = dt.runtimeChecked match
           case ir.DFUInt(_) => DFUInt(dt.width)
           case ir.DFSInt(_) => DFSInt(dt.width)
         DFVal.Const(dfType.asFE[DFSInt[Int]], Some(BigInt(v)))

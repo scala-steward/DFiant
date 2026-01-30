@@ -115,7 +115,7 @@ object DFIf:
       // otherwise, all types must be the same.
       if (hasNoType || branchTypes.forall(_.isSimilarTo(branchTypes.head)))
         val retDFType = if (hasNoType) ir.DFUnit else branchTypes.head
-        val DFVal(headerIR: DFIfHeader) = header: @unchecked
+        val DFVal(headerIR: DFIfHeader) = header.runtimeChecked
         val headerUpdate = headerIR.copy(dfType = retDFType.dropUnreachableRefs)
         // updating the type of the if header
         headerIR.replaceMemberWith(headerUpdate).asValAny.asInstanceOf[R]

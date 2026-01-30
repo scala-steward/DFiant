@@ -1,7 +1,7 @@
 package dfhdl
 
 import dfhdl.core.Design
-import dfhdl.compiler.stages.CompiledDesign
+import dfhdl.compiler.stages.{CompiledDesign, StagedDesign}
 import dfhdl.tools.toolsCore.{Builder, Programmer}
 import dfhdl.options.*
 import dfhdl.backends
@@ -9,6 +9,41 @@ import dfhdl.compiler.ir
 import dfhdl.tools.{builders, programmers}
 import ir.constraints.DeviceID.Vendor
 import dfhdl.tools.toolsCore.*
+import dfhdl.app.AppMode
+export compiler.stages.printCodeString
+
+extension (dsn: Design)
+  def compile(using CompilerOptions, PrinterOptions): CompiledDesign =
+    StagedDesign(dsn).compile
+
+extension (dsn: => Design)
+  private inline def runApp(appMode: AppMode)(using
+      ElaborationOptions,
+      CompilerOptions,
+      LinterOptions,
+      SimulatorOptions,
+      BuilderOptions,
+      ProgrammerOptions,
+      AppOptions
+  ): Unit =
+    // this is the behavior we want to trap the compilation information at the call site
+    // (so that `appCompileTime` inside `DFApp` is the current application compile time
+    // and not the DFHDL library compile time)
+    @scala.annotation.nowarn(
+      "msg=New anonymous class definition will be duplicated at each inline site"
+    )
+    val app = new dfhdl.app.ManualDFApp(dsn) {}
+    app.runManual(appMode)
+  end runApp
+  inline def lint(using CompilerOptions, LinterOptions, AppOptions): Unit =
+    runApp(AppMode.lint)
+  inline def simulate(using CompilerOptions, SimulatorOptions, AppOptions): Unit =
+    runApp(AppMode.simulate)
+  inline def build(using CompilerOptions, BuilderOptions, AppOptions): Unit =
+    runApp(AppMode.build)
+  inline def program(using CompilerOptions, ProgrammerOptions, AppOptions): Unit =
+    runApp(AppMode.program)
+end extension
 
 extension (cd: CompiledDesign)
   def lint(using

@@ -385,7 +385,7 @@ class CustomControlPhase(setting: Setting) extends CommonPhase:
       Context
   ): Tree =
     def patternSingleton: Tree = FromCore.patternSingleton(selector, constPat)
-    val DFVal(dfTypeTpe) = selector.tpe: @unchecked
+    val DFVal(dfTypeTpe) = selector.tpe.runtimeChecked
     (dfTypeTpe.widen, constPat) match
       case (DFXInt(signed, widthTpe), Constant(i: Int)) if i < 0 && !signed =>
         report.error(
@@ -611,19 +611,20 @@ class CustomControlPhase(setting: Setting) extends CommonPhase:
           case UnApply(select: Select, _, binds) =>
             select match
               case Select(tree @ Block(List(TypeDef(_, template)), _), _) =>
-                val Template(preBody = List(defdef)) = template: @unchecked
-                val DefDef(preRhs = rhs: Tree @unchecked) = defdef: @unchecked
+                val Template(preBody = List(defdef)) = template.runtimeChecked
+                val DefDef(preRhs = rhs: Tree @unchecked) = defdef.runtimeChecked
                 Some(tree, binds, rhs.underlying)
               case _ => None
           case _ => None
       object Binds:
         def unapply(rhs: Tree)(using Context): Option[List[Tree]] =
           rhs match
-            case Apply(_, List(Apply(_, List(Typed(SeqLiteral(elems, _), _))))) =>
+            case Apply(
+                  _,
+                  List(TypeApply(Select(Apply(_, List(Typed(SeqLiteral(elems, _), _))), _), _))
+                ) =>
               Some(elems)
-            case TypeApply(sym @ Select(sel, _), _) if sym.symbol == defn.Any_isInstanceOf =>
-              unapply(sel)
-            case _ => 
+            case _ =>
               None
     end SI
     object Struct:
@@ -644,7 +645,7 @@ class CustomControlPhase(setting: Setting) extends CommonPhase:
       ctx: Context,
       valDefGen: ValDefGen
   ): Tree = boundary:
-    val DFVal(dfTypeTpe) = selectorTree.tpe: @unchecked
+    val DFVal(dfTypeTpe) = selectorTree.tpe.runtimeChecked
     patternTree match
       case Pattern.Tuple(patterns) =>
         dfTypeTpe match
@@ -732,7 +733,7 @@ class CustomControlPhase(setting: Setting) extends CommonPhase:
                   patternTree.srcPos
                 )
                 break(EmptyTree)
-            val Literal(Constant(op: String)) = elems.head: @unchecked
+            val Literal(Constant(op: String)) = elems.head.runtimeChecked
             val fullSI =
               Seq(elems.drop(1), binds)
                 .flatMap(_.zipWithIndex)
@@ -748,7 +749,7 @@ class CustomControlPhase(setting: Setting) extends CommonPhase:
                 idxHigh = idxHigh - partWidth
               case bindTree: Bind =>
                 bindTree.tpe.simple match
-                  case StripAndString(DFVal(DFBits(widthTpe))) =>
+                  case DFVal(DFBits(widthTpe)) =>
                     widthTpe match
                       case ConstantType(Constant(partWidth: Int)) if partWidth > 0 =>
                         val idxLow = idxHigh - partWidth + 1

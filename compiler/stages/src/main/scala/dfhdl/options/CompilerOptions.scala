@@ -43,17 +43,17 @@ object CompilerOptions:
     def cachePath(topName: String): String =
       s"${co.topCommitPath(topName)}${separatorChar}cache"
 
-  opaque type CommitFolder <: String = String
+  into opaque type CommitFolder <: String = String
   object CommitFolder:
     given CommitFolder = "sandbox"
     given Conversion[String, CommitFolder] = identity
 
-  opaque type NewFolderForTop <: Boolean = Boolean
+  into opaque type NewFolderForTop <: Boolean = Boolean
   object NewFolderForTop:
     given NewFolderForTop = true
     given Conversion[Boolean, NewFolderForTop] = identity
 
-  opaque type Backend <: BackendCompiler = BackendCompiler
+  into opaque type Backend <: BackendCompiler = BackendCompiler
   object Backend:
     given Backend = dfhdl.backends.verilog.sv2009
     given Conversion[BackendCompiler, Backend] = identity
@@ -66,23 +66,23 @@ object CompilerOptions:
         case _                         => false
     export dfhdl.backends.*
 
-  opaque type LogLevel <: dfhdl.options.LogLevel = dfhdl.options.LogLevel
+  into opaque type LogLevel <: dfhdl.options.LogLevel = dfhdl.options.LogLevel
   given Conversion[wvlet.log.LogLevel, LogLevel] = x => x.asInstanceOf[LogLevel]
   object LogLevel:
     given (using logLevel: dfhdl.options.LogLevel): LogLevel = logLevel
     export dfhdl.options.LogLevel.*
 
-  opaque type PrintDFHDLCode <: Boolean = Boolean
+  into opaque type PrintDFHDLCode <: Boolean = Boolean
   object PrintDFHDLCode:
     given PrintDFHDLCode = false
     given Conversion[Boolean, PrintDFHDLCode] = identity
 
-  opaque type PrintBackendCode <: Boolean = Boolean
+  into opaque type PrintBackendCode <: Boolean = Boolean
   object PrintBackendCode:
     given PrintBackendCode = if (scastieIsRunning) true else false
     given Conversion[Boolean, PrintBackendCode] = identity
 
-  opaque type DropUserOpaques <: Boolean = Boolean
+  into opaque type DropUserOpaques <: Boolean = Boolean
   object DropUserOpaques:
     given DropUserOpaques = false
     given Conversion[Boolean, DropUserOpaques] = identity

@@ -1,6 +1,6 @@
 package dfhdl
 import munit.*
-import internals.{AllowTopLevel, HasTypeName, Position, metaContextIgnore}
+import internals.{HasTypeName, Position, metaContextIgnore}
 import compiler.printing.{DefaultPrinter, Printer}
 import core.{HasDFC, DFValOf, DFValAny, DFConstOf, IntParam, IntP, Width, widthIntParam}
 import compiler.ir
@@ -21,7 +21,7 @@ extension [T <: DFType](t: DFValOf[T])(using dfc: DFC, w: Width[T])
   )(using w.Out =:= R): Unit =
     assert(t.widthIntParam.toScalaInt == r.toScalaInt)
 
-abstract class DFSpec extends NoDFCSpec, AllowTopLevel, HasTypeName, HasDFC:
+abstract class DFSpec extends NoDFCSpec, HasTypeName, HasDFC:
   final lazy val dfc: DFC = core.DFC.emptyNoEO
   type TScope = core.DFC.Scope.Design
   given TScope = core.DFC.Scope.Design
@@ -41,6 +41,7 @@ abstract class DFSpec extends NoDFCSpec, AllowTopLevel, HasTypeName, HasDFC:
     dfc.clearErrors()
     runTimeCode
     val err = dfc.getErrors.headOption.map(_.dfMsg).getOrElse(noErrMsg)
+    dfc.clearErrors()
     assertNoDiff(err, expectedErr)
 
   def assertEquals[T <: DFType, L <: DFConstOf[T], R <: DFConstOf[T]](l: L, r: R)(using DFC): Unit =
@@ -74,8 +75,12 @@ abstract class DFSpec extends NoDFCSpec, AllowTopLevel, HasTypeName, HasDFC:
     println(getCodeStringFrom(block))
 
   inline def assertCodeString(expectedCS: String)(block: => Unit): Unit =
+    dfc.clearErrors()
     val cs = getCodeStringFrom(block)
     assertNoDiff(cs, expectedCS)
+    val errors = dfc.getErrors
+    if (errors.nonEmpty)
+      assert(false, errors.mkString("\n"))
 
   def assertLatestDesignDclPosition(
       lineOffset: Int,

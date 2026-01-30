@@ -25,18 +25,18 @@ object PrinterOptions:
       designPrintFilter = designPrintFilter
     )
   given (using defaults: Defaults[Any]): PrinterOptions = defaults
-  opaque type Align <: Boolean = Boolean
+  into opaque type Align <: Boolean = Boolean
   object Align:
     given Align = true
     given Conversion[Boolean, Align] = identity
 
-  opaque type Color <: Boolean = Boolean
+  into opaque type Color <: Boolean = Boolean
   object Color:
     // disabling color if in Scastie because of https://github.com/scalacenter/scastie/issues/492
     given Color = !scastieIsRunning
     given Conversion[Boolean, Color] = identity
 
-  opaque type ShowGlobals <: Boolean = Boolean
+  into opaque type ShowGlobals <: Boolean = Boolean
   object ShowGlobals:
     given ShowGlobals = false
     given Conversion[Boolean, ShowGlobals] = identity
