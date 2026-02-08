@@ -234,7 +234,7 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
   end orderCheck
 
   def transform(designDB: DB)(using MemberGetSet, CompilerOptions): DB =
-    // refCheck()
+    refCheck()
     memberExistenceCheck()
     ownershipCheck(designDB.top, designDB.membersNoGlobals.drop(1))
     orderCheck()
