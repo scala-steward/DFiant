@@ -50,7 +50,8 @@ protected[dfhdl] object LoopOps:
       ) rt: DomainType.RT
   ): Unit = loopTag(ir.CombinationalTag)
 
-  // to be used inside an RT loop to indicate that the loop should fall through to the next step if the guard is false
+  // to be used inside an RT loop to indicate that the loop should fall through to the
+  // next step if the guard is false without consuming any cycles
   def FALL_THROUGH(using
       dfc: DFC,
       @implicitNotFound(
