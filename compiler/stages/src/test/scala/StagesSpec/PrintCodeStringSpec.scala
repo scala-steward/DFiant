@@ -1171,6 +1171,57 @@ class PrintCodeStringSpec extends StageSpec:
          |end Foo""".stripMargin
     )
   }
+  test("for/while loop printing with FALL_THROUGH") {
+    class Foo extends RTDesign:
+      val matrix = Bits(10) X 8 X 8 <> OUT.REG
+      process:
+        for (
+          i <- 0 until 8;
+          if i % 2 == 0;
+          j <- 0 until 8;
+          if j % 2 == 0;
+          k <- 0 until 10
+          if k % 2 == 0
+        )
+          FALL_THROUGH
+          matrix(i)(j)(k).din := 1
+        val ii = UInt.until(8) <> VAR init 0
+        while (ii != 7)
+          FALL_THROUGH
+          matrix(ii)(0)(0).din := 0
+          ii                   := ii + 1
+        10.sec.wait
+    end Foo
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|class Foo extends RTDesign:
+         |  val matrix = Bits(10) X 8 X 8 <> OUT.REG
+         |  process:
+         |    for (i <- 0 until 8)
+         |      FALL_THROUGH
+         |      if ((i % 2) == 0)
+         |        for (j <- 0 until 8)
+         |          FALL_THROUGH
+         |          if ((j % 2) == 0)
+         |            for (k <- 0 until 10)
+         |              FALL_THROUGH
+         |              if ((k % 2) == 0) matrix(i)(j)(k).din := 1
+         |            end for
+         |          end if
+         |        end for
+         |      end if
+         |    end for
+         |    val ii = UInt(3) <> VAR init d"3'0"
+         |    while (ii != d"3'7")
+         |      FALL_THROUGH
+         |      matrix(ii.toInt)(0)(0).din := 0
+         |      ii := ii + d"3'1"
+         |    end while
+         |    10.sec.wait
+         |end Foo""".stripMargin
+    )
+  }
   test("while loop printing") {
     class Foo extends EDDesign:
       val x = Bit <> OUT

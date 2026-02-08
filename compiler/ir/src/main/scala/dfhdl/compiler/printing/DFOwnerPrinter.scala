@@ -361,8 +361,10 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
     s"def $name: $defType =\n${body.hindent}\nend $name"
   def csDFForBlock(forBlock: DFLoop.DFForBlock): String =
     val csCOMB_LOOP = if (forBlock.isCombinational) "COMB_LOOP" else ""
+    val csFALL_THROUGH = if (forBlock.isFallThrough) "FALL_THROUGH" else ""
     val body =
       sn"""|${csCOMB_LOOP}
+           |${csFALL_THROUGH}
            |${csDFOwnerBody(forBlock)}"""
     val named = forBlock.meta.nameOpt.map(n => s"val $n = ").getOrElse("")
     //format: off
@@ -372,8 +374,10 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
     //format: on
   def csDFWhileBlock(whileBlock: DFLoop.DFWhileBlock): String =
     val csCOMB_LOOP = if (whileBlock.isCombinational) "COMB_LOOP" else ""
+    val csFALL_THROUGH = if (whileBlock.isFallThrough) "FALL_THROUGH" else ""
     val body =
       sn"""|${csCOMB_LOOP}
+           |${csFALL_THROUGH}
            |${csDFOwnerBody(whileBlock)}"""
     val named = whileBlock.meta.nameOpt.map(n => s"val $n = ").getOrElse("")
     sn"""|${named}while (${whileBlock.guardRef.refCodeString})
