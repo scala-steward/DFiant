@@ -36,7 +36,8 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
   var processAnonDefSym: Symbol = uninitialized
   var processScopeCtxSym: Symbol = uninitialized
   var stepType: Type = uninitialized
-  var pluginOnEntryExitSym: Symbol = uninitialized
+  var fallThroughType: Type = uninitialized
+  var pluginOnEntryExitFallThroughSym: Symbol = uninitialized
   var waitSym: Symbol = uninitialized
   var dfcStack: List[Tree] = Nil
   val processStepDefs = mutable.LinkedHashMap.empty[Symbol, DefDef]
@@ -85,12 +86,12 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
     report.error("Process blocks must only declare step `def`s or no step`def`s at all.", srcPos)
 
   enum CheckType derives CanEqual:
-    case None, Return, Loop, OnEntryExit
+    case None, Return, Loop, OnEntryExitFallThrough
   def processStatCheck(tree: Tree, returnCheck: CheckType)(using Context): Unit =
     tree match
       case Block(stats, expr) =>
         returnCheck match
-          case CheckType.OnEntryExit =>
+          case CheckType.OnEntryExitFallThrough =>
             (expr :: stats).foreach(t => processStatCheck(t, returnCheck))
           case _ =>
             processStatCheck(stats, tree.srcPos)
@@ -98,8 +99,8 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
               case Literal(Constant(_: Unit)) =>
               case _                          =>
                 stats.headOption match
-                  case Some(OnEntryDef() | OnExitDef()) =>
-                  case Some(dd: DefDef)                 =>
+                  case Some(OnEntryDef() | OnExitDef() | FallThroughDef()) =>
+                  case Some(dd: DefDef)                                    =>
                   // allDefsErrMsg(expr.srcPos)
                   case _ =>
                     processStatCheck(expr, returnCheck)
@@ -130,13 +131,16 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
               //      |For a purely combinational loop, call `0.cy.wait` at the end of the loop block.""".stripMargin,
               //   tree.srcPos
               // )
-          case CheckType.OnEntryExit =>
+          case CheckType.OnEntryExitFallThrough =>
             tree match
               case dd: DefDef =>
-                report.error("onEntry/onExit must not contain any other `def`s.", dd.srcPos)
+                report.error(
+                  "onEntry/onExit/fallThrough must not contain any other `def`s.",
+                  dd.srcPos
+                )
               case Goto() | Wait() =>
                 report.error(
-                  "onEntry/onExit `def`s cannot have `wait` or step goto statements.",
+                  "onEntry/onExit/fallThrough `def`s cannot have `wait` or step goto statements.",
                   tree.srcPos
                 )
               case _ =>
@@ -151,17 +155,16 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
       case _: DefDef => true
       case _         => false
     }).runtimeChecked
-    val (onEntryExit: List[DefDef], stepDefs: List[DefDef]) = allDefs.partition {
-      case OnEntryDef() => true
-      case OnExitDef()  => true
-      case _            => false
+    val (onEntryExitFallThrough: List[DefDef], stepDefs: List[DefDef]) = allDefs.partition {
+      case OnEntryDef() | OnExitDef() | FallThroughDef() => true
+      case _                                             => false
     }
 
     // if (stepDefs.nonEmpty && allStepBlocks.nonEmpty) allDefsErrMsg(srcPos)
     // checking onEntry and onExit defs syntax
-    onEntryExit.foreach { dd =>
+    onEntryExitFallThrough.foreach { dd =>
       if (dd.paramss != Nil)
-        report.error(s"An ${dd.name} def must not have arguments.", dd.srcPos)
+        report.error(s"`def ${dd.name}` must not have arguments.", dd.srcPos)
     }
     var errFound = false
     // checking process defs syntax and caching the process def symbols
@@ -177,7 +180,9 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
     }
     if (!errFound)
       stepDefs.foreach { dd => processStatCheck(dd.rhs, returnCheck = CheckType.Return) }
-      onEntryExit.foreach { dd => processStatCheck(dd.rhs, returnCheck = CheckType.OnEntryExit) }
+      onEntryExitFallThrough.foreach { dd =>
+        processStatCheck(dd.rhs, returnCheck = CheckType.OnEntryExitFallThrough)
+      }
       allStepBlocks.foreach { step => processStatCheck(step, returnCheck = CheckType.None) }
   end processStatCheck
 
@@ -271,7 +276,8 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
               List(domainTypeTree)
             )
             if anonfun.toString.startsWith("$anonfun") && process.toString == "process" &&
-              forever.toString == "forever" && domainTypeTree.tpe.widenDealias.typeSymbol.name.toString == "RT" =>
+              forever.toString == "forever" &&
+              domainTypeTree.tpe.widenDealias.typeSymbol.name.toString == "RT" =>
           processAnonDefSym = dd.symbol
           processScopeCtxSym = scopeCtx.symbol
           Some(ProcessForever(scopeCtx, dd.rhs))
@@ -307,6 +313,16 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
   object OnExitDef:
     def unapply(tree: DefDef)(using Context): Boolean =
       tree.name.toString == "onExit"
+  object FallThroughDef:
+    def unapply(tree: DefDef)(using Context): Boolean =
+      if (tree.name.toString == "fallThrough")
+        if (!(tree.tpt.tpe <:< fallThroughType))
+          report.error(
+            s"`def fallThrough` must return a DFHDL Boolean or Bit value.",
+            tree.srcPos
+          )
+        true
+      else false
   object Goto:
     def unapply(tree: Ident)(using Context): Boolean =
       processStepDefs.contains(tree.symbol)
@@ -353,8 +369,8 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
           .appliedTo(Literal(Constant(dd.name.toString)))
           .appliedTo(dd.rhs.changeOwner(dd.symbol, ctx.owner))
           .appliedTo(dfcStack.head, ref(processScopeCtxSym))
-      case dd @ (OnEntryDef() | OnExitDef()) =>
-        ref(pluginOnEntryExitSym)
+      case dd @ (OnEntryDef() | OnExitDef() | FallThroughDef()) =>
+        ref(pluginOnEntryExitFallThroughSym)
           .appliedTo(dd.genMeta)
           .appliedTo(dd.rhs.changeOwner(dd.symbol, ctx.owner))
           .appliedTo(dfcStack.head)
@@ -372,7 +388,16 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
     fromBooleanSym = requiredMethod("dfhdl.core.r__For_Plugin.fromBoolean")
     customWhileSym = requiredMethod("dfhdl.core.DFWhile.plugin")
     stepType = requiredClassRef("dfhdl.core.Step")
-    pluginOnEntryExitSym = requiredMethod("dfhdl.core.Step.pluginOnEntryExit")
+    val dfTypeType = requiredClassRef("dfhdl.core.DFType")
+    val noArgsType = requiredClassRef("dfhdl.core.NoArgs")
+    val dfBoolOrBitType =
+      dfTypeType.appliedTo(requiredClassRef("dfhdl.compiler.ir.DFBoolOrBit"), noArgsType)
+    val modifierType = requiredClassRef("dfhdl.core.Modifier")
+    val modifierAnyType =
+      modifierType.appliedTo(List(defn.AnyType, defn.AnyType, defn.AnyType, defn.AnyType))
+    val dfValType = requiredClassRef("dfhdl.core.DFVal")
+    fallThroughType = dfValType.appliedTo(dfBoolOrBitType, modifierAnyType)
+    pluginOnEntryExitFallThroughSym = requiredMethod("dfhdl.core.Step.pluginOnEntryExitFallThrough")
     processStepDefs.clear()
     ctx
   end prepareForUnit

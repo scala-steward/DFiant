@@ -357,8 +357,12 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
   def csStepBlock(stepBlock: StepBlock): String =
     val body = csDFOwnerBody(stepBlock)
     val name = stepBlock.getName
-    val defType = if (stepBlock.isRegular) "Step" else "Unit"
-    s"def $name: $defType =\n${body.hindent}\nend $name"
+    val defType =
+      if (stepBlock.isRegular) ": Step"
+      else if (stepBlock.isFallThrough)
+        printer.csDFValType(stepBlock.getVeryLastMember.get.asInstanceOf[DFVal].dfType)
+      else ": Unit"
+    s"def $name$defType =\n${body.hindent}\nend $name"
   def csDFForBlock(forBlock: DFLoop.DFForBlock): String =
     val csCOMB_LOOP = if (forBlock.isCombinational) "COMB_LOOP" else ""
     val csFALL_THROUGH = if (forBlock.isFallThrough) "FALL_THROUGH" else ""

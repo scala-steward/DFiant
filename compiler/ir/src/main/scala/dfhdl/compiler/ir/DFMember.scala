@@ -1081,9 +1081,10 @@ object StepBlock:
   extension (stepBlock: StepBlock)
     def isOnEntry(using MemberGetSet): Boolean = stepBlock.getName == "onEntry"
     def isOnExit(using MemberGetSet): Boolean = stepBlock.getName == "onExit"
+    def isFallThrough(using MemberGetSet): Boolean = stepBlock.getName == "fallThrough"
     def isRegular(using MemberGetSet): Boolean = stepBlock.getName match
-      case "onEntry" | "onExit" => false
-      case _                    => true
+      case "onEntry" | "onExit" | "fallThrough" => false
+      case _                                    => true
 
 final case class Goto(
     stepRef: Goto.Ref,

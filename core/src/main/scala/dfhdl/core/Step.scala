@@ -71,20 +71,28 @@ object Step extends Step:
     run
     dfc.exitOwner()
 
-  // this is called by the compiler plugin and replaces the step's onEntry/onExit `def` with
-  // a step block that has the name "onEntry"/"onExit" which is special-cases and not treated
-  // as a normal step, but just a container for the onEntry/onExit code.
-  def pluginOnEntryExit(meta: ir.Meta)(
-      run: => Unit
+  // this is called by the compiler plugin and replaces the step's onEntry/onExit/fallThrough `def` with
+  // a step block that has the name "onEntry"/"onExit"/"fallThrough" which is special-cases and not treated
+  // as a normal step, but just a container for the onEntry/onExit/fallThrough code.
+  def pluginOnEntryExitFallThrough(meta: ir.Meta)(
+      run: => Any
   )(using dfc: DFC): Unit =
-    val onEntryExit = ir.StepBlock(
+    import dfc.getSet
+    val onEntryExitFallThrough = ir.StepBlock(
       dfc.owner.ref,
       meta,
       dfc.tags
     ).addMember
-    dfc.enterOwner(onEntryExit.asFE)
-    run
+    dfc.enterOwner(onEntryExitFallThrough.asFE)
+    val ret = run
+    if (onEntryExitFallThrough.isFallThrough)
+      Exact.strip(ret) match
+        case v: DFValAny =>
+          // adding ident placement as the last member of the fall-through block
+          DFVal.Alias.AsIs.ident(v)(using dfc.anonymize)
+        case _ => // do nothing
     dfc.exitOwner()
+  end pluginOnEntryExitFallThrough
 
   // this is called by the compiler plugin and replaces references (calls) to the step `def`.
   // for the process this is considered as a goto statement.

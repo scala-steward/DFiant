@@ -992,7 +992,8 @@ class PrintCodeStringSpec extends StageSpec:
           10.ms.wait
           if (i) S_2 else S_1
         def S_2: Step =
-          def onEntry =
+          def fallThrough = !i
+          def onEntry     =
             x := 0
           def onExit =
             x := 1
@@ -1015,6 +1016,9 @@ class PrintCodeStringSpec extends StageSpec:
          |      else S_1
          |    end S_1
          |    def S_2: Step =
+         |      def fallThrough: Bit <> VAL =
+         |        !i
+         |      end fallThrough
          |      def onEntry: Unit =
          |        x := 0
          |      end onEntry
