@@ -65,43 +65,78 @@ case object DropRTProcess extends Stage:
               )
               prevBlockOrHeader = block
           }
-          val removedOnEntryExitMembers = mutable.Set.empty[DFMember]
+          val removedOnEntryExitFallThroughMembers = mutable.Set.empty[DFMember]
           val gotoDsns = gotos.map { g =>
             new MetaDesign(
               g,
               Patch.Add.Config.ReplaceWithLast(Patch.Replace.Config.ChangeRefAndRemove),
               dfhdl.core.DomainType.RT(dfhdl.core.RTDomainCfg.Derived)
             ):
+              import dfhdl.core.{DFIf, DFUnit, DFBool}
               val currentStepBlock = g.getOwnerStepBlock
               val nextStepBlock: StepBlock = g.stepRef.get match
                 case stepBlock: StepBlock => stepBlock
                 case Goto.ThisStep        => currentStepBlock
                 case Goto.NextStep        => nextBlocks(currentStepBlock)
                 case Goto.FirstStep       => stateBlocks.head
+              def setState(nextStepBlock: StepBlock): Unit =
+                stateReg.din.:=(enumEntry(entries(nextStepBlock.getName)))(using
+                  dfc.setMeta(g.meta)
+                )
               if (currentStepBlock != nextStepBlock)
-                // add currentStepBlock-onExit and nextStepBlock onEntry members
+                // add currentStepBlock-onExit members
                 currentStepBlock.members(MemberView.Folded).collectFirst {
                   case onExit: StepBlock if onExit.isOnExit => onExit
                 }.foreach { onExit =>
                   val onExitMembers = onExit.members(MemberView.Flattened)
                   plantClonedMembers(onExit, onExitMembers)
-                  removedOnEntryExitMembers += onExit
-                  removedOnEntryExitMembers ++= onExitMembers
+                  removedOnEntryExitFallThroughMembers += onExit
+                  removedOnEntryExitFallThroughMembers ++= onExitMembers
                 }
-                nextStepBlock.members(MemberView.Folded).collectFirst {
-                  case onEntry: StepBlock if onEntry.isOnEntry => onEntry
-                }.foreach { onEntry =>
-                  val onEntryMembers = onEntry.members(MemberView.Flattened)
-                  plantClonedMembers(onEntry, onEntryMembers)
-                  removedOnEntryExitMembers += onEntry
-                  removedOnEntryExitMembers ++= onEntryMembers
-                }
+                def handleNextStep(nextStepBlock: StepBlock): Unit =
+                  // onEntry members will always activated, even if we fall-through the next step block
+                  val nextStepBlockMembers = nextStepBlock.members(MemberView.Flattened)
+                  nextStepBlockMembers.collectFirst {
+                    case onEntry: StepBlock if onEntry.isOnEntry => onEntry
+                  }.foreach { onEntry =>
+                    val onEntryMembers = onEntry.members(MemberView.Flattened)
+                    plantClonedMembers(onEntry, onEntryMembers)
+                    removedOnEntryExitFallThroughMembers += onEntry
+                    removedOnEntryExitFallThroughMembers ++= onEntryMembers
+                  }
+                  setState(nextStepBlock)
+                  // in case of circular fall-through, we stop
+                  if (nextStepBlock != currentStepBlock)
+                    val fallThroughCond = nextStepBlockMembers.collectFirst {
+                      case fallThrough: StepBlock if fallThrough.isFallThrough =>
+                        val fallThroughMembers = fallThrough.members(MemberView.Flattened)
+                        val fallThroughDFC = dfc.setMeta(fallThrough.meta.anonymize)
+                        removedOnEntryExitFallThroughMembers += fallThrough
+                        removedOnEntryExitFallThroughMembers ++= fallThroughMembers
+                        // planting all members except the last one (the ident of the condition)
+                        val clonedMemberMap =
+                          plantClonedMembers(fallThrough, fallThroughMembers.dropRight(1))
+                        val Ident(origCond) = fallThroughMembers.last.runtimeChecked
+                        val cond = clonedMemberMap.getOrElse(origCond, origCond).asInstanceOf[DFVal]
+                        val ifBlock = DFIf.Block(
+                          Some(cond.asValOf[DFBool]),
+                          DFIf.Header(DFUnit)(using fallThroughDFC)
+                        )(using fallThroughDFC)
+                        dfc.enterOwner(ifBlock)
+                        val fallThroughStepBlock = nextBlocks(nextStepBlock)
+                        handleNextStep(fallThroughStepBlock)
+                        dfc.exitOwner()
+                    }
+                  end if
+                end handleNextStep
+                handleNextStep(nextStepBlock)
+              else
+                setState(nextStepBlock)
               end if
-              stateReg.din.:=(enumEntry(entries(nextStepBlock.getName)))(using dfc.setMeta(g.meta))
           }
           Iterator(
             List(dsn.patch, pbPatch),
-            removedOnEntryExitMembers.map(_ -> Patch.Remove()),
+            removedOnEntryExitFallThroughMembers.map(_ -> Patch.Remove()),
             caseDsns.map(_.patch),
             gotoDsns.map(_.patch)
           ).flatten

@@ -62,7 +62,10 @@ abstract class MetaDesign[+D <: DomainType](
         else owner
       dfc.mutableDB.plantMember(updatedOwner, m, _ => cond)
     }
-  final def plantClonedMembers(baseOwner: ir.DFOwner, members: List[ir.DFMember]): Unit =
+  final def plantClonedMembers(
+      baseOwner: ir.DFOwner,
+      members: List[ir.DFMember]
+  ): Map[ir.DFMember, ir.DFMember] =
     val clonedMemberMap = members.map { m => m -> m.copyWithNewRefs }.toMap
     members.foreach { m =>
       val cloned = clonedMemberMap(m)
@@ -74,6 +77,8 @@ abstract class MetaDesign[+D <: DomainType](
         dfc.mutableDB.newRefFor(clonedRef, clonedMemberMap.getOrElse(refMember, refMember))
       }
     }
+    clonedMemberMap
+  end plantClonedMembers
   final def applyBlock(owner: ir.DFOwner)(block: => Unit): Unit =
     dfc.mutableDB.OwnershipContext.enter(owner)
     block
