@@ -124,7 +124,8 @@ final case class DB(
                 if (owner == namedDFTypeMember.getOwnerDesign)
                   namedDFTypeMap // same design block -> nothing to do
                 else
-                  namedDFTypeMap + (dfType -> None) // used in more than one block -> global named type
+                  namedDFTypeMap +
+                    (dfType -> None) // used in more than one block -> global named type
               case Some(None) => namedDFTypeMap // known to be a global type
               // found new named type
               case None =>
@@ -782,7 +783,8 @@ final case class DB(
       case internal: DFDesignBlock             => internal.usesClkRst.usesClk
       case _                                   => false
     } || reversedDependents.getOrElse(domainOwner, Set()).exists(_.usesClkRst.usesClk) ||
-      domainOwner.isTop && (domainOwner.getExplicitCfg.clkCfg match
+      domainOwner.isTop &&
+      (domainOwner.getExplicitCfg.clkCfg match
         case ClkCfg.Explicit(inclusionPolicy = ClkRstInclusionPolicy.AlwaysAtTop) => true
         case _                                                                    => false)
 
@@ -794,7 +796,8 @@ final case class DB(
       case internal: DFDesignBlock             => internal.usesClkRst.usesRst
       case _                                   => false
     } || reversedDependents.getOrElse(domainOwner, Set()).exists(_.usesClkRst.usesRst) ||
-      domainOwner.isTop && (domainOwner.getExplicitCfg.rstCfg match
+      domainOwner.isTop &&
+      (domainOwner.getExplicitCfg.rstCfg match
         case RstCfg.Explicit(inclusionPolicy = ClkRstInclusionPolicy.AlwaysAtTop) => true
         case _                                                                    => false)
   end extension
@@ -1099,7 +1102,8 @@ final case class DB(
                 domainOwner.getDomainClkConstraintsView.foreach {
                   case constraints.IO(loc = loc: String) =>
                     locationMap.get(loc).foreach { prevPort =>
-                      locationCollisions += s"${prevPort} and ${domainOwner.getFullName} are both assigned to location `${loc}`"
+                      locationCollisions +=
+                        s"${prevPort} and ${domainOwner.getFullName} are both assigned to location `${loc}`"
                     }
                     locationMap += loc -> domainOwner.getFullName
                     foundLoc = true
@@ -1121,14 +1125,17 @@ final case class DB(
               case constraints.IO(bitIdx = None, loc = loc: String) =>
                 bitSet.clear()
                 locationMap.get(loc).foreach { prevPort =>
-                  locationCollisions += s"${prevPort} and ${port.getFullName} are both assigned to location `${loc}`"
+                  locationCollisions +=
+                    s"${prevPort} and ${port.getFullName} are both assigned to location `${loc}`"
                 }
                 locationMap += loc -> port.getFullName
                 if (port.width != 1)
-                  locationCollisions += s"${port.getFullName} has mutliple bits assigned to location `${loc}`"
+                  locationCollisions +=
+                    s"${port.getFullName} has mutliple bits assigned to location `${loc}`"
               case constraints.IO(bitIdx = bitIdx: Int, loc = loc: String) =>
                 locationMap.get(loc).foreach { prevPort =>
-                  locationCollisions += s"${prevPort} and ${port.getFullName}(${bitIdx}) are both assigned to location `${loc}`"
+                  locationCollisions +=
+                    s"${prevPort} and ${port.getFullName}(${bitIdx}) are both assigned to location `${loc}`"
                 }
                 locationMap += loc -> s"${port.getFullName}(${bitIdx})"
                 bitSet -= bitIdx
@@ -1176,7 +1183,8 @@ final case class DB(
               case constraints.IO(dir = dir: Dir) =>
                 (dir, port.modifier.dir) match
                   case (Dir.IN, Dir.OUT) | (Dir.OUT, Dir.IN) =>
-                    errors += s"${port.getFullName} direction (${port.modifier.dir}) has a resource direction ($dir) mismatch."
+                    errors +=
+                      s"${port.getFullName} direction (${port.modifier.dir}) has a resource direction ($dir) mismatch."
                   case _ =>
               case _ =>
             }
@@ -1193,8 +1201,28 @@ final case class DB(
             |Make sure you connect the resource to the port with the correct direction.
             |""".stripMargin
       )
-
   end portResourceDirCheck
+
+  def stepBlockCheck(): Unit =
+    val namedRTProcessValues = members.view.collect {
+      case pb: ProcessBlock if pb.isInRTDomain =>
+        getMembersOf(pb, MemberView.Flattened).view.collect {
+          case dfVal: DFVal if !dfVal.isAnonymous => dfVal
+        }.filter { dfVal =>
+          !(dfVal.hasTagOf[BindTag] || dfVal.hasTagOf[IteratorTag])
+        }
+    }.flatten
+    if (namedRTProcessValues.nonEmpty)
+      throw new IllegalArgumentException(
+        //format: off
+        s"""|Named DFHDL values are not allowed in RT process blocks. Found the following named values:
+            |  ${namedRTProcessValues.map(v => s"${v.getName} at ${v.meta.position}").mkString("\n  ")}
+            |To Fix:
+            |Use anonymous values instead.
+            |""".stripMargin
+        //format: on
+      )
+  end stepBlockCheck
 
   def check(): Unit =
     nameCheck()
@@ -1207,6 +1235,7 @@ final case class DB(
     waitCheck()
     portLocationCheck()
     portResourceDirCheck()
+    stepBlockCheck()
   end check
 
   // There can only be a single connection to a value in a given range

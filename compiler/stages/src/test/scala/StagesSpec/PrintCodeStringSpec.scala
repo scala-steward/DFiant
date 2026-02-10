@@ -1127,6 +1127,7 @@ class PrintCodeStringSpec extends StageSpec:
   test("for/while loop printing with COMB_LOOP") {
     class Foo extends RTDesign:
       val matrix = Bits(10) X 8 X 8 <> OUT.REG
+      val ii     = UInt.until(8)    <> VAR
       process:
         for (
           i <- 0 until 8;
@@ -1138,7 +1139,7 @@ class PrintCodeStringSpec extends StageSpec:
         )
           COMB_LOOP
           matrix(i)(j)(k).din := 1
-        val ii = UInt.until(8) <> VAR init 0
+        ii := 0
         while (ii != 7)
           COMB_LOOP
           matrix(ii)(0)(0).din := 0
@@ -1150,6 +1151,7 @@ class PrintCodeStringSpec extends StageSpec:
       top,
       """|class Foo extends RTDesign:
          |  val matrix = Bits(10) X 8 X 8 <> OUT.REG
+         |  val ii = UInt(3) <> VAR
          |  process:
          |    for (i <- 0 until 8)
          |      COMB_LOOP
@@ -1165,7 +1167,7 @@ class PrintCodeStringSpec extends StageSpec:
          |        end for
          |      end if
          |    end for
-         |    val ii = UInt(3) <> VAR init d"3'0"
+         |    ii := d"3'0"
          |    while (ii != d"3'7")
          |      COMB_LOOP
          |      matrix(ii.toInt)(0)(0).din := 0
@@ -1178,6 +1180,7 @@ class PrintCodeStringSpec extends StageSpec:
   test("for/while loop printing with FALL_THROUGH") {
     class Foo extends RTDesign:
       val matrix = Bits(10) X 8 X 8 <> OUT.REG
+      val ii     = UInt.until(8)    <> VAR
       process:
         for (
           i <- 0 until 8;
@@ -1189,7 +1192,7 @@ class PrintCodeStringSpec extends StageSpec:
         )
           FALL_THROUGH
           matrix(i)(j)(k).din := 1
-        val ii = UInt.until(8) <> VAR init 0
+        ii := 0
         while (ii != 7)
           FALL_THROUGH
           matrix(ii)(0)(0).din := 0
@@ -1201,6 +1204,7 @@ class PrintCodeStringSpec extends StageSpec:
       top,
       """|class Foo extends RTDesign:
          |  val matrix = Bits(10) X 8 X 8 <> OUT.REG
+         |  val ii = UInt(3) <> VAR
          |  process:
          |    for (i <- 0 until 8)
          |      FALL_THROUGH
@@ -1216,7 +1220,7 @@ class PrintCodeStringSpec extends StageSpec:
          |        end for
          |      end if
          |    end for
-         |    val ii = UInt(3) <> VAR init d"3'0"
+         |    ii := d"3'0"
          |    while (ii != d"3'7")
          |      FALL_THROUGH
          |      matrix(ii.toInt)(0)(0).din := 0
