@@ -32,7 +32,9 @@ abstract class MetaDesign[+D <: DomainType](
   final override private[dfhdl] def initOwner: Design.Block =
     dfc.mutableDB.addMember(injectedOwner)
     injectedOwner.getThisOrOwnerDesign.asFE
-  final override protected def __dfc: DFC = DFC.emptyNoEO.copy(refGen = refGen)
+  // default context position is set according to the positionMember
+  final override protected def __dfc: DFC =
+    DFC.emptyNoEO.copy(refGen = refGen, position = positionMember.meta.position)
 
   injectedOwner match
     case design: ir.DFDesignBlock => // do nothing
