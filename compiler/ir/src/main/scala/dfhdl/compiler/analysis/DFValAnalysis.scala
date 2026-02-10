@@ -84,8 +84,7 @@ object AsOpaque:
 
 object Bind:
   def unapply(alias: DFVal.Alias)(using MemberGetSet): Option[DFVal] =
-    if (alias.getTagOf[BindTag].isDefined)
-      Some(alias.relValRef.get)
+    if (alias.hasTagOf[BindTag]) Some(alias.relValRef.get)
     else None
 
 object ClkEdge:
@@ -415,11 +414,12 @@ extension (origVal: DFVal)
       forceIncludeOrigVal: Boolean
   )(using MemberGetSet): List[DFVal] =
     if (origVal.isAnonymous && !origVal.isGlobal || forceIncludeOrigVal)
-      origVal :: origVal.getRefs.map(_.get).view
-        .flatMap {
-          case dfVal: DFVal => dfVal.collectRelMembersRecur(false)
-          case _            => Nil
-        }.toList
+      origVal ::
+        origVal.getRefs.map(_.get).view
+          .flatMap {
+            case dfVal: DFVal => dfVal.collectRelMembersRecur(false)
+            case _            => Nil
+          }.toList
     else Nil
   @targetName("collectRelMembersDFVal")
   def collectRelMembers(includeOrigVal: Boolean)(using MemberGetSet): List[DFVal] =
