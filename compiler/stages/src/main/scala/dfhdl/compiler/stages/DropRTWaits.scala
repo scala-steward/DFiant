@@ -17,19 +17,19 @@ import scala.collection.mutable
  *     end S_N
  *     ```
  *     where N is the step number.
- *  2. Multiple single cycle waits are replaced with sequential step definitions (S_1, S_2, S_3, ...)
+ *  2. Multiple single cycle waits are replaced with sequential step definitions (S_0, S_1, S_2, ...)
  *     ```scala
+ *     def S_0: Step =
+ *       NextStep
+ *     end S_0
  *     def S_1: Step =
  *       NextStep
  *     end S_1
  *     def S_2: Step =
  *       NextStep
  *     end S_2
- *     def S_3: Step =
- *       NextStep
- *     end S_3
  *     ```
- *     where 1, 2, 3 are the step numbers.
+ *     where 0, 1, 2 are the step numbers.
  *  3. While loop `while (condition) { body }` is replaced with:
  *     ```scala
  *     def S_N: Step = 
@@ -41,8 +41,22 @@ import scala.collection.mutable
  *       }
  *     end S_N
  *     ```
- *  4. While loops with nested waits: waits inside while loops become step definitions with nested naming
- *     (S_1_1, S_1_2, etc.), and the while loop itself becomes a step definition
+ *     where N is the step number.
+ *  4. While loops that are tagged with `FALL_THROUGH` are replaced with:
+ *     ```scala
+ *     def S_N: Step =
+ *       def fallThrough = !condition
+ *       if (condition) {
+ *         body
+ *         ThisStep
+ *       } else {
+ *         NextStep
+ *       }
+ *     end S_N
+ *     ```
+ *     where N is the step number.
+ *  5. While loops with nested waits: waits inside while loops become step definitions with nested naming
+ *     (S_0_0, S_0_1, etc.), and the while loop itself becomes a step definition (S_0)
  */
 //format: on
 case object DropRTWaits extends Stage:
@@ -56,7 +70,7 @@ case object DropRTWaits extends Stage:
       case pb: ProcessBlock if pb.isInRTDomain =>
         val pbMembers = pb.members(MemberView.Flattened)
         // the nested step number is stored in a stack, the head of the list is the current step number
-        var stepNumberNest = List(1)
+        var stepNumberNest = List(0)
         // for nested while loops, we need to keep track of the exit members.
         // an exit member may have multiple patches that need to be applied in the LIFO order they are stacked.
         var exitMemberPatches = mutable.Map.empty[DFMember, List[Patch]]
@@ -71,7 +85,7 @@ case object DropRTWaits extends Stage:
             case Some(patches) => exitMemberPatches += patch._1 -> (patch._2 :: patches)
             case None          => exitMemberPatches += patch._1 -> List(patch._2)
           // starting a new step block with a new step number
-          stepNumberNest = 1 :: stepNumberNest
+          stepNumberNest = 0 :: stepNumberNest
         // checking if the step block has an exit member and returning the patches that need to be applied.
         def checkAndExitStepBlock(lastMember: DFMember): List[(DFMember, Patch)] =
           exitMemberPatches.get(lastMember) match
@@ -114,7 +128,15 @@ case object DropRTWaits extends Stage:
               import dfhdl.core.{StepBlock, DFIf, DFBool, DFUnit}
               val step = StepBlock.forced(using dfc.setName(stepName))
               dfc.enterOwner(step)
-              val cond = wb.guardRef.get.asValOf[DFBool]
+              val wbGuard = wb.guardRef.get
+              if (wb.isFallThrough)
+                val fallThrough = StepBlock.forced(using dfc.setName("fallThrough"))
+                dfc.enterOwner(fallThrough)
+                val clonedCond = !wbGuard.cloneAnonValueAndDepsHere.asValOf[DFBool]
+                dfhdl.core.DFVal.Alias.AsIs.ident(clonedCond)(using dfc.anonymize)
+                dfc.exitOwner()
+              end if
+              val cond = wbGuard.asValOf[DFBool]
               val ifBlock = DFIf.Block(Some(cond), DFIf.Header(DFUnit))
               dfc.exitOwner()
             // creating the else part of the while loop step block, to be applied when the while loop exits.
