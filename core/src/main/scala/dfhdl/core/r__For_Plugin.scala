@@ -157,4 +157,6 @@ object r__For_Plugin:
       output.asInstanceOf[V]
     end if
   end designFromDef
+  def identVal[V <: DFValAny](value: V)(using DFC): V =
+    DFVal.Alias.AsIs.ident(value).asInstanceOf[V]
 end r__For_Plugin

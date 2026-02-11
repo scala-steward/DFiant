@@ -201,6 +201,7 @@ class PrintCodeStringSpec extends StageSpec:
 
   test("RTDesign with class extension and parameters") {
     val gp: Bit <> CONST     = 1
+    val gp2                  = gp
     val i: SInt[16] <> CONST = 0
     val i2                   = i + 5
     class ID(dp: Bit <> CONST) extends RTDesign:
@@ -210,7 +211,7 @@ class PrintCodeStringSpec extends StageSpec:
       val flag                 = Bit      <> IN init dp || gp
       y := x.reg.reg(2, init = c - i) - x
     end ID
-    class IDExt(dpNew: Bit <> CONST) extends ID(gp && dpNew):
+    class IDExt(dpNew: Bit <> CONST) extends ID(gp2 && dpNew):
       val z = Bit <> OUT
       z := dpNew
 
@@ -218,11 +219,12 @@ class PrintCodeStringSpec extends StageSpec:
     assertNoDiff(
       id,
       """|val gp: Bit <> CONST = 1
+         |val gp2: Bit <> CONST = gp
          |val i: SInt[16] <> CONST = sd"16'0"
          |val i2: SInt[16] <> CONST = i + sd"16'5"
          |
          |class IDExt(
-         |    val dp: Bit <> CONST = gp && gp,
+         |    val dp: Bit <> CONST = gp2 && gp,
          |    val dpNew: Bit <> CONST = gp
          |) extends RTDesign:
          |  val c: SInt[16] <> CONST = sd"16'3"

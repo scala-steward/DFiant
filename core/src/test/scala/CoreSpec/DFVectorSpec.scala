@@ -24,7 +24,8 @@ class DFVectorSpec extends DFSpec:
          |val v3 = UInt(8) X 4 X 4 <> VAR
          |v3 := all(all(d"8'0"))
          |v3(3)(1) := d"8'25"
-         |v3 := v3
+         |val t = v3
+         |v3 := t
          |val len: Int <> CONST = 3
          |val v4 = UInt(8) X len <> VAR init all(d"8'0")
          |val v5: UInt[4] X len.type <> CONST = all(d"4'0")
