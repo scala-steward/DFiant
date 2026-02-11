@@ -135,16 +135,14 @@ class SimplifyRTOpsSpec extends StageSpec(stageCreatesUnrefAnons = true):
       """|class Foo extends RTDesign:
          |  val x = Bit <> OUT.REG
          |  val waitParam: UInt[26] <> CONST = d"26'50000000"
-         |  val waitCnt = UInt(26) <> VAR.REG
-         |  val waitCnt = UInt(26) <> VAR.REG
          |  process:
          |    x.din := 1
-         |    waitCnt.din := d"26'0"
+         |    val waitCnt = UInt(26) <> VAR.REG init d"26'0"
          |    while (waitCnt != d"26'49999999")
          |      waitCnt.din := waitCnt + d"26'1"
          |    end while
          |    x.din := 0
-         |    waitCnt.din := d"26'0"
+         |    val waitCnt = UInt(26) <> VAR.REG init d"26'0"
          |    while (waitCnt != (waitParam - d"26'1"))
          |      waitCnt.din := waitCnt + d"26'1"
          |    end while

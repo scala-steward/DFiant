@@ -1203,27 +1203,6 @@ final case class DB(
       )
   end portResourceDirCheck
 
-  def stepBlockCheck(): Unit =
-    val namedRTProcessValues = members.view.collect {
-      case pb: ProcessBlock if pb.isInRTDomain =>
-        getMembersOf(pb, MemberView.Flattened).view.collect {
-          case dfVal: DFVal if !dfVal.isAnonymous => dfVal
-        }.filter { dfVal =>
-          !(dfVal.hasTagOf[BindTag] || dfVal.hasTagOf[IteratorTag])
-        }
-    }.flatten
-    if (namedRTProcessValues.nonEmpty)
-      throw new IllegalArgumentException(
-        //format: off
-        s"""|Named DFHDL values are not allowed in RT process blocks. Found the following named values:
-            |  ${namedRTProcessValues.map(v => s"${v.getName} at ${v.meta.position}").mkString("\n  ")}
-            |To Fix:
-            |Use anonymous values instead.
-            |""".stripMargin
-        //format: on
-      )
-  end stepBlockCheck
-
   def check(): Unit =
     nameCheck()
     connectionTable // causes connectivity checks
@@ -1235,7 +1214,6 @@ final case class DB(
     waitCheck()
     portLocationCheck()
     portResourceDirCheck()
-    stepBlockCheck()
   end check
 
   // There can only be a single connection to a value in a given range
