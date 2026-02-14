@@ -148,7 +148,7 @@ lazy val dependencies =
     private val airframelogV = "2025.1.27"
     private val oslibV = "0.11.7"
     private val scallopV = "5.3.0"
-    private val upickleV = "4.4.2"
+    private val upickleV = "4.4.3"
 
     val scodec = "org.scodec" %% "scodec-bits" % scodecV
     val munit = "org.scalameta" %% "munit" % munitV % Test
