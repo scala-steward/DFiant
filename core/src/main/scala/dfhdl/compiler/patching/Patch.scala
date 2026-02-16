@@ -41,7 +41,7 @@ object Patch:
           def apply(refs: Set[DFRefAny])(using MemberGetSet): Set[DFRefAny] =
             refs -- rf(refs)
       // All references are replaced
-      object All extends RefFilter:
+      case object All extends RefFilter:
         def apply(refs: Set[DFRefAny])(using MemberGetSet): Set[DFRefAny] = refs
       // Only references from outside the given owner are replaced
       final case class Outside(block: DFOwner) extends RefFilter:
