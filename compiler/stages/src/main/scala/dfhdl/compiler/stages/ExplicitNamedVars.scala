@@ -79,6 +79,15 @@ case object ExplicitNamedVars extends Stage:
               )
             )
             chPatchList ++ ch.patchChains(dsn.newVarIR)
+          // named ident requires removal of the ident itself
+          case ident @ Ident(value) =>
+            val dsn = new MetaDesign(
+              ident,
+              Patch.Add.Config.ReplaceWithFirst(Patch.Replace.Config.FullReplacement)
+            ):
+              final val plantedNewVar = ident.asValAny.genNewVar(using dfc.setMeta(ident.meta))
+              plantedNewVar.:=(value.asValAny)
+            List(dsn.patch)
           // all other named values
           case named =>
             val anonIR = named.anonymize

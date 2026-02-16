@@ -118,10 +118,10 @@ class ExplicitNamedVarsSpec extends StageSpec:
       val lhs     = Bits(8) <> IN
       val shifted = lhs << 1
       val o       = Bits(8) <> OUT
-      o <> ((
+      o <> (
         if (lhs(7)) shifted ^ h"1b"
         else shifted
-      ): Bits[8] <> VAL)
+      )
     end xtime
     val id = (new xtime).explicitNamedVars
     assertCodeString(
@@ -137,4 +137,24 @@ class ExplicitNamedVarsSpec extends StageSpec:
     )
   }
 
+  test("Simple named ident") {
+    class ID extends DFDesign:
+      val x = SInt(16) <> IN
+      val y = SInt(16) <> OUT
+      val v = x
+      y := v
+    end ID
+    val id = (new ID).explicitNamedVars
+    assertCodeString(
+      id,
+      """|class ID extends DFDesign:
+         |  val x = SInt(16) <> IN
+         |  val y = SInt(16) <> OUT
+         |  val v = SInt(16) <> VAR
+         |  v := x
+         |  y := v
+         |end ID
+         |""".stripMargin
+    )
+  }
 end ExplicitNamedVarsSpec
