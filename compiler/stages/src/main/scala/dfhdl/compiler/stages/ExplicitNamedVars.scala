@@ -6,6 +6,28 @@ import dfhdl.compiler.patching.*
 import dfhdl.internals.*
 import dfhdl.options.CompilerOptions
 
+/** This stage turns all named values to variables that get assigned. As a result, conditional
+  * expressions (if/match) are converted to statements.
+  *
+  * Additionally, this stage creates explicit register and variable declarations for named value
+  * expressions under RT process blocks. The named expression becomes a register when the
+  * declaration and usage are in different steps. Otherwise, it is a variable declaration. If the
+  * named expression is accessed both in the same step and in another step, then both variable and
+  * register declarations are created. Examples:
+  * {{{
+  *   val x = UInt(16) <> IN
+  *   val y = UInt(16) <> OUT.REG init 0
+  *   process:
+  *     def S0: Step =
+  *       val v = x // becomes a variable declaration
+  *       y.din := v
+  *       NextStep
+  *     val vr = x // becomes a register declaration
+  *     def S1: Step =
+  *       y.din := vr + 1
+  *       NextStep
+  * }}}
+  */
 case object ExplicitNamedVars extends Stage:
   def dependencies: List[Stage] = List(NamedAnonCondExpr)
   def nullifies: Set[Stage] = Set(DropLocalDcls)
@@ -22,7 +44,6 @@ case object ExplicitNamedVars extends Stage:
             case _ => false
         case _ => false
       }
-  final val WhenNotHeader = !WhenHeader
 
   extension (ch: DFConditional.Header)
     // recursive call to patch conditional block chains
@@ -43,6 +64,24 @@ case object ExplicitNamedVars extends Stage:
       }
   end extension
 
+  extension (member: DFMember)
+    def getProcessOrStepBlockOwner(using MemberGetSet): Option[ProcessBlock | StepBlock] =
+      @scala.annotation.tailrec
+      def recur(current: DFMember): Option[ProcessBlock | StepBlock] = current match
+        case pb: ProcessBlock => Some(pb)
+        case sb: StepBlock    => Some(sb)
+        case _: DFDesignBlock => None
+        case m                => recur(m.getOwner)
+      recur(member.getOwner)
+  extension (dfVal: DFVal)
+    def getRegOrVarDeps(using MemberGetSet): (regs: Set[DFValReadDep], vars: Set[DFValReadDep]) =
+      val ownerOpt = dfVal.getProcessOrStepBlockOwner
+      ownerOpt match
+        case Some(owner) =>
+          dfVal.getReadDeps.partition { _.getProcessOrStepBlockOwner.get != owner }
+        case None => (regs = Set(), vars = dfVal.getReadDeps)
+  end extension
+
   def transform(designDB: DB)(using MemberGetSet, CompilerOptions): DB =
     given RefGen = RefGen.fromGetSet
     val patchList =
@@ -54,57 +93,97 @@ case object ExplicitNamedVars extends Stage:
           case _: DFVal.Dcl => None
           // ignoring constant declarations (named constants or derived constants)
           case DclConst() => None
-          // named if / match expressions will be changed to statements
-          case ch: DFConditional.Header =>
-            // removing name and type from header
-            val updatedCH = ch match
-              case mh: DFConditional.DFMatchHeader => mh.copy(dfType = DFUnit).anonymize
-              case ih: DFConditional.DFIfHeader    => ih.copy(dfType = DFUnit).anonymize
-            // this variable will replace the header as a value
-            val dsn = new MetaDesign(
-              ch,
-              Patch.Add.Config.ReplaceWithLast(Patch.Replace.Config.FullReplacement, WhenHeader)
-            ):
-              final val plantedNewVar = ch.asValAny.genNewVar(using dfc.setName(ch.getName))
-              val newVarIR = plantedNewVar.asIR
-              plantMember(updatedCH)
-            val chPatchList = List(
-              // replacing all the references of header as a conditional header
-              dsn.patch,
-              // replacing all the references of header as a value
-              ch -> Patch.Replace(
-                dsn.newVarIR,
-                Patch.Replace.Config.ChangeRefOnly,
-                WhenNotHeader
-              )
-            )
-            chPatchList ++ ch.patchChains(dsn.newVarIR)
-          // named ident requires removal of the ident itself
-          case ident @ Ident(value) =>
-            val dsn = new MetaDesign(
-              ident,
-              Patch.Add.Config.ReplaceWithFirst(Patch.Replace.Config.FullReplacement)
-            ):
-              final val plantedNewVar = ident.asValAny.genNewVar(using dfc.setMeta(ident.meta))
-              plantedNewVar.:=(value.asValAny)
-            List(dsn.patch)
           // all other named values
           case named =>
-            val anonIR = named.anonymize
-            val dsn = new MetaDesign(named, Patch.Add.Config.ReplaceWithFirst()):
-              final val plantedNewVar = named.asValAny.genNewVar(using dfc.setMeta(named.meta))
-              plantedNewVar.:=(plantMember(anonIR).asValAny)(using
-                dfc.setMetaAnon(named.meta.position)
-              )
-            List(dsn.patch)
+            // anonymized value
+            val anonValueIR = named match
+              // named ident requires removal of the ident itself
+              case Ident(value) => value
+              // removing name and type from header
+              case mh: DFConditional.DFMatchHeader => mh.copy(dfType = DFUnit).anonymize
+              // removing name and type from header
+              case ih: DFConditional.DFIfHeader => ih.copy(dfType = DFUnit).anonymize
+              case _                            => named.anonymize
+            val readDeps = named.getRegOrVarDeps
+            // println(s"regs: ${readDeps.regs}")
+            // println(s"vars: ${readDeps.vars}")
+            val regUse = readDeps.regs.nonEmpty
+            // var is also used if there are no dependencies at all
+            val varUse = readDeps.vars.nonEmpty || readDeps.regs.isEmpty && readDeps.vars.isEmpty
+            val dsn = new MetaDesign(
+              named,
+              Patch.Add.Config.Before,
+              dfhdl.core.DomainType.RT(dfhdl.core.RTDomainCfg.Derived)
+            ):
+              val regDFC = dfc.setMeta(named.meta)
+              lazy val varDFC = if (regUse) regDFC.setName(s"${named.getName}_din") else regDFC
+              lazy val plantedNewVar = named.asValAny.dfType.<>(VAR)(using varDFC)
+              if (varUse) plantedNewVar // touch to trigger the lazy val
+              lazy val plantedNewReg = named.asValAny.dfType.<>(VAR.REG)(using regDFC)
+              if (regUse) plantedNewReg // touch to trigger the lazy val
+              val anonValue = named match
+                case Ident(_) => anonValueIR.asValAny
+                case _        => plantMember(anonValueIR).asValAny
+              named match
+                case _: DFConditional.Header => // do nothing
+                case _                       =>
+                  if (varUse && regUse)
+                    plantedNewVar := anonValue
+                    plantedNewReg.din := plantedNewVar
+                  else if (varUse)
+                    plantedNewVar := anonValue
+                  else if (regUse)
+                    plantedNewReg.din := anonValue
+            val varPatchOpt =
+              if (varUse)
+                Some(named ->
+                  Patch.Replace(
+                    dsn.plantedNewVar.asIR,
+                    Patch.Replace.Config.ChangeRefOnly,
+                    Patch.Replace.RefFilter.OfMembers(readDeps.vars.asInstanceOf[Set[DFMember]])
+                  ))
+              else None
+            val regPatchOpt =
+              if (regUse)
+                Some(named ->
+                  Patch.Replace(
+                    dsn.plantedNewReg.asIR,
+                    Patch.Replace.Config.ChangeRefOnly,
+                    Patch.Replace.RefFilter.OfMembers(readDeps.regs.asInstanceOf[Set[DFMember]])
+                  ))
+              else None
+            // final named value handling according to the specialized use-cases
+            val finalizePatches = named match
+              // only ident values are removed completely, along with their references
+              case Ident(_)                 => Some(named -> Patch.Remove())
+              case ch: DFConditional.Header =>
+                val headerVar = if (varUse) dsn.plantedNewVar.asIR else dsn.plantedNewReg.asIR
+                // replacing all the references of header as a conditional header
+                val headerPatch = ch -> Patch.Replace(
+                  anonValueIR,
+                  Patch.Replace.Config.ChangeRefOnly,
+                  WhenHeader
+                )
+                // named header removal while preserving the
+                ch -> Patch.Remove(true) ::
+                  // setting the conditional blocks to reference the new anonymous header
+                  headerPatch ::
+                  // patching chains
+                  ch.patchChains(headerVar)
+              // remove the member, but preserve the references
+              case _ => Some(named -> Patch.Remove(isMoved = true))
+            Iterable(
+              Some(dsn.patch),
+              varPatchOpt,
+              regPatchOpt,
+              finalizePatches
+            ).flatten
         }
         .toList
     designDB.patch(patchList)
   end transform
 end ExplicitNamedVars
 
-//This stage turns all named values to variables that get assigned.
-//As a result, conditional expressions (if/match) are converted to statements.
 extension [T: HasDB](t: T)
   def explicitNamedVars(using CompilerOptions): DB =
     StageRunner.run(ExplicitNamedVars)(t.db)

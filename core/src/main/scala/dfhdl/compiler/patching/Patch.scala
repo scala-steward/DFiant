@@ -51,6 +51,10 @@ object Patch:
       final case class Inside(block: DFOwner) extends RefFilter:
         def apply(refs: Set[DFRefAny])(using MemberGetSet): Set[DFRefAny] =
           refs.collect { case r: DFRef.TwoWayAny if r.originMember.isInsideOwner(block) => r }
+      // Only references to the given members are replaced
+      final case class OfMembers(members: Set[DFMember]) extends RefFilter:
+        def apply(refs: Set[DFRefAny])(using MemberGetSet): Set[DFRefAny] =
+          refs.collect { case r: DFRef.TwoWayAny if members.contains(r.originMember) => r }
     end RefFilter
   end Replace
   final case class Add private[patching] (db: DB, config: Add.Config) extends Patch:
@@ -172,6 +176,16 @@ extension (db: DB)
       .foldLeft(ReplacementContext.fromRefTable(refTable)) {
         case (rc, (origMember, Patch.Replace(repMember, config, refFilter)))
             if (origMember != repMember) =>
+          // TODO: consider using this code in the future
+          // Include refs from any Add for this member so refs shared with added members (e.g. when
+          // the added block reuses the same member) are not purged and lost from the ref table.
+          // val addRefsForSameMember =
+          //   patchList.collect {
+          //     case (m, Patch.Add(db, _)) if m == origMember => db.members.flatMap(_.getRefs)
+          //   }.flatten.toList
+          // val keepRefs = (repMember.getRefs ++ addRefsForSameMember).distinct
+          // val ret =
+          //   rc.replaceMember(origMember, repMember, config, refFilter, keepRefs)
           val ret =
             rc.replaceMember(origMember, repMember, config, refFilter, repMember.getRefs)
           // patchDebug {
@@ -191,7 +205,7 @@ extension (db: DB)
             case _ => db.refTable
           // updating the patched DB reference table members with the newest members kept by the replacement context
           val updatedPatchRefTable = rc.getUpdatedRefTable(fixedGlobalRefTable)
-          val keepRefList = db.members.flatMap(_.getRefs)
+          lazy val keepRefList = db.members.flatMap(_.getRefs)
           val repRT = config match
             case Patch.Add.Config.ReplaceWithMemberN(n, repConfig, refFilter) =>
               val repMember = db.members(n + 1) // At index 0 we have the Top. We don't want that.
@@ -209,23 +223,19 @@ extension (db: DB)
                 Patch.Replace.RefFilter.All, keepRefList
               )
             case _ => rc
-          //          patchDebug {
-          //            println("repRT.refTable:")
-          //            println(repRT.refTable.mkString("\n"))
-          //          }
-          //          patchDebug {
-          //            println("dbPatched.refTable:")
-          //            println(dbPatched.refTable.mkString("\n"))
-          //          }
-          //          patchDebug {
-          //            println("updatedPatchRefTable:")
-          //            println(updatedPatchRefTable.mkString("\n"))
-          //          }
+          // patchDebug {
+          //   println("repRT.refTable:")
+          //   println(repRT.refTable.mkString("\n"))
+          // }
+          // patchDebug {
+          //   println("updatedPatchRefTable:")
+          //   println(updatedPatchRefTable.mkString("\n"))
+          // }
           val ret = repRT.copy(refTable = repRT.refTable ++ updatedPatchRefTable)
-          //          patchDebug {
-          //            println("rc.refTable:")
-          //            println(ret.refTable.mkString("\n"))
-          //          }
+          // patchDebug {
+          //   println("rc.refTable:")
+          //   println(ret.refTable.mkString("\n"))
+          // }
           ret
         // skip over empty move
         case (rc, (origMember, Patch.Move(Nil, _, config))) => rc
@@ -360,16 +370,20 @@ extension (db: DB)
               tbl + (m -> Patch.Add(add.db, Patch.Add.Config.ReplaceWithFirst()))
             // add followed by a replacement is allowed via a tandem patch execution
             case (add: Patch.Add, replace: Patch.Replace) if add.config == Patch.Add.Config.After =>
-              tbl + (m -> Patch.Add(
-                add.db.copy(add.db.members.head :: replace.updatedMember :: add.db.members.drop(1)),
-                Patch.Add.Config.ReplaceWithFirst()
-              ))
+              tbl +
+                (m -> Patch.Add(
+                  add.db.copy(add.db.members.head :: replace.updatedMember ::
+                    add.db.members.drop(1)),
+                  Patch.Add.Config.ReplaceWithFirst()
+                ))
             // replacement followed by an add via a tandem patch execution
             case (replace: Patch.Replace, add: Patch.Add) if add.config == Patch.Add.Config.After =>
-              tbl + (m -> Patch.Add(
-                add.db.copy(add.db.members.head :: replace.updatedMember :: add.db.members.drop(1)),
-                Patch.Add.Config.ReplaceWithFirst()
-              ))
+              tbl +
+                (m -> Patch.Add(
+                  add.db.copy(add.db.members.head :: replace.updatedMember ::
+                    add.db.members.drop(1)),
+                  Patch.Add.Config.ReplaceWithFirst()
+                ))
             // allow the same member to be removed more than once by getting rid of the redundant removals
             case (Patch.Remove(isMovedL), Patch.Remove(isMovedR)) =>
               tbl + (m -> Patch.Remove(isMovedL || isMovedR))
