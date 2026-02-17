@@ -199,6 +199,8 @@ extension (member: DFMember)
   def originMembersNoTypeRef(using MemberGetSet): Set[DFMember] =
     getSet.designDB.originMemberTableNoTypeRef.getOrElse(member, Set())
 
+type DFValReadDep = TextOut | DFNet | DFVal | DFConditional.Block
+
 extension (dfVal: DFVal)
   def getPartialAliases(using MemberGetSet): Set[DFVal.Alias.Partial] =
     dfVal.originMembers.flatMap {
@@ -233,8 +235,8 @@ extension (dfVal: DFVal)
     dfVal.originMembers.view
       .collect { case dfVal: DFVal => dfVal }
       .exists(dfVal => cond(dfVal) || dfVal.existsInComposedReadDeps(cond))
-  def getReadDeps(using MemberGetSet): Set[TextOut | DFNet | DFVal | DFConditional.Block] =
-    val fromRefs: Set[TextOut | DFNet | DFVal | DFConditional.Block] =
+  def getReadDeps(using MemberGetSet): Set[DFValReadDep] =
+    val fromRefs: Set[DFValReadDep] =
       dfVal.originMembersNoTypeRef.flatMap {
         case net: DFNet =>
           net match
