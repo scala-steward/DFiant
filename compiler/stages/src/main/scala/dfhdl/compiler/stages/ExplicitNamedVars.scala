@@ -164,7 +164,7 @@ case object ExplicitNamedVars extends Stage:
                   Patch.Replace.Config.ChangeRefOnly,
                   WhenHeader
                 )
-                // named header removal while preserving the
+                // named header removal while preserving the references
                 ch -> Patch.Remove(true) ::
                   // setting the conditional blocks to reference the new anonymous header
                   headerPatch ::
