@@ -57,6 +57,24 @@ import scala.collection.mutable
  *     where N is the step number.
  *  5. While loops with nested waits: waits inside while loops become step definitions with nested naming
  *     (S_0_0, S_0_1, etc.), and the while loop itself becomes a step definition (S_0)
+ *  6. If the process does not start with a step, a wait statement or while loop, we add an empty step definition for the first 
+ *     step (with a NextStep return value) before the first member. Internally, there could be anonymous value
+ *     members before the step/while/wait members, but these are ignored for the check of what the first member is.
+ *     For example:
+ *     ```scala
+ *     process:
+ *       x.din := 0
+ *     end process
+ *     ```
+ *     will be transformed to:
+ *     ```scala
+ *     process:
+ *       def S_0: Step =
+ *         NextStep
+ *       end S_0
+ *       x.din := 0
+ *     end process
+ *     ```
  */
 //format: on
 case object DropRTWaits extends Stage:
@@ -97,10 +115,35 @@ case object DropRTWaits extends Stage:
         def getStepName(): String =
           stepNumberNest.view.reverse.mkString("S_", "_", "")
 
+        // Rule 6: If process does not start with step, wait, or while, add empty S_0 before first member
+        val needsInitialStep =
+          pbMembers
+            .dropWhile {
+              case v: DFVal => v.isAnonymous
+              case _        => false
+            }.headOption match
+            case None                          => true
+            case Some(_: Wait)                 => false
+            case Some(wb: DFLoop.DFWhileBlock) => wb.isCombinational
+            case Some(_: StepBlock)            => false
+            case _                             => true
+
+        val initialStepPatches = if needsInitialStep then
+          val stepName = getStepName()
+          nextStepBlock()
+          val dsn = new MetaDesign(pb, Patch.Add.Config.InsideFirst):
+            import dfhdl.core.StepBlock
+            val step = StepBlock.forced(using dfc.setName(stepName))
+            dfc.enterOwner(step)
+            NextStep
+            dfc.exitOwner()
+          List(dsn.patch)
+        else Nil
+
         // transforming the process block members.
         // all members except the while loops can be an exit member, and need to be handled with `checkAndExitStepBlock`.
         // waits and while loops are handled specially.
-        pbMembers.flatMap {
+        initialStepPatches ++ pbMembers.flatMap {
           // transform a wait statement into a step block (assuming the wait is a single cycle wait, due to previous stages)
           case wait: Wait =>
             val stepName = getStepName()
