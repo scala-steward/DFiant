@@ -311,11 +311,19 @@ abstract class CommonPhase extends PluginPhase:
         case _ => None
   end extension
 
+  type PosKey = String
+  extension (sym: Symbol)(using Context)
+    def posKey: PosKey = sym.srcPos.show
+  extension (tree: Tree)(using Context)
+    def posKey: PosKey = tree.srcPos.show
+
   extension (srcPos: util.SrcPos)(using Context)
     def show: String =
-      val pos = srcPos.startPos
-      val endPos = srcPos.endPos
-      s"${pos.source.path}:${pos.line}:${pos.column}-${endPos.line}:${endPos.column}"
+      if (srcPos.span == util.Spans.NoSpan) "NoSpan"
+      else
+        val pos = srcPos.startPos
+        val endPos = srcPos.endPos
+        s"${pos.source.path}:${pos.line}:${pos.column}-${endPos.line}:${endPos.column}"
 
   extension (tree: Apply)(using Context)
     def replaceArg(fromArg: Tree, toArg: Tree): Apply =

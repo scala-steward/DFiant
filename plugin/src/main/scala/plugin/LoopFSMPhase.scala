@@ -40,7 +40,7 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
   var pluginOnEntryExitFallThroughSym: Symbol = uninitialized
   var waitSym: Symbol = uninitialized
   var dfcStack: List[Tree] = Nil
-  val processStepDefs = mutable.LinkedHashMap.empty[Symbol, DefDef]
+  val processStepDefs = mutable.LinkedHashMap.empty[PosKey, DefDef]
 
   override val runsAfter = Set(transform.Pickler.name)
   override val runsBefore = Set("CustomControl")
@@ -54,7 +54,7 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
   override def transformDefDef(tree: DefDef)(using Context): Tree =
     val updatedDefDef =
       if (tree.symbol == processAnonDefSym)
-        val registeredSteps = processStepDefs.view.map { (sym, dd) =>
+        val registeredSteps = processStepDefs.valuesIterator.map { dd =>
           ref(registerStepSym)
             .appliedTo(dd.genMeta)
             .appliedTo(dfcStack.head, ref(processScopeCtxSym))
@@ -172,7 +172,7 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
     // checking process defs syntax and caching the process def symbols
     stepDefs.foreach {
       case dd @ DefDef(_, Nil, retTypeTree, _) if retTypeTree.tpe =:= stepType =>
-        processStepDefs += (dd.symbol -> dd)
+        processStepDefs += (dd.symbol.posKey -> dd)
       case dd =>
         report.error(
           "Unexpected register-transfer (RT) process `def` syntax. Must be `def xyz: Step = ...`",
@@ -327,7 +327,7 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
       else false
   object Goto:
     def unapply(tree: Ident)(using Context): Boolean =
-      processStepDefs.contains(tree.symbol)
+      processStepDefs.contains(tree.symbol.posKey)
   object Wait:
     def unapply(tree: Apply)(using Context): Boolean =
       tree.tpe.typeSymbol.fullName.toString == "dfhdl.core.Wait$package$.Wait"
@@ -366,7 +366,7 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
 
   override def transformStats(trees: List[Tree])(using Context): List[Tree] =
     trees.map {
-      case dd: DefDef if processStepDefs.contains(dd.symbol) =>
+      case dd: DefDef if processStepDefs.contains(dd.symbol.posKey) =>
         ref(addStepSym)
           .appliedTo(Literal(Constant(dd.name.toString)))
           .appliedTo(dd.rhs.changeOwner(dd.symbol, ctx.owner))
