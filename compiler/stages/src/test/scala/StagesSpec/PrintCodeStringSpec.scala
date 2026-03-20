@@ -1663,4 +1663,31 @@ class PrintCodeStringSpec extends StageSpec:
          |end Foo""".stripMargin
     )
   }
+
+  test("named rt-process loops") {
+    class Foo extends RTDesign:
+      val x = Bit <> OUT.REG init 0
+      process:
+        val MyWhile = while (x)
+          def GoGo: Step =
+            NextStep
+          end GoGo
+          x.din := !x
+        end MyWhile
+    end Foo
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|class Foo extends RTDesign:
+         |  val x = Bit <> OUT.REG init 0
+         |  process:
+         |    val MyWhile = while (x)
+         |      def GoGo: Step =
+         |        NextStep
+         |      end GoGo
+         |      x.din := !x
+         |    end while
+         |end Foo""".stripMargin
+    )
+  }
 end PrintCodeStringSpec

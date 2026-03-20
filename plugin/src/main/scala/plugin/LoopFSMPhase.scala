@@ -89,6 +89,8 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
     case None, Return, Loop, OnEntryExitFallThrough
   def processStatCheck(tree: Tree, returnCheck: CheckType)(using Context): Unit =
     tree match
+      case vd: ValDef if vd.tpt.tpe =:= defn.UnitType =>
+        processStatCheck(vd.rhs, returnCheck)
       case Block(stats, expr) =>
         returnCheck match
           case CheckType.OnEntryExitFallThrough =>
