@@ -441,4 +441,161 @@ class DropRTWaitsSpec extends StageSpec():
          |end Foo""".stripMargin
     )
   }
+  test("basic named steps") {
+    class Foo extends RTDesign:
+      val x = Bit <> OUT.REG init 0
+      process:
+        x.din := 1
+        def MyStep: Step =
+          NextStep
+        end MyStep
+        1.cy.wait
+    end Foo
+    val top = (new Foo).dropRTWaits
+    assertCodeString(
+      top,
+      """|class Foo extends RTDesign:
+         |  val x = Bit <> OUT.REG init 0
+         |  process:
+         |    def S_0: Step =
+         |      NextStep
+         |    end S_0
+         |    x.din := 1
+         |    def MyStep: Step =
+         |      NextStep
+         |    end MyStep
+         |    def S_2: Step =
+         |      NextStep
+         |    end S_2
+         |end Foo""".stripMargin
+    )
+  }
+  test("basic named steps with nested steps") {
+    class Foo extends RTDesign:
+      val x = Bit <> OUT.REG init 0
+      process:
+        def MyStep: Step =
+          1.cy.wait
+          def Internal: Step =
+            NextStep
+          end Internal
+          1.cy.wait
+          NextStep
+        end MyStep
+    end Foo
+    val top = (new Foo).dropRTWaits
+    assertCodeString(
+      top,
+      """|class Foo extends RTDesign:
+         |  val x = Bit <> OUT.REG init 0
+         |  process:
+         |    def MyStep: Step =
+         |      def MyStep_0: Step =
+         |        NextStep
+         |      end MyStep_0
+         |      def MyStep_Internal: Step =
+         |        NextStep
+         |      end MyStep_Internal
+         |      def MyStep_2: Step =
+         |        NextStep
+         |      end MyStep_2
+         |      NextStep
+         |    end MyStep
+         |end Foo""".stripMargin
+    )
+  }
+  test("complex named steps with nested steps, loops, and waits") {
+    class Foo extends RTDesign:
+      val x = Bit <> OUT.REG init 0
+      process:
+        def MyStep: Step =
+          1.cy.wait
+          def Internal: Step =
+            def Deeper: Step =
+              NextStep
+            end Deeper
+            1.cy.wait
+            NextStep
+          end Internal
+          1.cy.wait
+          NextStep
+        end MyStep
+        x.din := !x
+        def MyStepB: Step =
+          def InternalB: Step =
+            NextStep
+          end InternalB
+          1.cy.wait
+          val MyWait = 1.cy.wait
+          1.cy.wait
+          NextStep
+        end MyStepB
+        x.din := !x
+        val MyWhile = while (x)
+          x.din := !x
+          def GoGo: Step =
+            NextStep
+          end GoGo
+          1.cy.wait
+        end MyWhile
+        x.din := !x
+    end Foo
+    val top = (new Foo).dropRTWaits
+    assertCodeString(
+      top,
+      """|class Foo extends RTDesign:
+         |  val x = Bit <> OUT.REG init 0
+         |  process:
+         |    def MyStep: Step =
+         |      def MyStep_0: Step =
+         |        NextStep
+         |      end MyStep_0
+         |      def MyStep_Internal: Step =
+         |        def MyStep_Internal_Deeper: Step =
+         |          NextStep
+         |        end MyStep_Internal_Deeper
+         |        def MyStep_Internal_1: Step =
+         |          NextStep
+         |        end MyStep_Internal_1
+         |        NextStep
+         |      end MyStep_Internal
+         |      def MyStep_2: Step =
+         |        NextStep
+         |      end MyStep_2
+         |      NextStep
+         |    end MyStep
+         |    x.din := !x
+         |    def MyStepB: Step =
+         |      def MyStepB_InternalB: Step =
+         |        NextStep
+         |      end MyStepB_InternalB
+         |      def MyStepB_1: Step =
+         |        NextStep
+         |      end MyStepB_1
+         |      def MyStepB_MyWait: Step =
+         |        NextStep
+         |      end MyStepB_MyWait
+         |      def MyStepB_3: Step =
+         |        NextStep
+         |      end MyStepB_3
+         |      NextStep
+         |    end MyStepB
+         |    x.din := !x
+         |    def MyWhile: Step =
+         |      if (x)
+         |        x.din := !x
+         |        def MyWhile_GoGo: Step =
+         |          NextStep
+         |        end MyWhile_GoGo
+         |        def MyWhile_1: Step =
+         |          NextStep
+         |        end MyWhile_1
+         |        ThisStep
+         |      else NextStep
+         |      end if
+         |    end MyWhile
+         |    x.din := !x
+         |end Foo""".stripMargin
+    )
+  }
 end DropRTWaitsSpec

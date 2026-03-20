@@ -33,12 +33,12 @@ import scala.collection.mutable
  *  3. While loop `while (condition) { body }` is replaced with:
  *     ```scala
  *     def S_N: Step = 
- *       if (condition) {
+ *       if (condition)
  *         body
  *         ThisStep
- *       } else {
+ *       else
  *         NextStep
- *       }
+ *       end if
  *     end S_N
  *     ```
  *     where N is the step number.
@@ -46,12 +46,12 @@ import scala.collection.mutable
  *     ```scala
  *     def S_N: Step =
  *       def fallThrough = !condition
- *       if (condition) {
+ *       if (condition)
  *         body
  *         ThisStep
- *       } else {
+ *       else
  *         NextStep
- *       }
+ *       end if
  *     end S_N
  *     ```
  *     where N is the step number.
@@ -75,6 +75,75 @@ import scala.collection.mutable
  *       x.din := 0
  *     end process
  *     ```
+ *  7. The user can define explicit naming by setting a value name for a wait statement or a while block,
+ *     or by defining a step block. Nested steps are named by appending the parent step name and an underscore. 
+ *     Unnamed steps are enumerated with the parent step name and an underscore. The enumeration starts from 0,
+ *     and increments while counting the named steps as well.
+ *     For example:
+ *     ```scala
+ *     process:
+ *       def MyStep: Step =
+ *         1.cy.wait //no name, so enumerate as MyStep_0
+ *         val MyWait = 1.cy.wait //named, so use as MyStep_MyWait
+ *         1.cy.wait //no name, so enumerate as MyStep_2
+ *         def Internal: Step = //nested step, so change name to MyStep_Internal
+ *           NextStep
+ *         end Internal
+ *         NextStep
+ *       end MyStep
+ *       x.din := y
+ *       val MyStepB = 1.cy.wait //named, so use as MyStepB
+ *       x.din := 1
+ *       1.cy.wait //no name, so enumerate as MyStep_2
+ *       val MyWhile = while (y) //named, so use as MyWhile
+ *         x.din := 1
+ *         def GoGo: Step = //nested step, so change name to MyWhile_GoGo
+ *           NextStep
+ *         end GoGo
+ *       end MyWhile
+ *       x.din := 1
+ *     end process
+ *     ```
+ *     will be transformed to:
+ *     ```scala
+ *     process:
+ *       def MyStep: Step =
+ *         def MyStep_0: Step =
+ *           NextStep
+ *         end MyStep_0
+ *         def MyStep_MyWait: Step =
+ *           NextStep
+ *         end MyStep_MyWait
+ *         def MyStep_2: Step =
+ *           NextStep
+ *         end MyStep_2
+ *         def MyStep_Internal: Step =
+ *           NextStep
+ *         end MyStep_Internal
+ *         NextStep
+ *       end MyStep
+ *       x.din := y
+ *       def MyStepB: Step =
+ *         NextStep
+ *       end MyStepB
+ *       x.din := 1
+ *       def S_2: Step = 
+ *         NextStep
+ *       end S_2
+ *       def MyWhile: Step =
+ *         if (y)
+ *           x.din := 1
+ *           def MyWhile_GoGo: Step =
+ *             NextStep
+ *           end MyWhile_GoGo
+ *           ThisStep
+ *         else
+ *           NextStep
+ *         end if
+ *       end MyWhile
+ *       x.din := 1
+ *     end process
+ *     ```
  */
 //format: on
 case object DropRTWaits extends Stage:
@@ -87,33 +156,41 @@ case object DropRTWaits extends Stage:
       // each process block has its own step enumeration
       case pb: ProcessBlock if pb.isInRTDomain =>
         val pbMembers = pb.members(MemberView.Flattened)
-        // the nested step number is stored in a stack, the head of the list is the current step number
-        var stepNumberNest = List(0)
+        // Rule 7: step scope (prefix, counter).
+        case class StepScope(prefix: String, counter: Int)
+        var stepNameStack = List(StepScope("", 0))
         // for nested while loops, we need to keep track of the exit members.
         // an exit member may have multiple patches that need to be applied in the LIFO order they are stacked.
         var exitMemberPatches = mutable.Map.empty[DFMember, List[Patch]]
-        // the step number is incremented by 1
+        // increment the counter for the current (top) step scope
         def nextStepBlock(): Unit =
-          stepNumberNest = (stepNumberNest.head + 1) :: stepNumberNest.tail
-        // entering a step block starts a deeper nesting level and memoizes an exit member patch that
-        // needs to be applied
-        def enterStepBlock(patch: (DFMember, Patch)): Unit =
+          val h = stepNameStack.head
+          stepNameStack = StepScope(h.prefix, h.counter + 1) :: stepNameStack.tail
+        // entering a step block (e.g. while body) starts a deeper nesting level and memoizes an exit member patch
+        def enterStepBlock(stepMember: DFMember, exitMember: DFMember, patch: Option[Patch]): Unit =
           // stacking the patches for the exit member
-          exitMemberPatches.get(patch._1) match
-            case Some(patches) => exitMemberPatches += patch._1 -> (patch._2 :: patches)
-            case None          => exitMemberPatches += patch._1 -> List(patch._2)
-          // starting a new step block with a new step number
-          stepNumberNest = 0 :: stepNumberNest
+          exitMemberPatches.get(exitMember) match
+            case Some(patches) => exitMemberPatches += exitMember -> (patch.toList ++ patches)
+            case None          => exitMemberPatches += exitMember -> patch.toList
+          stepNameStack = StepScope(getStepName(stepMember), 0) :: stepNameStack
         // checking if the step block has an exit member and returning the patches that need to be applied.
         def checkAndExitStepBlock(lastMember: DFMember): List[(DFMember, Patch)] =
           exitMemberPatches.get(lastMember) match
             case Some(patches) =>
-              stepNumberNest = stepNumberNest.tail
+              stepNameStack = stepNameStack.tail
               nextStepBlock()
               patches.map(lastMember -> _)
             case None => Nil
-        def getStepName(): String =
-          stepNumberNest.view.reverse.mkString("S_", "_", "")
+
+        def getStepName(stepMember: DFMember): String =
+          val prefix = stepNameStack.head.prefix
+          stepMember.meta.nameOpt match
+            case Some(name) =>
+              if (prefix.isEmpty) name
+              else s"${prefix}_${name}"
+            case None =>
+              if (prefix.isEmpty) s"S_${stepNameStack.head.counter}"
+              else s"${prefix}_${stepNameStack.head.counter}"
 
         // Rule 6: If process does not start with step, wait, or while, add empty S_0 before first member
         val needsInitialStep =
@@ -129,7 +206,7 @@ case object DropRTWaits extends Stage:
             case _                             => true
 
         val initialStepPatches = if needsInitialStep then
-          val stepName = getStepName()
+          val stepName = "S_0"
           nextStepBlock()
           val dsn = new MetaDesign(pb, Patch.Add.Config.InsideFirst):
             import dfhdl.core.StepBlock
@@ -146,7 +223,7 @@ case object DropRTWaits extends Stage:
         initialStepPatches ++ pbMembers.flatMap {
           // transform a wait statement into a step block (assuming the wait is a single cycle wait, due to previous stages)
           case wait: Wait =>
-            val stepName = getStepName()
+            val stepName = getStepName(wait)
             nextStepBlock()
             val dsn = new MetaDesign(
               wait,
@@ -160,7 +237,7 @@ case object DropRTWaits extends Stage:
             dsn.patch :: checkAndExitStepBlock(wait)
           // transform a while loop into a step block.
           case wb: DFLoop.DFWhileBlock if !wb.isCombinational =>
-            val stepName = getStepName()
+            val stepName = getStepName(wb)
             // the last member of the while loop is the exit member.
             val lastLoopMember = wb.getVeryLastMember.get
             // creating the if part of the while loop step block.
@@ -195,8 +272,20 @@ case object DropRTWaits extends Stage:
               dfc.enterOwner(elseBlock)
               NextStep
               dfc.exitOwner()
-            enterStepBlock(elseDsn.patch)
+            enterStepBlock(wb, lastLoopMember, Some(elseDsn.patch._2))
             Some(stepAndIfDsn.patch)
+          case stepBlock: StepBlock =>
+            val stepName = getStepName(stepBlock)
+            val lastStepBlockMember = stepBlock.getVeryLastMember.get
+            enterStepBlock(stepBlock, lastStepBlockMember, None)
+            if (stepBlock.getName != stepName)
+              Some(
+                stepBlock -> Patch.Replace(
+                  stepBlock.setName(stepName),
+                  Patch.Replace.Config.FullReplacement
+                )
+              )
+            else None
           case member => checkAndExitStepBlock(member)
         }
     }.flatten.toList
