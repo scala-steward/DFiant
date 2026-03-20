@@ -1674,6 +1674,12 @@ class PrintCodeStringSpec extends StageSpec:
           end GoGo
           x.din := !x
         end MyWhile
+        val MyFor = for (i <- 0 until 10)
+          def GoGo2: Step =
+            NextStep
+          end GoGo2
+          x.din := !x
+        end MyFor
     end Foo
     val top = (new Foo).getCodeString
     assertNoDiff(
@@ -1686,7 +1692,13 @@ class PrintCodeStringSpec extends StageSpec:
          |        NextStep
          |      end GoGo
          |      x.din := !x
-         |    end while
+         |    end MyWhile
+         |    val MyFor = for (i <- 0 until 10)
+         |      def GoGo2: Step =
+         |        NextStep
+         |      end GoGo2
+         |      x.din := !x
+         |    end MyFor
          |end Foo""".stripMargin
     )
   }

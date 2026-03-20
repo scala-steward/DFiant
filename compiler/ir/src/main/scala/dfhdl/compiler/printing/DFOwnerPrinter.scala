@@ -371,10 +371,11 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
            |${csFALL_THROUGH}
            |${csDFOwnerBody(forBlock)}"""
     val named = forBlock.meta.nameOpt.map(n => s"val $n = ").getOrElse("")
+    val endName = forBlock.meta.nameOpt.map(n => s"end $n").getOrElse("end for")
     //format: off
     sn"""|${named}for (${forBlock.iteratorRef.refCodeString} <- ${printer.csDFRange(forBlock.rangeRef.get)})
          |${body.hindent}
-         |end for"""
+         |$endName"""
     //format: on
   def csDFWhileBlock(whileBlock: DFLoop.DFWhileBlock): String =
     val csCOMB_LOOP = if (whileBlock.isCombinational) "COMB_LOOP" else ""
@@ -384,9 +385,10 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
            |${csFALL_THROUGH}
            |${csDFOwnerBody(whileBlock)}"""
     val named = whileBlock.meta.nameOpt.map(n => s"val $n = ").getOrElse("")
+    val endName = whileBlock.meta.nameOpt.map(n => s"end $n").getOrElse("end while")
     sn"""|${named}while (${whileBlock.guardRef.refCodeString})
          |${body.hindent}
-         |end while"""
+         |$endName"""
   def csDomainBlock(domain: DomainBlock): String =
     val body = csDFOwnerBody(domain)
     val named = domain.meta.nameOpt.map(n => s"val $n = ").getOrElse("")
