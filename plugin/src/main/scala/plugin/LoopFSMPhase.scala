@@ -291,13 +291,6 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
     tree match
       case ProcessForever(scopeCtx, block) =>
         processStatCheck(block, returnCheck = CheckType.None)
-        processStepDefs.view.groupBy(_._2.name.toString).foreach { case (name, defs) =>
-          if (defs.size > 1)
-            report.error(
-              s"Process step `def`s must be unique. Found multiple `def $name: Step = ...`s.",
-              defs.head._2.srcPos
-            )
-        }
       case Apply(Select(This(_), wait), args) if wait.toString == "wait" => // DFHDL/Java wait
         if (!tree.tpe.isContextualMethod) // Java's wait wouldn't be contextual
           report.error(
@@ -335,7 +328,7 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
     tree match
       case Goto() =>
         ref(gotoStepSym)
-          .appliedTo(Literal(Constant(tree.name.toString)))
+          .appliedTo(Literal(Constant(getStepKey(tree))))
           .appliedTo(dfcStack.head, ref(processScopeCtxSym))
       case _ => tree
 
@@ -364,11 +357,18 @@ class LoopFSMPhase(setting: Setting) extends CommonPhase:
       case _ =>
         tree
 
+  // this is used to get a unique key for the step,
+  // because the step name may be repeated when declared internally in another step or loop.
+  // the line position makes sure we get a unique key for the step.
+  private def getStepKey(tree: DefDef | Ident)(using Context): String =
+    val sym = tree.symbol
+    s"${sym.name}_${sym.srcPos.startPos.line + 1}"
+
   override def transformStats(trees: List[Tree])(using Context): List[Tree] =
     trees.map {
       case dd: DefDef if processStepDefs.contains(dd.symbol.posKey) =>
         ref(addStepSym)
-          .appliedTo(Literal(Constant(dd.name.toString)))
+          .appliedTo(Literal(Constant(getStepKey(dd))))
           .appliedTo(dd.rhs.changeOwner(dd.symbol, ctx.owner))
           .appliedTo(dfcStack.head, ref(processScopeCtxSym))
       case dd @ (OnEntryDef() | OnExitDef() | FallThroughDef()) =>

@@ -1675,9 +1675,9 @@ class PrintCodeStringSpec extends StageSpec:
           x.din := !x
         end MyWhile
         val MyFor = for (i <- 0 until 10)
-          def GoGo2: Step =
+          def GoGo: Step =
             NextStep
-          end GoGo2
+          end GoGo
           x.din := !x
         end MyFor
     end Foo
@@ -1694,9 +1694,9 @@ class PrintCodeStringSpec extends StageSpec:
          |      x.din := !x
          |    end MyWhile
          |    val MyFor = for (i <- 0 until 10)
-         |      def GoGo2: Step =
+         |      def GoGo: Step =
          |        NextStep
-         |      end GoGo2
+         |      end GoGo
          |      x.din := !x
          |    end MyFor
          |end Foo""".stripMargin
