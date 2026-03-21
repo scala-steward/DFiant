@@ -76,7 +76,8 @@ import scala.collection.mutable
  *     end process
  *     ```
  *  7. The user can define explicit naming by setting a value name for a wait statement or a while block,
- *     or by defining a step block. Nested steps are named by appending the parent step name and an underscore. 
+ *     or by defining a step block. Nested steps are named by appending the parent step name and an underscore,
+ *     unless the nested step already includes the parent step name with an underscore. 
  *     Unnamed steps are enumerated with the parent step name and an underscore. The enumeration starts from 0,
  *     and increments while counting the named steps as well.
  *     For example:
@@ -89,6 +90,9 @@ import scala.collection.mutable
  *         def Internal: Step = //nested step, so change name to MyStep_Internal
  *           NextStep
  *         end Internal
+ *         def MyStep_Internal2: Step = //nested step, but already includes the parent step name with an underscore,
+ *           NextStep                   //so use as MyStep_Internal2
+ *         end MyStep_Internal2
  *         NextStep
  *       end MyStep
  *       x.din := y
@@ -120,6 +124,9 @@ import scala.collection.mutable
  *         def MyStep_Internal: Step =
  *           NextStep
  *         end MyStep_Internal
+ *         def MyStep_Internal2: Step =
+ *           NextStep
+ *         end MyStep_Internal2
  *         NextStep
  *       end MyStep
  *       x.din := y
@@ -187,6 +194,7 @@ case object DropRTWaits extends Stage:
           stepMember.meta.nameOpt match
             case Some(name) =>
               if (prefix.isEmpty) name
+              else if (name.startsWith(prefix + "_")) name
               else s"${prefix}_${name}"
             case None =>
               if (prefix.isEmpty) s"S_${stepNameStack.head.counter}"

@@ -522,9 +522,9 @@ class DropRTWaitsSpec extends StageSpec():
         end MyStep
         x.din := !x
         def MyStepB: Step =
-          def InternalB: Step =
+          def MyStepB_Internal: Step =
             NextStep
-          end InternalB
+          end MyStepB_Internal
           1.cy.wait
           val MyWait = 1.cy.wait
           1.cy.wait
@@ -540,7 +540,8 @@ class DropRTWaitsSpec extends StageSpec():
         end MyWhile
         x.din := !x
     end Foo
-    val top = (new Foo).dropRTWaits
+    // run dropRTWaits twice to test the nested step name handling (nothing should change after the first run)
+    val top = (new Foo).dropRTWaits.dropRTWaits
     assertCodeString(
       top,
       """|class Foo extends RTDesign:
@@ -566,9 +567,9 @@ class DropRTWaitsSpec extends StageSpec():
          |    end MyStep
          |    x.din := !x
          |    def MyStepB: Step =
-         |      def MyStepB_InternalB: Step =
+         |      def MyStepB_Internal: Step =
          |        NextStep
-         |      end MyStepB_InternalB
+         |      end MyStepB_Internal
          |      def MyStepB_1: Step =
          |        NextStep
          |      end MyStepB_1
