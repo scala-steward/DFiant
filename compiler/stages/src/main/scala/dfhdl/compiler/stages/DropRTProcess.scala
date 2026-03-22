@@ -15,7 +15,7 @@ import dfhdl.core.{DFValAny, DFOwnerAny, asValAny, DFC}
   */
 //format: on
 case object DropRTProcess extends Stage:
-  def dependencies: List[Stage] = List() // DropRTWaits
+  def dependencies: List[Stage] = List(FlattenStepBlocks)
   def nullifies: Set[Stage] = Set(DFHDLUniqueNames)
 
   def transform(designDB: DB)(using MemberGetSet, CompilerOptions): DB =
@@ -74,11 +74,8 @@ case object DropRTProcess extends Stage:
             ):
               import dfhdl.core.{DFIf, DFUnit, DFBool}
               val currentStepBlock = g.getOwnerStepBlock
-              val nextStepBlock: StepBlock = g.stepRef.get match
-                case stepBlock: StepBlock => stepBlock
-                case Goto.ThisStep        => currentStepBlock
-                case Goto.NextStep        => nextBlocks(currentStepBlock)
-                case Goto.FirstStep       => stateBlocks.head
+              // the stage `FlattenStepBlocks` guarantees that the goto always references a regular StepBlock
+              val nextStepBlock: StepBlock = g.stepRef.get.asInstanceOf[StepBlock]
               def setState(nextStepBlock: StepBlock): Unit =
                 stateReg.din.:=(enumEntry(entries(nextStepBlock.getName)))(using
                   dfc.setMeta(g.meta)

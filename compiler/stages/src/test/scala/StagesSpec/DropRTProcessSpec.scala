@@ -11,15 +11,15 @@ class DropRTProcessSpec extends StageSpec():
       val my_fsm = process:
         def S0: Step =
           y.din := 0
-          if (x) NextStep else S0
+          if (x) S1 else S0
         def S1: Step =
           def onEntry =
             y.din := 1
-          if (x) S2 else FirstStep
+          if (x) S2 else S0
         def S2: Step =
           def onExit =
             y.din := 0
-          if (x) ThisStep else FirstStep
+          if (x) S2 else S0
     end Foo
     val top = (new Foo).dropRTProcess
     assertCodeString(
@@ -98,20 +98,31 @@ class DropRTProcessSpec extends StageSpec():
          |end Foo""".stripMargin
     )
   }
-  test("process with no steps") {
+  test("process with a single step") {
     class Foo extends RTDesign:
       val x = Bit <> IN
       val y = Bit <> OUT.REG init 0
       process:
-        y.din := 0
+        def S0: Step =
+          y.din := 0
+          S0
+        end S0
     end Foo
     val top = (new Foo).dropRTProcess
     assertCodeString(
       top,
       """|class Foo extends RTDesign:
+         |  enum State(val value: UInt[1] <> CONST) extends Encoded.Manual(1):
+         |    case S0 extends State(d"1'0")
+         |
          |  val x = Bit <> IN
          |  val y = Bit <> OUT.REG init 0
-         |  y.din := 0
+         |  val state = State <> VAR.REG init State.S0
+         |  state match
+         |    case State.S0 =>
+         |      y.din := 0
+         |      state.din := State.S0
+         |  end match
          |end Foo""".stripMargin
     )
   }
@@ -122,22 +133,22 @@ class DropRTProcessSpec extends StageSpec():
       process:
         def S0: Step =
           y.din := 0
-          NextStep
+          S1
         def S1: Step =
           def fallThrough = x
           def onEntry =
             y.din := 1
-          NextStep
+          S2
         def S2: Step =
           def fallThrough = !x
           def onEntry =
             y.din := !y
-          NextStep
+          S3
         def S3: Step =
           def fallThrough = x ^ x.reg(1, init = 0)
           def onEntry =
             y.din := y ^ y.reg
-          NextStep
+          S4
         def S4: Step =
           y.din := 0
           if (x) S2 else S0
@@ -208,17 +219,17 @@ class DropRTProcessSpec extends StageSpec():
           def fallThrough = x
           def onEntry =
             y.din := y
-          NextStep
+          S1
         def S1: Step =
           def fallThrough = !x
           def onEntry =
             y.din := !y
-          NextStep
+          S2
         def S2: Step =
           def fallThrough = x ^ x.reg(1, init = 0)
           def onEntry =
             y.din := y ^ y.reg
-          NextStep
+          S0
     end Foo
     val top = (new Foo).dropRTProcess
     assertCodeString(
