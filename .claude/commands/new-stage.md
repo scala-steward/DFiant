@@ -150,6 +150,21 @@ m.isAnonymous                 // true if the value has no user-visible name
 m.originMembers               // members that reference this member
 ```
 
+### `MemberView.Folded` vs `MemberView.Flattened`
+
+```scala
+owner.members(MemberView.Folded)     // direct children only: m.getOwner == owner
+owner.members(MemberView.Flattened)  // all descendants recursively
+```
+
+Use `Folded` when processing only immediate children (e.g. iterating steps at one nesting level).
+Use `Flattened` when you need to inspect or collect all descendants (e.g. finding all `Goto`
+members anywhere inside a `ProcessBlock`, or collecting all members to move with a block).
+
+A member's **direct owner** is the block for which `m.getOwner == block`. `Flattened` includes
+members owned by nested blocks too, which can be confusing: a `Goto` inside a `StepBlock` inside
+a `ProcessBlock` appears in `pb.members(Flattened)` but NOT in `pb.members(Folded)`.
+
 ### Domain checks
 ```scala
 m.isInDFDomain    // dataflow domain
@@ -200,6 +215,43 @@ Patch.Move.Config.After
 Patch.Move.Config.InsideFirst  // insert as first child of a block
 Patch.Move.Config.InsideLast
 ```
+
+### `Patch.Move` semantics — critical details
+
+**Descendants are NOT moved automatically.** `Patch.Move(List(member), origOwner, cfg)` only
+moves the listed members. If `member` is a `DFOwner` (e.g. a `StepBlock`), its children remain
+at their original positions in the flat member list. Since the flat member list must be a valid
+pre-order DFS traversal (every member's owner must appear before it), moving a block without its
+children violates the ownership invariant and causes `sanityCheck` to fail.
+
+**Always include descendants when moving a block:**
+```scala
+val allMembersToMove = block :: block.members(MemberView.Flattened)
+anchor -> Patch.Move(allMembersToMove, block.getOwner, Patch.Move.Config.After)
+```
+
+**Anchor redirect for `DFOwner` + `Config.After`.** When the anchor is a `DFOwner` and config
+is `After`, the patch system redirects the physical insertion point to
+`anchor.getVeryLastMember` (deepest recursive last descendant). However, the ownership update
+uses the **original anchor** to determine the new owner: `newOwner = origAnchor.getOwnerBlock`.
+This means after the move, the moved members' `ownerRef`s point to `anchor.getOwnerBlock`,
+not to `anchor` itself.
+
+**Multiple Move patches on the same anchor + config are concatenated** in patchList order.
+If you add several `anchor -> Patch.Move(...)` entries for the same `(anchor, Config.After)`,
+all the member lists are merged and inserted together after the anchor (or its redirect target).
+
+**Conflict: a member cannot appear in two patches simultaneously.** If `Patch.Move` lists a
+member AND that same member appears in a separate `Patch.Remove` (or another `Patch.Move`),
+the DB throws `IllegalArgumentException: Received two different patches for the same member`.
+Note that `Patch.Move` internally generates `Patch.Remove` for each listed member. Common
+triggers:
+- Using a `Goto` as a `Move.Before` anchor (so the Move internally removes it on re-insertion)
+  while the same `Goto` is also in another Move's members list.
+- Moving a parent block with all descendants AND separately moving one of those descendants.
+
+The fix is always **multi-phase patching**: split conflicting patches into sequential
+`db.patch()` calls so each phase operates on a clean, conflict-free DB.
 
 ### `Patch.Add` via `MetaDesign`
 Use `MetaDesign` when you need to construct new IR members using the DFHDL frontend DSL:
@@ -265,10 +317,32 @@ dfc.setMeta(m.meta)        // copy DFC mirroring another member's metadata
 dfc.enterOwner(owner)      // push a new owner onto the ownership stack
 dfc.exitOwner()            // pop the owner stack
 dfc.owner                  // current owner (top of stack)
+dfc.ownerOrEmptyRef        // ir.DFOwner.Ref for the current owner — use this inside MetaDesign
+                           // when constructing raw IR members (avoids `import dfhdl.core.*` ref conflicts)
 dfc.inMetaProgramming      // true when inside a MetaDesign
 dfc.mutableDB              // access the MutableDB directly
 dfc.getSet                 // implicit MemberGetSet backed by mutableDB
 ```
+
+### Constructing raw IR members inside `MetaDesign`
+
+When you need to build an IR member directly (rather than through the DSL) inside a MetaDesign
+body — e.g. creating a `Goto` that references an existing `StepBlock` — use this idiom:
+
+```scala
+val dsn = new MetaDesign(anchorMember, Patch.Add.Config.Before):
+  import dfhdl.core.*   // brings refTW, addMember, and IR type helpers into scope
+  ir.Goto(existingStep.refTW[ir.Goto], dfc.ownerOrEmptyRef, dfc.getMeta, dfc.tags).addMember
+```
+
+Two important details:
+- `import dfhdl.core.*` (not `import dfhdl.compiler.ir.*`) is needed inside MetaDesign for
+  `refTW` and `addMember`. Do **not** write `ir.Goto` with a qualified prefix inside the body
+  when `dfhdl.compiler.ir.*` is already imported at the file level — use the unqualified `Goto`
+  or the explicit `ir.Goto` form consistently, but be aware that `import dfhdl.core.*` re-exports
+  what you need. In practice: inside MetaDesign, use `import dfhdl.core.*` and unqualified names.
+- Use `dfc.ownerOrEmptyRef` (a direct method on `DFC`) rather than `dfc.owner.ref`. The latter
+  requires extension methods that may conflict with `import dfhdl.core.*`.
 
 ### DFCG — the "global" variant
 
@@ -625,6 +699,49 @@ override def runCondition(using co: CompilerOptions): Boolean =
     case _                          => false
 ```
 
+### Pattern 9 — One-level-at-a-time repeated patching (`@tailrec`)
+
+Use when a transformation must be applied iteratively, processing one nesting level per pass
+(e.g. flattening a hierarchy depth-by-depth). This avoids duplicate entries that would arise
+if you tried to simultaneously move a parent block (with its descendant as part of the moved
+list) AND separately move that same descendant.
+
+```scala
+import scala.annotation.tailrec
+
+@tailrec private def flattenRepeatedly(db: DB)(using RefGen): DB =
+  given MemberGetSet = db.getSet
+  val patches = db.members.view.flatMap {
+    case pb: ProcessBlock if pb.isInRTDomain => collectOneLevelPatches(pb)
+    case _                                    => Nil
+  }.toList
+  if patches.isEmpty then db
+  else flattenRepeatedly(db.patch(patches))
+
+private def collectOneLevelPatches(pb: ProcessBlock)(using MemberGetSet): List[(DFMember, Patch)] =
+  // Only look at direct children of pb-level steps; lift each one level up.
+  // After one pass, previously-nested blocks are now direct pb children,
+  // and their children become the candidates for the next pass.
+  pb.members(MemberView.Folded).flatMap {
+    case parent: StepBlock if parent.isRegular =>
+      parent.members(MemberView.Folded).flatMap {
+        case child: StepBlock if child.isRegular =>
+          val allMembersToMove = child :: child.members(MemberView.Flattened)
+          List(parent -> Patch.Move(allMembersToMove, child.getOwner, Patch.Move.Config.After))
+        case _ => Nil
+      }
+    case _ => Nil
+  }
+```
+
+Key invariants:
+- Include ALL descendants in `allMembersToMove` to preserve the flat-list ownership ordering.
+- Process only **direct children** per pass — do not recurse into grandchildren in the same pass.
+- The `@tailrec` loop terminates when `collectOneLevelPatches` returns an empty list (all blocks
+  are already direct children of the `ProcessBlock`).
+- `given MemberGetSet = db.getSet` must be re-established at the top of each recursive call so
+  navigation helpers see the updated member structure.
+
 ---
 
 ## Boilerplate Template
@@ -639,7 +756,11 @@ import dfhdl.compiler.ir.*
 import dfhdl.compiler.patching.*
 import dfhdl.options.CompilerOptions
 
-/** One-line description of what this stage does and why it exists. */
+/**
+  * Describe what this stage does, why it exists, input/output IR shapes, and ordering/resolution
+  * rules if applicable. Do NOT include Idempotency or Determinism sections — those are
+  * implementation invariants enforced by the infrastructure, not user-facing documentation.
+  */
 case object MyStage extends Stage:
   def dependencies: List[Stage] = List(SomePriorStage)   // run these first
   def nullifies: Set[Stage]     = Set(SomeInvalidatedStage)
@@ -661,6 +782,14 @@ extension [T: HasDB](t: T)
 ```
 
 ---
+
+## Test Authoring Rules
+
+**Tests must be self-contained.** Each test should only exercise the stage under test. Do not write input designs that rely on a prior stage to produce the IR shape that the current stage expects — write that IR shape directly using the DFHDL DSL.
+
+For example, a stage that operates on `StepBlock`s should use explicit `def MyStep: Step = …` syntax in the test design rather than `1.cy.wait` or `while (…)` constructs, because those are transformed into `StepBlock`s by `DropRTWaits`, not by the stage under test. Letting `DropRTWaits` silently run as a dependency makes a failing test ambiguous: it is unclear whether the bug is in the stage under test or in the dependency.
+
+The same principle applies to any other prior-stage construct: if `DropFoo` normally feeds into `AddBar`, the `AddBarSpec` tests should express the output of `DropFoo` directly, without triggering `DropFoo`.
 
 ## Test File Template
 
@@ -725,15 +854,32 @@ abstract class StageSpec(stageCreatesUnrefAnons: Boolean = false)
 
 ## Common Mistakes to Avoid
 
-1. **Iterating over `Set` or `Map` to build the patch list** — order is undefined, producing non-deterministic output. Always iterate `designDB.members` (a `List`) to drive patch collection.
-2. **Overly broad pattern matches** — if a match can fire on already-transformed IR, the stage is not idempotent (`f(f(x)) ≠ f(x)`). Match on the exact source shape so that the output IR no longer satisfies the predicate.
-3. **Forgetting `end transform` / `end MyStage`** — scalafmt's `insertEndMarkerMinLines = 15` rule requires end markers on blocks ≥ 15 lines.
-2. **Missing `given RefGen = RefGen.fromGetSet`** inside `transform` when using `MetaDesign` with fresh reference generation.
-3. **Mutating `getSet`** — always create a new `MemberGetSet` via `newDB.getSet` after patching before iterating again.
-4. **Patch order matters** — patches are applied in list order; a `Move` before a `Replace` on the same member may conflict.
-5. **Not extending `NoCheckStage`** when your stage produces unreferenced anonymous members as intermediate output — the automatic sanity check will fail.
-6. **Nullifying too aggressively** — only nullify a stage if your transformation invalidates its invariant. Unnecessary nullification forces redundant re-runs.
-7. **Confusing `ChangeRefOnly` vs `FullReplacement`** — `ChangeRefOnly` keeps the old member in the member list (useful when another stage still expects it); `FullReplacement` swaps it in place.
+1. **Writing `end process` in code examples** — Scala does not support `end` markers on method
+   calls, so `process` blocks have no closing `end process`. Only named definitions (`def`, `class`,
+   `object`, `val`, etc.) accept end markers. StepBlock prints as `def Name: Step = … end Name`;
+   ProcessBlock prints as `process(sensitivity):\n  body` with no end marker.
+2. **Iterating over `Set` or `Map` to build the patch list** — order is undefined, producing non-deterministic output. Always iterate `designDB.members` (a `List`) to drive patch collection.
+3. **Overly broad pattern matches** — if a match can fire on already-transformed IR, the stage is not idempotent (`f(f(x)) ≠ f(x)`). Match on the exact source shape so that the output IR no longer satisfies the predicate.
+4. **Forgetting `end transform` / `end MyStage`** — scalafmt's `insertEndMarkerMinLines = 15` rule requires end markers on blocks ≥ 15 lines.
+5. **Missing `given RefGen = RefGen.fromGetSet`** inside `transform` when using `MetaDesign` with fresh reference generation.
+6. **Mutating `getSet`** — always create a new `MemberGetSet` via `newDB.getSet` after patching before iterating again.
+7. **Patch order matters** — patches are applied in list order; a `Move` before a `Replace` on the same member may conflict.
+8. **Not extending `NoCheckStage`** when your stage produces unreferenced anonymous members as intermediate output — the automatic sanity check will fail.
+9. **Nullifying too aggressively** — only nullify a stage if your transformation invalidates its invariant. Unnecessary nullification forces redundant re-runs.
+10. **Confusing `ChangeRefOnly` vs `FullReplacement`** — `ChangeRefOnly` keeps the old member in the member list (useful when another stage still expects it); `FullReplacement` swaps it in place.
+11. **Moving a `DFOwner` without its descendants** — `Patch.Move` only moves the listed members.
+    Moving a block but leaving its children at their original positions violates the ownership
+    invariant (pre-order DFS ordering). Always include `block :: block.members(MemberView.Flattened)`
+    in the moved-members list. If you need to move multiple nesting levels, use the one-level-at-a-time
+    `@tailrec` pattern (Pattern 9) to avoid duplicating descendants across multiple Move entries.
+12. **Conflicting patches on the same member** — `Patch.Move` internally generates `Patch.Remove`
+    for each moved member. If that same member also appears in another patch in the same list, you
+    get `IllegalArgumentException: Received two different patches for the same member`. The most
+    common cause is using a `Goto` as a `Move.Before` anchor while that same `Goto` also appears
+    in another Move's members list. Fix by splitting into sequential `db.patch()` calls (multi-phase).
+13. **Using `dfc.owner.ref` inside MetaDesign** — `import dfhdl.core.*` introduces extension
+    methods that conflict with `.ref`. Use `dfc.ownerOrEmptyRef` instead to obtain the owner's
+    `ir.DFOwner.Ref` when constructing raw IR members.
 
 ---
 
