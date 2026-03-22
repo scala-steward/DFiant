@@ -1255,6 +1255,17 @@ object DB:
   def fromJsonString(json: String): DB = read[DB](json)
 end DB
 
+/** Controls how `owner.members(view)` traverses the ownership tree.
+  *   - `Folded`: returns only the direct children of the owner (members whose `getOwner == owner`).
+  *   - `Flattened`: returns all descendants recursively. For a `DFDesignBlock` owner this returns
+  *     every member in the design (via `designMemberTable`). For other owners it recurses into
+  *     nested blocks but does NOT cross `DFDesignBlock` boundaries — sub-designs appear as a
+  *     single opaque entry.
+  *
+  * Use `Folded` when you only need to process immediate children (e.g. steps at one nesting level).
+  * Use `Flattened` when you need to inspect or collect all descendants (e.g. all `Goto` members
+  * anywhere inside a `ProcessBlock`, or gathering every member to move together with a block).
+  */
 enum MemberView derives CanEqual:
   case Folded, Flattened
 

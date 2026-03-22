@@ -282,6 +282,10 @@ case object DropRTWaits extends Stage:
               dfc.exitOwner()
             enterStepBlock(wb, lastLoopMember, Some(elseDsn.patch._2))
             Some(stepAndIfDsn.patch)
+          // onEntry/onExit/fallThrough blocks must NOT be renamed: DropRTProcess identifies them
+          // by exact names "onEntry"/"onExit"/"fallThrough" via isOnEntry/isOnExit/isFallThrough.
+          // They also must NOT affect the step-name counter of their enclosing scope.
+          case stepBlock: StepBlock if !stepBlock.isRegular => None
           case stepBlock: StepBlock =>
             val stepName = getStepName(stepBlock)
             val lastStepBlockMember = stepBlock.getVeryLastMember.get

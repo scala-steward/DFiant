@@ -105,8 +105,35 @@ object Patch:
       case object Via extends Config
     end Config
   end Add
-  // movedMembers: members to move
-  // origOwner: the original owner of the top members
+  /** Moves `movedMembers` to a new position in the flat member list relative to the anchor member.
+    *
+    * `origOwner` is the original direct owner of the top-level moved members. During ownership
+    * resolution, only members in `movedMembers` whose current owner equals `origOwner` have their
+    * `ownerRef` updated to the new owner (determined by the anchor and config). Members owned by
+    * nested sub-blocks are not re-owned — their `ownerRef` is assumed to already point to the
+    * correct intermediate owner.
+    *
+    * '''Descendants are NOT moved automatically.''' Only the explicitly listed `movedMembers` are
+    * repositioned in the flat list. Moving a `DFOwner` (e.g. a `StepBlock`) without its children
+    * breaks the pre-order DFS ownership invariant. Always include all descendants:
+    * {{{
+    *   val all = block :: block.members(MemberView.Flattened)
+    *   anchor -> Patch.Move(all, block.getOwner, Patch.Move.Config.After)
+    * }}}
+    *
+    * '''`DFOwner` anchor + `After`/`InsideLast` redirect.''' When the anchor is a `DFOwner`,
+    * physical placement is redirected to `anchor.getVeryLastMember` (deepest recursive last
+    * descendant). Ownership resolution still uses the original anchor, so `newOwner =
+    * anchor.getOwnerBlock`.
+    *
+    * '''Concatenation.''' Multiple `Move` patches targeting the same anchor and config are merged
+    * in patchList order into a single Move before being applied to the member list.
+    *
+    * '''Conflict detection.''' This patch internally generates `Patch.Remove` for every member in
+    * `movedMembers`. If any of those members also appear in a separate patch in the same patchList
+    * (e.g. as the anchor of another `Move.Before`), an `IllegalArgumentException` is thrown.
+    * Resolve by splitting conflicting patches into sequential `db.patch()` calls.
+    */
   final case class Move(movedMembers: List[DFMember], origOwner: DFOwner, config: Move.Config)
       extends Patch:
     override def toString(): String =
@@ -123,13 +150,19 @@ object Patch:
     sealed trait Config extends Product with Serializable derives CanEqual:
       def ==(addConfig: Add.Config): Boolean = addConfig == this
     object Config:
-      // moves members before the patched member
+      // Moves members before the anchor member. The anchor must not be a DFOwner when
+      // members to be moved using Before are also referenced by other patches (e.g., as movedMembers
+      // in another Move), as the internal Remove generated here would conflict.
       case object Before extends Config
-      // moves members after the patched member
+      // Moves members after the anchor member.
+      // When the anchor is a DFOwner, placement is redirected to anchor.getVeryLastMember.
+      // Ownership update: newOwner = anchor.getOwnerBlock (NOT anchor itself).
       case object After extends Config
-      // moves members inside the given block, at the beginning
+      // Moves members inside the given block, at the beginning (after the block header).
+      // The anchor must be a DFOwner; members become direct children of the anchor.
       case object InsideFirst extends Config
-      // moves members inside the given block, at the end
+      // Moves members inside the given block, at the end.
+      // The anchor must be a DFOwner; redirects to anchor.getVeryLastMember for placement.
       case object InsideLast extends Config
   end Move
 
