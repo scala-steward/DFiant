@@ -54,6 +54,43 @@ class DropRTProcessSpec extends StageSpec():
          |end Foo""".stripMargin
     )
   }
+  test("onEntry is not fired on self-transition") {
+    class Foo extends RTDesign:
+      val x = Bit <> IN
+      val y = Bit <> OUT.REG init 0
+      process:
+        def S0: Step =
+          if (x) S1 else S0
+        def S1: Step =
+          def onEntry =
+            y.din := 1
+          if (x) S1 else S0
+    end Foo
+    val top = (new Foo).dropRTProcess
+    assertCodeString(
+      top,
+      """|class Foo extends RTDesign:
+         |  enum State(val value: UInt[1] <> CONST) extends Encoded.Manual(1):
+         |    case S0 extends State(d"1'0")
+         |    case S1 extends State(d"1'1")
+         |
+         |  val x = Bit <> IN
+         |  val y = Bit <> OUT.REG init 0
+         |  val state = State <> VAR.REG init State.S0
+         |  state match
+         |    case State.S0 =>
+         |      if (x)
+         |        y.din := 1
+         |        state.din := State.S1
+         |      else state.din := State.S0
+         |      end if
+         |    case State.S1 =>
+         |      if (x) state.din := State.S1
+         |      else state.din := State.S0
+         |  end match
+         |end Foo""".stripMargin
+    )
+  }
   test("unnamed FSM steps") {
     class Foo extends RTDesign:
       val x = Bit <> IN
