@@ -106,6 +106,10 @@ CI installs these via OSS CAD Suite:
 - **Verilog**: verilator, iverilog (sv2005 skipped for iverilog), questa, vivado
 - **VHDL**: ghdl, nvc, questa, vivado (v2008 skipped for vivado)
 
+## Claude Instructions
+
+- When asked to **create a new compiler stage** or **modify an existing compiler stage**, always invoke the `/new-stage` skill before doing any work.
+
 ## Licenses
 
 - Main library (`internals`, `plugin`, `compiler_ir`, `core`, `compiler_stages`, `lib`, `ips`): **LGPL v3.0**
