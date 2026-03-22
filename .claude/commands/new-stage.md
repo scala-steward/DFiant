@@ -2,6 +2,8 @@
 
 > **For contributors adding new compiler transformation stages to DFHDL.**
 > This skill is version-controlled alongside the codebase — keep it updated when stage infrastructure changes.
+> After completing a stage, **update this file** with any general lessons learned (new patterns, API
+> behaviours, pitfalls). See the "Keeping This Skill Up to Date" section at the bottom for guidance.
 
 You are helping create a new DFHDL compiler transformation stage. Use the complete reference below to produce correct, idiomatic code.
 
@@ -897,3 +899,32 @@ abstract class StageSpec(stageCreatesUnrefAnons: Boolean = false)
 - [ ] At least one "basic" test and one "edge case" or "backend-specific" test
 - [ ] `assertCodeString` expected strings verified manually or via a first-run snapshot
 - [ ] `sbt test` passes (or `sbt quickTestSetup; test` for faster iteration via `lib/Playground.scala`)
+- [ ] **Update this skill** with any general lessons learned (see below)
+
+---
+
+## Keeping This Skill Up to Date
+
+While creating a new stage, you will often discover things that are not yet documented here:
+new IR API behaviours, patch interaction subtleties, MetaDesign patterns, common pitfalls, etc.
+
+**After completing a stage, review what you learned and update this file** when the lesson is
+general enough to help with future stage creation. Specifically:
+
+- **New IR / API behaviour** → add to the relevant section (IR Data Model, Patch System, MetaDesign).
+- **New pitfall or gotcha** → add a numbered entry to "Common Mistakes to Avoid".
+- **New reusable transformation pattern** → add a numbered "Pattern N" entry under "Transformation Patterns".
+- **Corrected or outdated information** → update the existing section in place.
+
+Do **not** add stage-specific implementation details here. Only document things that are likely
+to recur in other stages. The rule of thumb: *would a future contributor hit this same issue if
+they didn't already know about it?* If yes, document it.
+
+Also update **stage-adjacent source files** when you discover missing or incorrect API documentation:
+- `Patch.scala` — document `Patch.Move` / `Patch.Replace` / `Patch.Add` semantics
+- `DB.scala` — document `MemberView.Folded` / `Flattened`
+- `MetaDesign.scala` — document ownership and `plantMember` / `plantClonedMembers`
+- `DFC.scala` — document DFC helpers used in MetaDesign
+
+This skill and the source files it references are the authoritative guide for future stage authors.
+Keep them accurate.
