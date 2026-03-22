@@ -241,11 +241,14 @@ class ParsedCommandLine(
   end HelpMode
 
   private def usageText(options: String): String =
-    import dfhdl.internals.{sbtIsRunning, scala_cliIsRunning, sbtShellIsRunning}
+    import dfhdl.internals.{sbtIsRunning, scala_cliIsRunning, sbtShellIsRunning, sbtnIsRunning}
     if (scala_cliIsRunning) s"scala run . -M $topScalaPath -- $options"
     else if (sbtIsRunning)
-      if (sbtShellIsRunning && !scastieIsRunning) s"runMain $topScalaPath $options"
-      else s"""sbt "runMain $topScalaPath $options""""
+      if ((sbtShellIsRunning || sbtnIsRunning) && !scastieIsRunning)
+        s"runMain $topScalaPath $options"
+      else
+        val sbtCommand = if (sbtnIsRunning) "sbtn" else "sbt"
+        s"""$sbtCommand "runMain $topScalaPath $options""""
     else s"<your program> $options"
 
   banner(s"""Design Name: $designName\nUsage: ${usageText("[design-args] <mode> [options]")} """)

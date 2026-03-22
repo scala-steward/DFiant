@@ -6,7 +6,7 @@ import wvlet.log.{Logger, LogFormatter}
 import scala.collection.mutable
 import dfhdl.options.*
 import org.rogach.scallop.*
-import dfhdl.internals.sbtShellIsRunning
+import dfhdl.internals.{sbtShellIsRunning, sbtnIsRunning}
 import scala.util.chaining.scalaUtilChainingOps
 import java.time.Instant
 import dfhdl.compiler.stages.{StagedDesign, CompiledDesign}
@@ -400,7 +400,7 @@ trait DFApp:
       )
     parsedCommandLine.getExitCodeOption match
       case Some(code) =>
-        if (!sbtShellIsRunning) sys.exit(code)
+        if (!sbtShellIsRunning && !sbtnIsRunning) sys.exit(code)
       case None =>
         given CanEqual[ScallopConfBase, ScallopConfBase] = CanEqual.derived
         // update app options from command line
