@@ -102,6 +102,11 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
                     s"""|An anonymous value has no references.
                         |Referenced value: $dfVal""".stripMargin
                   )
+        case range: DFRange if !skipAnonRefCheck && range.originMembers.isEmpty =>
+          reportViolation(
+            s"""|An anonymous range has no references.
+                |Referenced range: $range""".stripMargin
+          )
         case _ =>
       end match
     }
