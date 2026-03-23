@@ -1,11 +1,11 @@
 # DFHDL Compiler Stage Creation Guide
 
-> **For contributors adding new compiler transformation stages to DFHDL.**
+> **For contributors adding or modifying compiler transformation stages in DFHDL.**
 > This skill is version-controlled alongside the codebase — keep it updated when stage infrastructure changes.
 > After completing a stage, **update this file** with any general lessons learned (new patterns, API
 > behaviours, pitfalls). See the "Keeping This Skill Up to Date" section at the bottom for guidance.
 
-You are helping create a new DFHDL compiler transformation stage. Use the complete reference below to produce correct, idiomatic code.
+You are helping create or modify a DFHDL compiler transformation stage. Use the complete reference below to produce correct, idiomatic code.
 
 ---
 
