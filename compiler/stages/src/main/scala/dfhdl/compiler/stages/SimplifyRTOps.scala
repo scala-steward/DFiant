@@ -74,11 +74,11 @@ import scala.collection.mutable
   *
   * ==Rule 4: For loop → while loop with iterator==
   *
-  * `for` loops in RT processes are replaced by a `Int <> VAR.REG` iterator assigned to the range
-  * start before the loop, and a `while` loop whose body ends with the iterator increment. The
-  * comparison operator is `<` for `until` (exclusive) and `<=` for `to` (inclusive); for negative
-  * steps the operators are `>` and `>=` respectively. For loops tagged as `COMB_LOOP` or outside
-  * the RT domain are left unchanged.
+  * `for` loops that are inside an RT process are replaced by a `Int <> VAR.REG` iterator assigned
+  * to the range start before the loop, and a `while` loop whose body ends with the iterator
+  * increment. The comparison operator is `<` for `until` (exclusive) and `<=` for `to` (inclusive);
+  * for negative steps the operators are `>` and `>=` respectively. For loops tagged as `COMB_LOOP`,
+  * outside the RT domain, or outside a process block are left unchanged.
   *
   * Iterator naming:
   *   - anonymous `for (i <- ...)`: iterator register keeps the original name (`i`)
@@ -201,7 +201,8 @@ case object SimplifyRTOps extends Stage:
         end if
 
       // replace RT for loops with while loops + iterator VAR.REG + increment at end of body
-      case forBlock: DFLoop.DFForBlock if forBlock.isInRTDomain && !forBlock.isCombinational =>
+      case forBlock: DFLoop.DFForBlock
+          if forBlock.isInRTDomain && !forBlock.isCombinational && forBlock.isInProcess =>
         val iteratorDcl = forBlock.iteratorRef.get
         val range = forBlock.rangeRef.get
         val startBigInt: BigInt = range.startRef.get match
