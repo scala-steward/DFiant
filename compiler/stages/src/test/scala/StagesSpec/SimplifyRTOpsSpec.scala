@@ -62,7 +62,7 @@ class SimplifyRTOpsSpec extends StageSpec(stageCreatesUnrefAnons = true):
         x.din := i.rising
         x.din := i.falling
         waitUntil(i)
-        waitUntil(i.falling)
+        val MyWait = waitUntil(i.falling)
         waitUntil(i.rising)
         x.din := 0
     end Foo
@@ -78,8 +78,8 @@ class SimplifyRTOpsSpec extends StageSpec(stageCreatesUnrefAnons = true):
          |    x.din := i.reg(1, init = 0) && (!i)
          |    while (!i)
          |    end while
-         |    while ((!i.reg(1, init = 0)) || i)
-         |    end while
+         |    val MyWait = while ((!i.reg(1, init = 0)) || i)
+         |    end MyWait
          |    while (i.reg(1, init = 1) || (!i))
          |    end while
          |    x.din := 0
@@ -96,7 +96,7 @@ class SimplifyRTOpsSpec extends StageSpec(stageCreatesUnrefAnons = true):
         x.din := 1
         waitWhile(i)
         x.din := 0
-        waitWhile(j)
+        val MyWait = waitWhile(j)
         x.din := 1
     end Foo
     val top = (new Foo).simplifyRTOps
@@ -111,8 +111,8 @@ class SimplifyRTOpsSpec extends StageSpec(stageCreatesUnrefAnons = true):
          |    while (i)
          |    end while
          |    x.din := 0
-         |    while (j)
-         |    end while
+         |    val MyWait = while (j)
+         |    end MyWait
          |    x.din := 1
          |end Foo""".stripMargin
     )
@@ -126,7 +126,7 @@ class SimplifyRTOpsSpec extends StageSpec(stageCreatesUnrefAnons = true):
         x.din := 1
         50000000.cy.wait
         x.din := 0
-        waitParam.cy.wait
+        val MyWait = waitParam.cy.wait
         1.cy.wait
     end Foo
     val top = (new Foo).simplifyRTOps
@@ -137,17 +137,112 @@ class SimplifyRTOpsSpec extends StageSpec(stageCreatesUnrefAnons = true):
          |  val waitParam: UInt[26] <> CONST = d"26'50000000"
          |  process:
          |    x.din := 1
-         |    val waitCnt = UInt(26) <> VAR.REG init d"26'0"
+         |    val waitCnt = UInt(26) <> VAR.REG
+         |    waitCnt.din := d"26'0"
          |    while (waitCnt != d"26'49999999")
          |      waitCnt.din := waitCnt + d"26'1"
          |    end while
          |    x.din := 0
-         |    val waitCnt = UInt(26) <> VAR.REG init d"26'0"
-         |    while (waitCnt != (waitParam - d"26'1"))
-         |      waitCnt.din := waitCnt + d"26'1"
-         |    end while
+         |    val MyWait_waitCnt = UInt(26) <> VAR.REG
+         |    MyWait_waitCnt.din := d"26'0"
+         |    val MyWait = while (MyWait_waitCnt != (waitParam - d"26'1"))
+         |      MyWait_waitCnt.din := MyWait_waitCnt + d"26'1"
+         |    end MyWait
          |    1.cy.wait
          |end Foo""".stripMargin
     )
   }
+  test("RT for loop with until is converted to while loop") {
+    class Foo extends RTDesign:
+      val x = Bit <> OUT.REG
+      process:
+        x.din := 1
+        for (i <- 0 until 4)
+          x.din := 0
+        x.din := 1
+    end Foo
+    val top = (new Foo).simplifyRTOps
+    assertCodeString(
+      top,
+      """|class Foo extends RTDesign:
+         |  val x = Bit <> OUT.REG
+         |  process:
+         |    x.din := 1
+         |    val i = Int <> VAR.REG
+         |    i.din := 0
+         |    while (i < 4)
+         |      x.din := 0
+         |      i.din := i + 1
+         |    end while
+         |    x.din := 1
+         |end Foo""".stripMargin
+    )
+  }
+
+  test("RT for loop with to is converted to while loop with <= guard") {
+    class Foo extends RTDesign:
+      val x = Bit <> OUT.REG
+      process:
+        val MyFor = for (i <- 0 to 3)
+          x.din := 0
+    end Foo
+    val top = (new Foo).simplifyRTOps
+    assertCodeString(
+      top,
+      """|class Foo extends RTDesign:
+         |  val x = Bit <> OUT.REG
+         |  process:
+         |    val MyFor_i = Int <> VAR.REG
+         |    MyFor_i.din := 0
+         |    val MyFor = while (MyFor_i <= 3)
+         |      x.din := 0
+         |      MyFor_i.din := MyFor_i + 1
+         |    end MyFor
+         |end Foo""".stripMargin
+    )
+  }
+
+  test("RT for loop with explicit step is converted to while loop with step increment") {
+    class Foo extends RTDesign:
+      val x = Bit <> OUT.REG
+      process:
+        for (i <- 0 until 8 by 2)
+          x.din := 0
+    end Foo
+    val top = (new Foo).simplifyRTOps
+    assertCodeString(
+      top,
+      """|class Foo extends RTDesign:
+         |  val x = Bit <> OUT.REG
+         |  process:
+         |    val i = Int <> VAR.REG
+         |    i.din := 0
+         |    while (i < 8)
+         |      x.din := 0
+         |      i.din := i + 2
+         |    end while
+         |end Foo""".stripMargin
+    )
+  }
+
+  test("ED domain for loop is untouched") {
+    class Foo extends EDDesign:
+      val x = Bit <> OUT
+      process:
+        for (i <- 0 until 4)
+          x :== 0
+    end Foo
+    val top = (new Foo).simplifyRTOps
+    assertCodeString(
+      top,
+      """|class Foo extends EDDesign:
+         |  val x = Bit <> OUT
+         |  process:
+         |    for (i <- 0 until 4)
+         |      x :== 0
+         |    end for
+         |end Foo""".stripMargin
+    )
+  }
+
 end SimplifyRTOpsSpec
