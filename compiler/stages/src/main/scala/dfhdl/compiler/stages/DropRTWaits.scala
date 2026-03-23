@@ -260,13 +260,18 @@ case object DropRTWaits extends Stage:
                   val wbGuard = wb.guardRef.get
                   val cond = wbGuard.asValOf[DFBool]
                   val ifBlock = DFIf.Block(Some(cond), DFIf.Header(DFUnit))
-                  dfc.exitOwner()
+                  // Stay inside `step` while building the if/else structure so that both
+                  // the if-true-branch and the else-branch are owned by `step`, not by the
+                  // enclosing ProcessBlock.  (Previously `dfc.exitOwner()` was called here,
+                  // which caused elseBlock and its Goto(NextStep) to be created at process
+                  // level, breaking getOwnerStepBlock in FlattenStepBlocks.)
                   dfc.enterOwner(ifBlock)
                   ThisStep
                   dfc.exitOwner()
                   val elseBlock = DFIf.Block(None, ifBlock)
                   dfc.enterOwner(elseBlock)
                   NextStep
+                  dfc.exitOwner()
                   dfc.exitOwner()
                 Some(dsn.patch)
               // Non-empty loop body: the last member of the while loop is the exit member.
@@ -299,17 +304,24 @@ case object DropRTWaits extends Stage:
                   dfc.enterOwner(stepAndIfDsn.ifBlock)
                   ThisStep
                   dfc.exitOwner()
+                  // Enter `step` explicitly so that elseBlock is owned by `step` (sibling of
+                  // ifBlock), not by `ifBlock`. Without this, FullReplacement(wb → ifBlock)
+                  // would redirect elseBlock's ownerRef to ifBlock, nesting it inside the
+                  // if-true branch instead of at the same level.
+                  dfc.enterOwner(stepAndIfDsn.step)
                   val elseBlock = DFIf.Block(None, stepAndIfDsn.ifBlock)
                   dfc.enterOwner(elseBlock)
                   NextStep
                   dfc.exitOwner()
+                  dfc.exitOwner()
                 enterStepBlock(wb, lastLoopMember, Some(elseDsn.patch._2))
                 Some(stepAndIfDsn.patch)
+            end match
           // onEntry/onExit/fallThrough blocks must NOT be renamed: DropRTProcess identifies them
           // by exact names "onEntry"/"onExit"/"fallThrough" via isOnEntry/isOnExit/isFallThrough.
           // They also must NOT affect the step-name counter of their enclosing scope.
           case stepBlock: StepBlock if !stepBlock.isRegular => None
-          case stepBlock: StepBlock =>
+          case stepBlock: StepBlock                         =>
             val stepName = getStepName(stepBlock)
             val lastStepBlockMember = stepBlock.getVeryLastMember.get
             enterStepBlock(stepBlock, lastStepBlockMember, None)

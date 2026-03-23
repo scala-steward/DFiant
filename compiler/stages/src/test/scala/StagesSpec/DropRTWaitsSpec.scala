@@ -154,7 +154,6 @@ class DropRTWaitsSpec extends StageSpec():
          |        waitCnt1.din := waitCnt1 + d"8'1"
          |        ThisStep
          |      else NextStep
-         |      end if
          |    end S_0
          |    waitCnt1.din := d"8'0"
          |    x.din := !x
@@ -230,7 +229,6 @@ class DropRTWaitsSpec extends StageSpec():
          |        waitCnt1.din := waitCnt1 + d"8'1"
          |        ThisStep
          |      else NextStep
-         |      end if
          |    end S_0
          |    waitCnt1.din := d"8'0"
          |    x.din := !x
@@ -239,7 +237,6 @@ class DropRTWaitsSpec extends StageSpec():
          |        waitCnt2.din := waitCnt2 + d"8'1"
          |        ThisStep
          |      else NextStep
-         |      end if
          |    end S_1
          |    waitCnt2.din := d"8'0"
          |    x.din := 1
@@ -278,7 +275,6 @@ class DropRTWaitsSpec extends StageSpec():
          |        waitCnt1.din := waitCnt1 + d"8'1"
          |        ThisStep
          |      else NextStep
-         |      end if
          |    end S_0
          |    waitCnt1.din := d"8'0"
          |    x.din := !x
@@ -287,7 +283,6 @@ class DropRTWaitsSpec extends StageSpec():
          |        waitCnt2.din := waitCnt2 + d"8'1"
          |        ThisStep
          |      else NextStep
-         |      end if
          |    end S_1
          |    waitCnt2.din := d"8'0"
          |    x.din := 1
@@ -323,7 +318,6 @@ class DropRTWaitsSpec extends StageSpec():
          |            waitCnt2.din := waitCnt2 + d"8'1"
          |            ThisStep
          |          else NextStep
-         |          end if
          |        end S_0_0
          |        waitCnt2.din := d"8'0"
          |        x.din := !x
@@ -419,7 +413,6 @@ class DropRTWaitsSpec extends StageSpec():
          |          waitCnt1.din := waitCnt1 + d"8'1"
          |          ThisStep
          |        else NextStep
-         |        end if
          |      end S_1
          |      waitCnt1.din := d"8'0"
          |    else
