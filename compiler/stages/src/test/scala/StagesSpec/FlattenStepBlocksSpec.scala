@@ -413,7 +413,9 @@ class FlattenStepBlocksSpec extends StageSpec():
     )
   }
 
-  test("multiple inter-step statements from nested and conditional scopes collected before single NextStep") {
+  test(
+    "multiple inter-step statements from nested and conditional scopes collected before single NextStep"
+  ) {
     class Foo extends RTDesign:
       val a = Int <> OUT.REG
       val b = Int <> OUT.REG
@@ -459,6 +461,62 @@ class FlattenStepBlocksSpec extends StageSpec():
          |    def S_1: Step =
          |      S_0
          |    end S_1
+         |end Foo""".stripMargin
+    )
+  }
+  test("multiple steps nested inside the same conditional branch with inter-step statements") {
+    class Foo extends RTDesign:
+      val i = Int <> VAR.REG
+      process:
+        def S_0: Step =
+          NextStep
+        end S_0
+        i.din := 0
+        def S_1: Step =
+          if (i < 3)
+            println(s"Hello")
+            def S_1_0: Step =
+              NextStep
+            end S_1_0
+            println(s"World")
+            def S_1_1: Step =
+              NextStep
+            end S_1_1
+            println(s"!")
+            i.din := i + 1
+            ThisStep
+          else NextStep
+          end if
+        end S_1
+        finish()
+    end Foo
+    val top = (new Foo).flattenStepBlocks
+    assertCodeString(
+      top,
+      """|class Foo extends RTDesign:
+         |  val i = Int <> VAR.REG
+         |  process:
+         |    def S_0: Step =
+         |      i.din := 0
+         |      S_1
+         |    end S_0
+         |    def S_1: Step =
+         |      if (i < 3)
+         |        println(s"Hello")
+         |        S_1_0
+         |      else
+         |        finish()
+         |        S_0
+         |    end S_1
+         |    def S_1_0: Step =
+         |      println(s"World")
+         |      S_1_1
+         |    end S_1_0
+         |    def S_1_1: Step =
+         |      println(s"!")
+         |      i.din := i + 1
+         |      S_1
+         |    end S_1_1
          |end Foo""".stripMargin
     )
   }

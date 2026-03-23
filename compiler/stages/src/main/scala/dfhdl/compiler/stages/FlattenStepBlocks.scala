@@ -224,6 +224,13 @@ case object FlattenStepBlocks extends Stage:
     val consumedGoto = cbMembers.drop(sIdx + 1).collectFirst { case g: Goto => g }.get
     (cb, consumedGoto)
 
+  // Returns the next regular StepBlock sibling inside the same conditional branch, if any.
+  private def findNextStepInBranch(s: StepBlock)(using MemberGetSet): Option[StepBlock] =
+    val cb = s.getOwner.asInstanceOf[DFConditional.Block]
+    val cbMembers = cb.members(MemberView.Folded)
+    val sIdx = cbMembers.indexOf(s)
+    cbMembers.drop(sIdx + 1).collectFirst { case sb: StepBlock if sb.isRegular => sb }
+
   private def deepestLastChild(step: StepBlock)(using MemberGetSet): StepBlock =
     step.members(MemberView.Folded)
       .collect { case sb: StepBlock if sb.isRegular => sb }
@@ -232,8 +239,11 @@ case object FlattenStepBlocks extends Stage:
       case Some(last) => deepestLastChild(last)
 
   private def findNextStepGoto(step: StepBlock)(using MemberGetSet): Option[Goto] =
+    // Restrict to gotos whose enclosing StepBlock is `step` itself, not a nested step.
+    // Without this guard, pre-order DFS would find a nested step's Goto(NextStep) first,
+    // causing inter-step statements to be incorrectly moved into an inner step's body.
     step.members(MemberView.Flattened).collectFirst {
-      case g: Goto if g.stepRef.get == Goto.NextStep => g
+      case g: Goto if g.stepRef.get == Goto.NextStep && g.getOwnerStepBlock == step => g
     }
 
   // --- Phase 3: Goto ChangeRef patches (computed from original DB) ---
@@ -248,12 +258,16 @@ case object FlattenStepBlocks extends Stage:
     }
     val consumedGotos = conditionalBranchSteps.map(findConsumedGoto(_)._2).toSet
     val conditionalStepMap = conditionalBranchSteps.map { s =>
-      val (_, consumedGoto) = findConsumedGoto(s)
-      val target: StepBlock = consumedGoto.stepRef.get match
-        case sb: StepBlock  => sb
-        case Goto.ThisStep  => consumedGoto.getOwnerStepBlock
-        case Goto.NextStep  => nextStepMap(consumedGoto.getOwnerStepBlock)
-        case Goto.FirstStep => firstStep
+      // Non-last steps in a branch target the next step in the branch directly.
+      // Only the last step uses the branch-terminal consumed goto to find its target.
+      val target: StepBlock = findNextStepInBranch(s).getOrElse {
+        val (_, consumedGoto) = findConsumedGoto(s)
+        consumedGoto.stepRef.get match
+          case sb: StepBlock  => sb
+          case Goto.ThisStep  => consumedGoto.getOwnerStepBlock
+          case Goto.NextStep  => nextStepMap(consumedGoto.getOwnerStepBlock)
+          case Goto.FirstStep => firstStep
+      }
       s -> target
     }.toMap
     pb.members(MemberView.Flattened)
@@ -288,7 +302,13 @@ case object FlattenStepBlocks extends Stage:
       val cbMembers = cb.members(MemberView.Folded)
       val sIdx = cbMembers.indexOf(s)
       val consumedGotoIdx = cbMembers.indexOf(consumedGoto)
-      val interStepStmts = cbMembers.slice(sIdx + 1, consumedGotoIdx)
+      // When multiple steps share the same branch, only collect statements up to the next
+      // step (not all the way to the consumed goto). Otherwise the same statements would be
+      // collected for every step that precedes them, producing duplicate Move patches.
+      val upperIdx = findNextStepInBranch(s)
+        .map(cbMembers.indexOf)
+        .getOrElse(consumedGotoIdx)
+      val interStepStmts = cbMembers.slice(sIdx + 1, upperIdx)
         .filterNot(m => m.isInstanceOf[StepBlock] || m.isInstanceOf[Goto])
       val targetStep = deepestLastChild(s)
       findNextStepGoto(targetStep).toList.flatMap { nextStepGoto =>
@@ -343,19 +363,32 @@ case object FlattenStepBlocks extends Stage:
     }
     conditionalBranchSteps.flatMap { s =>
       val (cb, consumedGoto) = findConsumedGoto(s)
-      // Insert an explicit Goto to s at s's former position in the branch
-      val dsn = new MetaDesign(s, Patch.Add.Config.Before):
-        import dfhdl.core.*
-        Goto(s.refTW[Goto], dfc.ownerOrEmptyRef, dfc.getMeta, dfc.tags).addMember
-      // Remove the consumed goto
-      val removeConsumedGoto: (DFMember, Patch) = consumedGoto -> Patch.Remove()
+      val cbMembers = cb.members(MemberView.Folded)
+      val sIdx = cbMembers.indexOf(s)
+      val isFirstStepInBranch = !cbMembers.take(sIdx).exists(_.isInstanceOf[StepBlock])
+      val isLastStepInBranch = findNextStepInBranch(s).isEmpty
+      // Insert an explicit Goto to s at s's former position in the branch only for the first
+      // step. Subsequent steps in the same branch are reached via the preceding step's goto.
+      val dsnPatchOpt: Option[(DFMember, Patch)] =
+        if isFirstStepInBranch then
+          Some(
+            new MetaDesign(s, Patch.Add.Config.Before):
+              import dfhdl.core.*
+              Goto(s.refTW[Goto], dfc.ownerOrEmptyRef, dfc.getMeta, dfc.tags).addMember
+            .patch
+          )
+        else None
+      // Remove the consumed goto only for the last step so it is not removed twice when
+      // multiple steps share the same branch-terminal goto.
+      val removeConsumedGotoOpt: Option[(DFMember, Patch)] =
+        if isLastStepInBranch then Some(consumedGoto -> Patch.Remove()) else None
       // Move s and ALL its descendants to after the parent step at pb level.
       // Including descendants ensures the flat member list maintains valid ownership ordering.
       val parentStep = cb.getOwnerStepBlock
       val allMembersToMove = s :: s.members(MemberView.Flattened)
       val movePatch: (DFMember, Patch) =
         parentStep -> Patch.Move(allMembersToMove, cb, Patch.Move.Config.After)
-      List(dsn.patch, removeConsumedGoto, movePatch)
+      dsnPatchOpt.toList ++ List(movePatch) ++ removeConsumedGotoOpt
     }
   end collectConditionalExtractionPatches
 
