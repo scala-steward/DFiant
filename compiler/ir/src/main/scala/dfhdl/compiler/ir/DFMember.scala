@@ -108,7 +108,7 @@ end DFMember
 
 object DFMember:
   given ReadWriter[DFMember] = ReadWriter.merge(
-    summon[ReadWriter[DFMember.Empty.type]],
+    summon[ReadWriter[DFMember.Empty]],
     summon[ReadWriter[DFVal]],
     summon[ReadWriter[Statement]],
     summon[ReadWriter[DFInterfaceOwner]],
@@ -161,6 +161,12 @@ object DFMember:
     lazy val getRefs: List[DFRef.TwoWayAny] = Nil
     def copyWithNewRefs(using RefGen): this.type = this
   case object Empty extends Empty:
+    given ReadWriter[Empty] = ReadWriter.merge(
+      summon[ReadWriter[Empty.type]],
+      summon[ReadWriter[Goto.ThisStep.type]],
+      summon[ReadWriter[Goto.NextStep.type]],
+      summon[ReadWriter[Goto.FirstStep.type]]
+    )
     given ReadWriter[Empty.type] = macroRW
 
   sealed trait Named extends DFMember:
@@ -1112,8 +1118,11 @@ end Goto
 
 object Goto:
   case object ThisStep extends DFMember.Empty
+  given ReadWriter[ThisStep.type] = macroRW
   case object NextStep extends DFMember.Empty
+  given ReadWriter[NextStep.type] = macroRW
   case object FirstStep extends DFMember.Empty
+  given ReadWriter[FirstStep.type] = macroRW
   type Ref = DFRef.TwoWay[StepBlock | ThisStep.type | NextStep.type | FirstStep.type, Goto]
 
 sealed trait DFOwner extends DFMember:
