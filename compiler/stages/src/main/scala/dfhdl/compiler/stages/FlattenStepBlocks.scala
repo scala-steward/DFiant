@@ -166,7 +166,7 @@ import scala.annotation.tailrec
   */
 //format: on
 case object FlattenStepBlocks extends Stage:
-  def dependencies: List[Stage] = List(DropRTWaits)
+  def dependencies: List[Stage] = List(DropRTWaits, ExplicitNamedVars, DropLocalDcls)
   def nullifies: Set[Stage] = Set()
 
   def transform(designDB: DB)(using MemberGetSet, CompilerOptions): DB =
@@ -174,13 +174,13 @@ case object FlattenStepBlocks extends Stage:
     // Phase 3 ChangeRef patches are computed from the original DB.
     val gotoPatchList = designDB.members.view.flatMap {
       case pb: ProcessBlock if pb.isInRTDomain => collectGotoPatches(pb)
-      case _                                    => Nil
+      case _                                   => Nil
     }.toList
     // Phase 0: inter-step relocation (Step 5 inter-step + Step 6)
     val db0 = designDB.patch(
       designDB.members.view.flatMap {
         case pb: ProcessBlock if pb.isInRTDomain => collectInterStepPatches(pb)
-        case _                                    => Nil
+        case _                                   => Nil
       }.toList
     )
     // Phase 1: conditional branch extraction (uses db0 for updated member structure)
@@ -189,7 +189,7 @@ case object FlattenStepBlocks extends Stage:
       db0.patch(
         db0.members.view.flatMap {
           case pb: ProcessBlock if pb.isInRTDomain => collectConditionalExtractionPatches(pb)
-          case _                                    => Nil
+          case _                                   => Nil
         }.toList
       )
     }
@@ -204,7 +204,7 @@ case object FlattenStepBlocks extends Stage:
     given MemberGetSet = db.getSet
     val patches = db.members.view.flatMap {
       case pb: ProcessBlock if pb.isInRTDomain => collectFlattenPatchesOneLevel(pb)
-      case _                                    => Nil
+      case _                                   => Nil
     }.toList
     if patches.isEmpty then db
     else flattenRepeatedly(db.patch(patches))
@@ -260,7 +260,7 @@ case object FlattenStepBlocks extends Stage:
       .collect { case g: Goto if !consumedGotos.contains(g) => g }
       .flatMap { g =>
         g.stepRef.get match
-          case _: StepBlock => None
+          case _: StepBlock  => None
           case Goto.ThisStep =>
             Some(g -> Patch.ChangeRef(_.asInstanceOf[Goto].stepRef, g.getOwnerStepBlock))
           case Goto.FirstStep =>
@@ -326,6 +326,7 @@ case object FlattenStepBlocks extends Stage:
               }
             }
         }
+      end if
     }
     step5InterStep ++ step6
   end collectInterStepPatches
