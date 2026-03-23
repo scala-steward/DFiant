@@ -599,4 +599,20 @@ class DropRTWaitsSpec extends StageSpec():
          |end Foo""".stripMargin
     )
   }
+  test("empty loop") {
+    class Foo extends RTDesign:
+      process:
+        while (true) {}
+    val top = (new Foo).dropRTWaits
+    assertCodeString(
+      top,
+      """|class Foo extends RTDesign:
+         |  process:
+         |    def S_0: Step =
+         |      if (true) ThisStep
+         |      else NextStep
+         |    end S_0
+         |end Foo""".stripMargin
+    )
+  }
 end DropRTWaitsSpec

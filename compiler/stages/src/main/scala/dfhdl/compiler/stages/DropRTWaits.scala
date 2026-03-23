@@ -246,42 +246,65 @@ case object DropRTWaits extends Stage:
           // transform a while loop into a step block.
           case wb: DFLoop.DFWhileBlock if !wb.isCombinational =>
             val stepName = getStepName(wb)
-            // the last member of the while loop is the exit member.
-            val lastLoopMember = wb.getVeryLastMember.get
-            // creating the if part of the while loop step block.
-            val stepAndIfDsn = new MetaDesign(
-              wb,
-              Patch.Add.Config.ReplaceWithLast(Patch.Replace.Config.FullReplacement)
-            ):
-              import dfhdl.core.{StepBlock, DFIf, DFBool, DFUnit}
-              val step = StepBlock.forced(using dfc.setName(stepName))
-              dfc.enterOwner(step)
-              val wbGuard = wb.guardRef.get
-              if (wb.isFallThrough)
-                val fallThrough = StepBlock.forced(using dfc.setName("fallThrough"))
-                dfc.enterOwner(fallThrough)
-                val clonedCond = !wbGuard.cloneAnonValueAndDepsHere.asValOf[DFBool]
-                dfhdl.core.DFVal.Alias.AsIs.ident(clonedCond)(using dfc.anonymize)
-                dfc.exitOwner()
-              end if
-              val cond = wbGuard.asValOf[DFBool]
-              val ifBlock = DFIf.Block(Some(cond), DFIf.Header(DFUnit))
-              dfc.exitOwner()
-            // creating the else part of the while loop step block, to be applied when the while loop exits.
-            val elseDsn = new MetaDesign(
-              lastLoopMember,
-              Patch.Add.Config.After
-            ):
-              import dfhdl.core.DFIf
-              dfc.enterOwner(stepAndIfDsn.ifBlock)
-              ThisStep
-              dfc.exitOwner()
-              val elseBlock = DFIf.Block(None, stepAndIfDsn.ifBlock)
-              dfc.enterOwner(elseBlock)
-              NextStep
-              dfc.exitOwner()
-            enterStepBlock(wb, lastLoopMember, Some(elseDsn.patch._2))
-            Some(stepAndIfDsn.patch)
+            wb.getVeryLastMember match
+              // Empty loop body: generate the complete step+if/else structure in one shot.
+              case None =>
+                nextStepBlock()
+                val dsn = new MetaDesign(
+                  wb,
+                  Patch.Add.Config.ReplaceWithLast(Patch.Replace.Config.FullReplacement)
+                ):
+                  import dfhdl.core.{StepBlock, DFIf, DFBool, DFUnit}
+                  val step = StepBlock.forced(using dfc.setName(stepName))
+                  dfc.enterOwner(step)
+                  val wbGuard = wb.guardRef.get
+                  val cond = wbGuard.asValOf[DFBool]
+                  val ifBlock = DFIf.Block(Some(cond), DFIf.Header(DFUnit))
+                  dfc.exitOwner()
+                  dfc.enterOwner(ifBlock)
+                  ThisStep
+                  dfc.exitOwner()
+                  val elseBlock = DFIf.Block(None, ifBlock)
+                  dfc.enterOwner(elseBlock)
+                  NextStep
+                  dfc.exitOwner()
+                Some(dsn.patch)
+              // Non-empty loop body: the last member of the while loop is the exit member.
+              case Some(lastLoopMember) =>
+                // creating the if part of the while loop step block.
+                val stepAndIfDsn = new MetaDesign(
+                  wb,
+                  Patch.Add.Config.ReplaceWithLast(Patch.Replace.Config.FullReplacement)
+                ):
+                  import dfhdl.core.{StepBlock, DFIf, DFBool, DFUnit}
+                  val step = StepBlock.forced(using dfc.setName(stepName))
+                  dfc.enterOwner(step)
+                  val wbGuard = wb.guardRef.get
+                  if (wb.isFallThrough)
+                    val fallThrough = StepBlock.forced(using dfc.setName("fallThrough"))
+                    dfc.enterOwner(fallThrough)
+                    val clonedCond = !wbGuard.cloneAnonValueAndDepsHere.asValOf[DFBool]
+                    dfhdl.core.DFVal.Alias.AsIs.ident(clonedCond)(using dfc.anonymize)
+                    dfc.exitOwner()
+                  end if
+                  val cond = wbGuard.asValOf[DFBool]
+                  val ifBlock = DFIf.Block(Some(cond), DFIf.Header(DFUnit))
+                  dfc.exitOwner()
+                // creating the else part of the while loop step block, to be applied when the while loop exits.
+                val elseDsn = new MetaDesign(
+                  lastLoopMember,
+                  Patch.Add.Config.After
+                ):
+                  import dfhdl.core.DFIf
+                  dfc.enterOwner(stepAndIfDsn.ifBlock)
+                  ThisStep
+                  dfc.exitOwner()
+                  val elseBlock = DFIf.Block(None, stepAndIfDsn.ifBlock)
+                  dfc.enterOwner(elseBlock)
+                  NextStep
+                  dfc.exitOwner()
+                enterStepBlock(wb, lastLoopMember, Some(elseDsn.patch._2))
+                Some(stepAndIfDsn.patch)
           // onEntry/onExit/fallThrough blocks must NOT be renamed: DropRTProcess identifies them
           // by exact names "onEntry"/"onExit"/"fallThrough" via isOnEntry/isOnExit/isFallThrough.
           // They also must NOT affect the step-name counter of their enclosing scope.
