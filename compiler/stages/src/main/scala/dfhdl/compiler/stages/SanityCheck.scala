@@ -41,6 +41,18 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
         case m: DFDesignBlock if !m.isTop =>
           if (!refTable.contains(m.ownerRef))
             reportViolation(s"Missing owner ref for the member: $m")
+        // check that all blocks in a conditional chain share the same owner
+        case cb: DFConditional.Block =>
+          cb.prevBlockOrHeaderRef.get match
+            case prevBlock: DFConditional.Block if prevBlock.getOwner != cb.getOwner =>
+              reportViolation(
+                s"""|Conditional block chain has mismatched owners.
+                    |Block:      $cb
+                    |Owner:      ${cb.getOwner}
+                    |Prev block: $prevBlock
+                    |Prev owner: ${prevBlock.getOwner}""".stripMargin
+              )
+            case _ =>
         // check by-name selectors
         case pbns: DFVal.PortByNameSelect =>
           val design = pbns.designInstRef.get
