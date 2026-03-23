@@ -744,11 +744,80 @@ Key invariants:
 - `given MemberGetSet = db.getSet` must be re-established at the top of each recursive call so
   navigation helpers see the updated member structure.
 
+### Pattern 10 — Replace a DFOwner while preserving its children
+
+Use when you want to swap one owner block for another (e.g. `DFForBlock` → `DFWhileBlock`) but
+keep all body members in place. `ReplaceWithLast(ChangeRefAndRemove)` redirects **all** refs to
+the old owner — including every child member's `ownerRef` — to the new owner (the last member
+synthesised in the MetaDesign). Body members naturally remain in the flat list at their correct
+positions, now re-parented to the new block. No `plantMembers` is needed.
+
+```scala
+case forBlock: DFLoop.DFForBlock if forBlock.isInRTDomain =>
+  val m1 = new MetaDesign(
+    forBlock,
+    Patch.Add.Config.ReplaceWithLast(Patch.Replace.Config.ChangeRefAndRemove),
+    dfhdl.core.DomainType.RT(dfhdl.core.RTDomainCfg.Derived)
+  ):
+    // preamble members (e.g. iterator VAR.REG, guard expression) ...
+    val whileBlock = dfhdl.core.DFWhile.Block(guard)(using dfc.setMeta(forBlock.meta))
+    dfc.enterOwner(whileBlock)   // required so whileBlock is a proper owner in the DB
+    dfc.exitOwner()
+  // capture M1 members for use in further patches
+  val newIterDclIR = m1.newIterDcl.asIR
+  List(m1.patch, ...)
+```
+
+The `dfc.enterOwner` / `dfc.exitOwner` pair is required for the new owner (here `whileBlock`) to
+be registered in the DB's ownership context so that child member navigation works correctly.
+
+### Pattern 11 — Two-MetaDesign pattern: append members at end of a re-owned body
+
+Use when you need to inject members **after the last body member** of a block that is being
+replaced by Pattern 10. Anchor M2 at `bodyMembers.last` with `After`. M2's `injectedOwner` is
+`bodyMembers.last.getOwner = oldBlock`. When M1's `ChangeRefAndRemove` redirects refs to the old
+block → new block, M2's members' `ownerRef`s are also redirected, placing them correctly as the
+last statements inside the new block.
+
+```scala
+val forBodyMembers = forBlock.members(MemberView.Folded)
+// M1: replace forBlock with whileBlock (Pattern 10) ...
+if forBodyMembers.nonEmpty then
+  val m2 = new MetaDesign(
+    forBodyMembers.last,
+    Patch.Add.Config.After,
+    dfhdl.core.DomainType.RT(dfhdl.core.RTDomainCfg.Derived)
+  ):
+    // members here are owned by forBodyMembers.last.getOwner = forBlock
+    // after M1's ChangeRefAndRemove, their ownerRefs are redirected to whileBlock
+    m1.newIterDcl.din := m1.newIterDcl + stepConst   // cross-MetaDesign ref is fine
+  List(m1.patch, iterDclPatch, m2.patch)
+else List(m1.patch, iterDclPatch)
+```
+
+**Cross-MetaDesign references**: Members declared with `val` in M1 body are accessible as
+`m1.memberName` (MetaDesign extends `reflect.Selectable`). They can be used inside M2's body
+via closure; the symbolic refs resolve correctly in the final DB because M1's members are present
+after all patches are applied.
+
+**Returning multiple patches per case**: use `.flatMap { ... }` (not `.collect { ... }.flatten`)
+and return `List(...)` from the case; return `None` from the catch-all `case _ =>`. Both `Option`
+and `List` are `IterableOnce`, so `flatMap` handles them uniformly.
+
 ---
 
 ## Boilerplate Template
 
 ### Stage file: `compiler/stages/src/main/scala/dfhdl/compiler/stages/MyStage.scala`
+
+### Stage ScalaDoc guidelines
+
+- Wrap the ScalaDoc comment with `//format: off` / `//format: on` (scalafmt reformats `{{{ }}}` blocks and `==Headings==` if left unguarded).
+- Use `==Rule N: Title==` ScalaDoc sections for each distinct transformation rule.
+- Use `{{{ }}}` code blocks (not ` ```scala ` fences) for before/after examples.
+- Each code block should start with `// Before` and `// After` comment lines.
+- Before/after examples should show the construct in context (e.g. with a preceding statement), not as the first and only statement in a process — this makes the placement of generated members unambiguous.
+- Do NOT include Idempotency or Determinism sections — those are implementation invariants, not user-facing documentation.
 
 ```scala
 package dfhdl.compiler.stages
@@ -758,11 +827,24 @@ import dfhdl.compiler.ir.*
 import dfhdl.compiler.patching.*
 import dfhdl.options.CompilerOptions
 
-/**
-  * Describe what this stage does, why it exists, input/output IR shapes, and ordering/resolution
-  * rules if applicable. Do NOT include Idempotency or Determinism sections — those are
-  * implementation invariants enforced by the infrastructure, not user-facing documentation.
+//format: off
+/** Brief description of what this stage does and which IR shapes it transforms.
+  *
+  * ==Rule 1: Title of first transformation==
+  *
+  * Prose explanation of the rule.
+  * {{{
+  * // Before
+  * <input IR shape>
+  *
+  * // After
+  * <output IR shape>
+  * }}}
+  *
+  * ==Rule 2: Title of second transformation==
+  * ...
   */
+//format: on
 case object MyStage extends Stage:
   def dependencies: List[Stage] = List(SomePriorStage)   // run these first
   def nullifies: Set[Stage]     = Set(SomeInvalidatedStage)
@@ -882,6 +964,33 @@ abstract class StageSpec(stageCreatesUnrefAnons: Boolean = false)
 13. **Using `dfc.owner.ref` inside MetaDesign** — `import dfhdl.core.*` introduces extension
     methods that conflict with `.ref`. Use `dfc.ownerOrEmptyRef` instead to obtain the owner's
     `ir.DFOwner.Ref` when constructing raw IR members.
+14. **`DFBlock` subtypes lack `isAnonymous` / `getName`** — these helpers are extension methods on
+    `DFMember.Named` (value types), not on blocks. For `DFForBlock`, `DFWhileBlock`, and similar,
+    access the name via `block.meta.nameOpt` directly:
+    ```scala
+    val iterName = forBlock.meta.nameOpt match
+      case None       => iteratorDcl.getName
+      case Some(name) => s"${name}_${iteratorDcl.getName}"
+    ```
+15. **Case-class extractor `DFForBlock()` requires all fields** — writing `case x @ DFLoop.DFForBlock()`
+    fails with "wrong number of argument patterns" because `DFForBlock` has multiple fields. Use a
+    type pattern instead: `case x: DFLoop.DFForBlock`. The same applies to other multi-field IR
+    case classes that have no dedicated single-argument unapply.
+
+---
+
+## API Notes
+
+### `dfhdl.core.DFInt32`
+
+Available as both a type alias and a value (`ir.DFInt32.asFE[DFInt32]`). Use it inside MetaDesign
+bodies to create 32-bit signed integer variables:
+
+```scala
+dfhdl.core.DFInt32.<>(VAR.REG).initForced(List(initConst))(using dfc.setName("i"))
+```
+
+This mirrors the `iterType.<>(VAR.REG)` pattern used for UInt variables.
 
 ---
 
