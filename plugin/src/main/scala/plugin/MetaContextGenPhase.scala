@@ -33,7 +33,6 @@ class MetaContextGenPhase(setting: Setting) extends CommonPhase:
   var treeOwnerApplyMap = Map.empty[Apply, (MemberDef, util.SrcPos)]
   var treeOwnerApplyMapStack = List.empty[Map[Apply, (MemberDef, util.SrcPos)]]
   val treeOwnerOverrideMap = mutable.Map.empty[DefDef, (Tree, util.SrcPos)]
-  val corruptedDFCDefMap = mutable.Map.empty[DefDef, (Symbol, util.SrcPos)]
   val contextDefs = mutable.Map.empty[String, Tree]
   var clsStack = List.empty[TypeDef]
   var applyStack = List.empty[Apply]
@@ -154,7 +153,8 @@ class MetaContextGenPhase(setting: Setting) extends CommonPhase:
     val origApply = applyStack.head
     applyStack = applyStack.drop(1)
     if (
-      fixedApply.tpe.isParameterless && !fixedApply.fun.symbol.ignoreMetaContext && !fixedApply.fun.symbol.forwardMetaContext
+      fixedApply.tpe.isParameterless && !fixedApply.fun.symbol.ignoreMetaContext &&
+      !fixedApply.fun.symbol.forwardMetaContext
     )
       fixedApply match
         // found a context argument
@@ -193,13 +193,11 @@ class MetaContextGenPhase(setting: Setting) extends CommonPhase:
       case _ :+ (cls @ TypeDef(_, template: Template)) if cls.symbol.isAnonymousClass =>
         template.parents.collectFirst { case p: Apply =>
           template.body.collectFirst {
-            case dd: DefDef if dd.symbol.name.toString == "__dfc" && dd.tpt.tpe.isMetaContext =>
-              if (dd.symbol.is(Override))
-                if (!treeOwnerOverrideMap.contains(dd))
-                  treeOwnerOverrideMap += (dd -> (EmptyTree, p.srcPos))
-              else if (cls.symbol.typeRef <:< hasDFCTpe)
-                if (!corruptedDFCDefMap.contains(dd))
-                  corruptedDFCDefMap += (dd -> (cls.symbol, p.srcPos))
+            case dd: DefDef
+                if dd.symbol.is(Override) && dd.symbol.name.toString == "__dfc" &&
+                  dd.tpt.tpe.isMetaContext =>
+              if (!treeOwnerOverrideMap.contains(dd))
+                treeOwnerOverrideMap += (dd -> (EmptyTree, p.srcPos))
           }
         }
       case _ =>
@@ -219,18 +217,7 @@ class MetaContextGenPhase(setting: Setting) extends CommonPhase:
                 cpy.DefDef(tree)(rhs = tree.rhs.setMeta(None, srcPos, None, Nil))
               else tree
         case None => tree
-      else
-        corruptedDFCDefMap.get(tree) match
-          case Some(ownerCls, srcPos) =>
-            val newSym = newSymbol(
-              ownerCls,
-              "__dfc".toTermName,
-              Override | Protected | Method | Touched,
-              sym.info
-            )
-            DefDef(newSym, tree.rhs.setMeta(None, srcPos, None, Nil))
-          case None =>
-            dropProxies(tree)
+      else dropProxies(tree)
     else tree
   end transformDefDef
 
@@ -404,8 +391,10 @@ class MetaContextGenPhase(setting: Setting) extends CommonPhase:
     tree match
       case Apply(Select(lhs, fun), List(rhs))
           if (fun == nme.EQ || fun == nme.NE) &&
-            (lhs.tpe <:< defn.IntType || lhs.tpe <:< defn.BooleanType || lhs.tpe <:< defn
-              .TupleTypeRef) =>
+            (lhs.tpe <:< defn.IntType || lhs.tpe <:< defn.BooleanType ||
+              lhs.tpe <:<
+              defn
+                .TupleTypeRef) =>
         val rhsSym = rhs.tpe.dealias.typeSymbol
         if (rhsSym == dfValSym)
           report.error(
@@ -413,7 +402,8 @@ class MetaContextGenPhase(setting: Setting) extends CommonPhase:
             pos
           )
       case Apply(Select(lhs, fun), List(Apply(Apply(Ident(hackName), _), _)))
-          if (fun == nme.ZOR || fun == nme.ZAND || fun == nme.XOR) && hackName.toString == "BooleanHack" =>
+          if (fun == nme.ZOR || fun == nme.ZAND || fun == nme.XOR) &&
+            hackName.toString == "BooleanHack" =>
         report.error(
           s"Unsupported Scala Boolean primitive at the LHS of `$fun` with a DFHDL value.\nConsider switching positions of the arguments.",
           pos
@@ -526,7 +516,6 @@ class MetaContextGenPhase(setting: Setting) extends CommonPhase:
     setMetaSym = metaContextCls.requiredMethod("setMeta")
     setMetaAnonSym = metaContextCls.requiredMethod("setMetaAnon")
     treeOwnerOverrideMap.clear()
-    corruptedDFCDefMap.clear()
     contextDefs.clear()
     ctx
   end prepareForUnit

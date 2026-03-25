@@ -224,7 +224,7 @@ sealed trait DFVal extends DFMember.Named:
           if dfType == relVal.dfType =>
         stripAsIsAndDesignParam(relVal)
       case dp: DFVal.DesignParam =>
-        stripAsIsAndDesignParam(dp.dfValRef.get)
+        stripAsIsAndDesignParam(dp.dfVal)
       case _ => dfVal
     // TODO: maybe we need a better way to check equivalent expressions, with symbolic algebra comparison?
     // with such comparison, it is possible to simplify expressions at least in the common cases.
@@ -457,10 +457,20 @@ object DFVal:
       tags: DFTags
   ) extends CanBeExpr derives ReadWriter:
     assert(!this.isAnonymous, "Design parameters cannot be anonymous.")
-    def dfValRef(using MemberGetSet): DFDesignBlock.ParamRef = getOwnerDesign.paramMap(getName)
+    // the value will be cached during elaboration, because the reference via the design's paramMap
+    // will not be available until the design is fully elaborated. during initial contruction and mutation,
+    // the value will be cached in core.DFVal.DesignParam, and later cleared in core.Design
+    private var cachedVal: Option[DFVal] = None
+    protected[compiler] def dfValRef(using MemberGetSet): DFDesignBlock.ParamRef =
+      getOwnerDesign.paramMap(getName)
+    def dfVal(using MemberGetSet): DFVal =
+      if (getSet.isMutable) cachedVal.getOrElse(dfValRef.get)
+      else dfValRef.get
+    protected[dfhdl] def setCachedVal(dfVal: DFVal): Unit =
+      cachedVal = Some(dfVal)
+    protected[dfhdl] def clearCachedVal(): Unit = cachedVal = None
     protected def protIsFullyAnonymous(using MemberGetSet): Boolean = false
-    protected def protGetConstData(using MemberGetSet): Option[Any] =
-      dfValRef.get.getConstData
+    protected def protGetConstData(using MemberGetSet): Option[Any] = dfVal.getConstData
     protected def `prot_=~`(that: DFMember)(using MemberGetSet): Boolean = that match
       case that: DesignParam =>
         // design parameters are considered to be the same even if they are referencing

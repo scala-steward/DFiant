@@ -51,7 +51,6 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
   var listMapEmptySym: TermSymbol = uninitialized
   var listMapSym: TermSymbol = uninitialized
   var dfhdlDFValIdentSym: TermSymbol = uninitialized
-  var prepareDesignParamValuesSym: TermSymbol = uninitialized
   val defaultParamMap = mutable.Map.empty[ClassSymbol, Map[Int, Tree]]
   override def prepareForTypeDef(tree: TypeDef)(using Context): Context =
     val sym = tree.symbol
@@ -206,78 +205,33 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
       case _ =>
     tree
 
-  private def dfcGen(owner: Symbol, treeSrcPos: util.SrcPos)(using
-      Context
-  ): (tree: Tree, valDefOpt: Option[ValDef]) =
-    // getting DFC context from the stack or need to generate an empty one
-    // with elaboration options found in the @top annotation
-    dfcArgStack.headOption match
-      case Some(dfcTree) => (dfcTree, None)
-      case None          =>
-        val value = owner.getAnnotation(topAnnotSym).map(a => dropProxies(a.tree)) match
-          // found top annotation
-          case Some(Apply(Apply(Apply(_, _), _), topElaborationOptionsTree :: _)) =>
-            ref(emptyDFCSym).appliedTo(topElaborationOptionsTree)
-          // no top
-          case _ =>
-            var currentOwner = owner.owner
-            while (currentOwner != NoSymbol && !(currentOwner.typeRef <:< noTopAnnotIsRequired))
-              currentOwner = currentOwner.owner
-            // no top, but if has an owner that extends `NoTopAnnotIsRequired`,
-            // we generate new context with default elaboration options
-            if (currentOwner.typeRef <:< noTopAnnotIsRequired) ref(emptyNoEODFCSym)
-            else
-              report.error(
-                "Missing `@top` annotation for this design to be instantiated as a top-level design.",
-                treeSrcPos
-              )
-              EmptyTree
-        val flags: FlagSet = if (ctx.owner.isConstructor) Private else EmptyFlags
-        val valDef = SyntheticValDef("dfcGen_plugin".toTermName, value, flags)
-        (ref(valDef.symbol), Some(valDef))
-  end dfcGen
-
-  private def dfcOverrideDef(owner: Symbol, dfcTree: Tree)(using Context): Tree =
+  private def dfcOverrideDef(owner: Symbol, treeSrcPos: util.SrcPos)(using Context): Tree =
     val sym =
       newSymbol(owner, "__dfc".toTermName, Override | Protected | Method | Touched, dfcTpe)
-    DefDef(sym, dfcTree)
+    // getting DFC context from the stack or need to generate an empty one
+    // with elaboration options found in the @top annotation
+    val dfcArg = dfcArgStack.headOption.getOrElse {
+      owner.getAnnotation(topAnnotSym).map(a => dropProxies(a.tree)) match
+        // found top annotation
+        case Some(Apply(Apply(Apply(_, _), _), topElaborationOptionsTree :: _)) =>
+          ref(emptyDFCSym).appliedTo(topElaborationOptionsTree)
+        // no top
+        case _ =>
+          var currentOwner = owner.owner
+          while (currentOwner != NoSymbol && !(currentOwner.typeRef <:< noTopAnnotIsRequired))
+            currentOwner = currentOwner.owner
+          // no top, but if has an owner that extends `NoTopAnnotIsRequired`,
+          // we generate new context with default elaboration options
+          if (currentOwner.typeRef <:< noTopAnnotIsRequired) ref(emptyNoEODFCSym)
+          else
+            report.error(
+              "Missing `@top` annotation for this design to be instantiated as a top-level design.",
+              treeSrcPos
+            )
+            EmptyTree
+    }
+    DefDef(sym, dfcArg)
   end dfcOverrideDef
-
-  private def prepareDesignParamValuesTree(tree: Tree, dfcTree: Tree)(using
-      Context
-  ): (valDefs: List[ValDef], parent: Tree, prepareTreeOpt: Option[Tree]) =
-    val tpe = tree.tpe
-    var valDefs: List[ValDef] = Nil
-    // naming the arguments before extending the tree as as parent because
-    // otherwise ownership and references need to change.
-    def nameArgs(tree: Tree): Tree =
-      tree match
-        case Apply(fun, args) =>
-          val updatedArgs = args.map { a =>
-            val uniqueName = NameKinds.UniqueName.fresh(s"arg_plugin".toTermName)
-            val valDef = SyntheticValDef(uniqueName, a)
-            valDefs = valDef :: valDefs
-            ref(valDef.symbol)
-          }
-          Apply(nameArgs(fun), updatedArgs)
-        case _ => tree
-    val parent = nameArgs(tree)
-    val prepareTreeOpt =
-      if (tpe <:< designTpe) then
-        val allParams =
-          tpe.typeSymbol.primaryConstructor.paramSymss.flatten.filter(_.isTerm)
-        val dfValPairs = allParams.lazyZip(valDefs.reverse).collect {
-          case (sym, vd: ValDef) if sym.info.dfValTpeOpt.nonEmpty =>
-            (Literal(Constant(sym.name.toString)): Tree, ref(vd.symbol))
-        }.toList
-        if (dfValPairs.nonEmpty) then
-          val names = mkList(dfValPairs.map(_._1), Some(defn.StringType))
-          val values = mkList(dfValPairs.map(_._2))
-          Some(ref(prepareDesignParamValuesSym).appliedTo(names, values).appliedTo(dfcTree))
-        else None
-      else None
-    (valDefs, parent, prepareTreeOpt)
-  end prepareDesignParamValuesTree
 
   override def transformApply(tree: Apply)(using Context): Tree =
     val tpe = tree.tpe
@@ -298,47 +252,48 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
         )
         cls.addAnnotations(tpe.typeSymbol.annotations)
         val constr = newConstructor(cls, Synthetic, Nil, Nil).entered
-        val dfc = dfcGen(cls, tree.srcPos)
-        val od = dfcOverrideDef(cls, dfc.tree)
-        val origSym = tpe.typeSymbol
-        val (valDefs, parent, prepareOpt) = prepareDesignParamValuesTree(tree, dfc.tree)
+        var valDefs: List[ValDef] = Nil
+        // naming the arguments before extending the tree as as parent because
+        // otherwise ownership and references need to change.
+        def nameArgs(tree: Tree): Tree =
+          tree match
+            case Apply(fun, args) =>
+              val updatedArgs = args.map { a =>
+                val uniqueName = NameKinds.UniqueName.fresh(s"arg_plugin".toTermName)
+                val valDef = SyntheticValDef(uniqueName, a)
+                valDefs = valDef :: valDefs
+                ref(valDef.symbol)
+              }
+              Apply(nameArgs(fun), updatedArgs)
+            case _ => tree
+        val parent = nameArgs(tree)
+        val od = dfcOverrideDef(cls, tree.srcPos)
         val cdef = ClassDefWithParents(cls, DefDef(constr), List(parent), List(od))
         Block(
-          valDefs.reverse ++ dfc.valDefOpt ++ prepareOpt :+ cdef,
+          valDefs.reverse :+ cdef,
           Typed(New(Ident(cdef.namedType)).select(constr).appliedToNone, TypeTree(tpe))
         )
       case _ => tree
     end match
   end transformApply
-  override def transformBlock(block: Block)(using Context): tpd.Tree =
-    block match
+  override def transformBlock(tree: Block)(using Context): tpd.Tree =
+    tree match
       case Block(
             List(td @ TypeDef(tn, template: Template)),
-            Typed(apply: Apply, tpt)
-          ) if block.tpe.typeConstructor <:< hasDFCTpe =>
+            Typed(apply @ Apply(fun, _), _)
+          ) if tree.tpe.typeConstructor <:< hasDFCTpe =>
         val hasDFCOverride = template.body.exists {
           case dd: DefDef if dd.name.toString == "__dfc" => true
           case _                                         => false
         }
-        if (hasDFCOverride) block
+        if (hasDFCOverride) tree
         else
-          val dfc = dfcGen(td.symbol, block.srcPos)
-          val od = dfcOverrideDef(td.symbol, dfc.tree)
-          val (valDefs, parent, prepareOpt) =
-            prepareDesignParamValuesTree(
-              template.parents.head.changeOwner(template.constr.symbol, ctx.owner),
-              dfc.tree
-            )
-          val updatedTemplate =
-            cpy.Template(template)(body = od :: template.body, parents = List(parent))
+          val od = dfcOverrideDef(td.symbol, tree.srcPos)
+          val updatedTemplate = cpy.Template(template)(body = od :: template.body)
           val updatedTypeDef = cpy.TypeDef(td)(rhs = updatedTemplate)
-          Block(
-            valDefs.reverse ++ dfc.valDefOpt ++ prepareOpt :+ updatedTypeDef,
-            block.expr
-          )
-        end if
+          cpy.Block(tree)(stats = List(updatedTypeDef), expr = tree.expr)
       case _ =>
-        block
+        tree
   // transform basic val x = y to val x = dfhdl.core.r__For_Plugin.identVal(y) if y is a DFVal
   override def transformValDef(tree: ValDef)(using Context): ValDef =
     object DFValIdent:
@@ -378,8 +333,6 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
     listMapEmptySym = requiredMethod("scala.collection.immutable.ListMap.empty")
     listMapSym = requiredModule("scala.collection.immutable.ListMap")
     dfhdlDFValIdentSym = requiredMethod("dfhdl.core.r__For_Plugin.identVal")
-    prepareDesignParamValuesSym =
-      requiredMethod("dfhdl.core.r__For_Plugin.prepareDesignParamValues")
     dfcArgStack = Nil
     defaultParamMap.clear()
     ctx

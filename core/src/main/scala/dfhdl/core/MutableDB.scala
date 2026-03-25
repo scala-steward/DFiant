@@ -190,10 +190,7 @@ final class MutableDB():
       var isDuplicate = false
       def sameDesignAs(groupDesign: DFDesignBlock): Boolean =
         if (design.dclMeta == groupDesign.dclMeta)
-          val groupMembers = designMembers(groupDesign)
-          if (currentMembers.length == groupMembers.length)
-            (currentMembers lazyZip groupMembers).forall { case (l, r) => l =~ r }
-          else false
+          currentMembers =~ designMembers(groupDesign)
         else false
       uniqueDesigns.get(designType) match
         // this design type already exists and has at least one group
@@ -224,10 +221,13 @@ final class MutableDB():
         // so they are kept as duplicates in the design instances
         val publicMembers = currentMembers.filterPublicMembers
         designMembers += design -> publicMembers
-        val transferredRefs = publicMembers.view.flatMap(m =>
-          (m.ownerRef -> currentRefTable(m.ownerRef)) ::
-            m.getRefs.map(r => r -> currentRefTable(r))
-        )
+        val transferredRefs =
+          // getting the design references to parameters
+          design.getRefs.map(r => r -> currentRefTable(r)) ++
+            publicMembers.view.flatMap(m =>
+              (m.ownerRef -> currentRefTable(m.ownerRef)) ::
+                m.getRefs.map(r => r -> currentRefTable(r))
+            )
         stack.head.refTable ++= transferredRefs
       else
         designMembers += design -> currentMembers

@@ -139,6 +139,7 @@ object r__For_Plugin:
     }
     val (isDuplicate, ret): (Boolean, V) =
       dfc.mutableDB.DesignContext.runFuncWithInputs(func, inputs)
+    Design.Block.updateWithParams(designBlock.asIR)
     def exitAndConnectInputs() =
       dfc.exitOwner()
       inputs.lazyZip(args).foreach { case (input, (arg, _)) =>

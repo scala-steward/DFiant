@@ -642,6 +642,7 @@ object DFVal extends DFValLP:
   end Const
 
   object DesignParam:
+    // Note: in meta-programming, the user needs to manually set the Design's paramMap.
     def apply[T <: DFTypeAny](
         dfVal: DFValOf[T],
         default: Option[DFValOf[T]] = None
@@ -655,6 +656,7 @@ object DFVal extends DFValLP:
           dfc.getMeta,
           dfc.tags
         )
+      if (!dfc.inMetaProgramming) alias.setCachedVal(dfVal.asIR)
       alias.addMember.asConstOf[T]
     end apply
   end DesignParam
@@ -1869,7 +1871,7 @@ extension (dfVal: ir.DFVal)
             dfVal match
               // design parameter, so recurse on the referenced value
               case dp: ir.DFVal.DesignParam =>
-                dp.dfValRef.get.cloneUnreachable
+                dp.dfVal.cloneUnreachable
               // named constant, so clone under a new name within relation to the current design
               case _ =>
                 val newMeta =
