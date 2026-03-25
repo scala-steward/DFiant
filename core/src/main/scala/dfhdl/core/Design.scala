@@ -152,11 +152,14 @@ object Design:
   type Block = DFOwner[ir.DFDesignBlock]
   object Block:
     def apply(domain: ir.DomainType, dclMeta: ir.Meta, instMode: InstMode)(using DFC): Block =
-      ir.DFDesignBlock(
-        domain, dclMeta, instMode, dfc.ownerOrEmptyRef, dfc.getMeta, dfc.tags
+      val paramMap = ListMap.from(
+        dfc.mutableDB.DesignContext.getDesignParamValueMap.view.mapValues(
+          _.asIR.refTW[ir.DFDesignBlock]
+        )
       )
-        .addMember
-        .asFE
+      ir.DFDesignBlock(
+        domain, dclMeta, instMode, paramMap, dfc.ownerOrEmptyRef, dfc.getMeta, dfc.tags
+      ).addMember.asFE
     end apply
   end Block
   extension [D <: Design](dsn: D)

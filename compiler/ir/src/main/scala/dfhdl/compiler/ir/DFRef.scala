@@ -3,6 +3,7 @@ import scala.annotation.unchecked.uncheckedVariance
 import dfhdl.internals.hashString
 import upickle.default.*
 import scala.collection.mutable
+import scala.collection.immutable.ListMap
 
 type DFRefAny = DFRef[DFMember]
 sealed trait DFRef[+M <: DFMember] extends Product, Serializable derives CanEqual:
@@ -39,6 +40,16 @@ object DFRef:
       extends TwoWay[DFVal.CanBeExpr, DFVal.CanBeExpr]:
     override def copyAsNewRef(using refGen: RefGen): this.type =
       refGen.genTypeRef.asInstanceOf[this.type]
+
+  extension (list: List[DFRefAny])
+    def =~(that: List[DFRefAny])(using MemberGetSet): Boolean =
+      list.length == that.length && list.lazyZip(that).forall(_ =~ _)
+
+  extension (list: ListMap[String, DFRefAny])
+    def =~(that: ListMap[String, DFRefAny])(using MemberGetSet): Boolean =
+      list.size == that.size && list.lazyZip(that).forall {
+        case ((k1, v1), (k2, v2)) => k1 == k2 && v1 =~ v2
+      }
 
   extension (ref: DFRefAny)
     def isTypeRef: Boolean = ref match

@@ -113,6 +113,10 @@ object r__For_Plugin:
         paramValue.asIR,
         DFVal.DesignParam(paramValue, default)(using dfc.setMeta(paramMeta)).asIR
       ).asValAny.asInstanceOf[V]
+  def prepareDesignParamValues(paramNames: List[String], paramValues: List[DFValAny])(using
+      DFC
+  ): Unit =
+    dfc.mutableDB.DesignContext.prepareDesignParamValues(paramNames, paramValues)
   @metaContextIgnore
   def designFromDefGetInput[V <: DFValAny](idx: Int)(using DFC): V =
     dfc.mutableDB.DesignContext.getDefInput(idx).asInstanceOf[V]

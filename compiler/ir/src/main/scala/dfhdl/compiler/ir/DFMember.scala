@@ -223,8 +223,8 @@ sealed trait DFVal extends DFMember.Named:
       case DFVal.Alias.AsIs(dfType = dfType, relValRef = DFRef(relVal))
           if dfType == relVal.dfType =>
         stripAsIsAndDesignParam(relVal)
-      case DFVal.DesignParam(dfValRef = DFRef(dfVal)) =>
-        stripAsIsAndDesignParam(dfVal)
+      case dp: DFVal.DesignParam =>
+        stripAsIsAndDesignParam(dp.dfValRef.get)
       case _ => dfVal
     // TODO: maybe we need a better way to check equivalent expressions, with symbolic algebra comparison?
     // with such comparison, it is possible to simplify expressions at least in the common cases.
@@ -451,13 +451,13 @@ object DFVal:
 
   final case class DesignParam(
       dfType: DFType,
-      dfValRef: DesignParam.Ref,
       defaultRef: DesignParam.DefaultRef,
       ownerRef: DFOwner.Ref,
       meta: Meta,
       tags: DFTags
   ) extends CanBeExpr derives ReadWriter:
     assert(!this.isAnonymous, "Design parameters cannot be anonymous.")
+    def dfValRef(using MemberGetSet): DFDesignBlock.ParamRef = getOwnerDesign.paramMap(getName)
     protected def protIsFullyAnonymous(using MemberGetSet): Boolean = false
     protected def protGetConstData(using MemberGetSet): Option[Any] =
       dfValRef.get.getConstData
@@ -472,25 +472,21 @@ object DFVal:
       case _ => false
     protected[ir] def protIsSimilarTo(that: CanBeExpr)(using MemberGetSet): Boolean =
       that match
-        case that: DesignParam =>
-          this.dfType.isSimilarTo(that.dfType) &&
-          this.dfValRef.get.isSimilarTo(that.dfValRef.get)
-        case _ => false
+        case that: DesignParam => this.dfType.isSimilarTo(that.dfType)
+        case _                 => false
     protected def setMeta(meta: Meta): this.type = copy(meta = meta).asInstanceOf[this.type]
     protected def setTags(tags: DFTags): this.type = copy(tags = tags).asInstanceOf[this.type]
     lazy val getRefs: List[DFRef.TwoWayAny] =
-      dfValRef :: defaultRef :: dfType.getRefs ++ meta.getRefs
+      defaultRef :: dfType.getRefs ++ meta.getRefs
     def updateDFType(dfType: DFType): this.type = copy(dfType = dfType).asInstanceOf[this.type]
     def copyWithNewRefs(using RefGen): this.type = copy(
       meta = meta.copyWithNewRefs,
       dfType = dfType.copyWithNewRefs,
       ownerRef = ownerRef.copyAsNewRef,
-      dfValRef = dfValRef.copyAsNewRef,
       defaultRef = defaultRef.copyAsNewRef
     ).asInstanceOf[this.type]
   end DesignParam
   object DesignParam:
-    type Ref = DFRef.TwoWay[DFVal, DesignParam]
     type DefaultRef = DFRef.TwoWay[DFVal | DFMember.Empty, DesignParam]
 
   final case class Special(
@@ -544,11 +540,8 @@ object DFVal:
     protected def protGetConstData(using MemberGetSet): Option[Any] = None
     protected def `prot_=~`(that: DFMember)(using MemberGetSet): Boolean = that match
       case that: Dcl =>
-        val sameInit =
-          if (this.initRefList.length == that.initRefList.length)
-            this.initRefList.lazyZip(that.initRefList).forall(_ =~ _)
-          else false
-        this.dfType =~ that.dfType && this.modifier == that.modifier && sameInit &&
+        this.dfType =~ that.dfType && this.modifier == that.modifier &&
+        this.initRefList =~ that.initRefList &&
         this.meta =~ that.meta && this.tags =~ that.tags
       case _ => false
     def initList(using MemberGetSet): List[DFVal] = initRefList.map(_.get)
@@ -594,10 +587,7 @@ object DFVal:
       else Some(calcFuncData(dfType, op, argTypes, argData))
     protected def `prot_=~`(that: DFMember)(using MemberGetSet): Boolean = that match
       case that: Func =>
-        this.dfType =~ that.dfType && this.op == that.op &&
-        (this.args
-          .lazyZip(that.args)
-          .forall((l, r) => l =~ r)) &&
+        this.dfType =~ that.dfType && this.op == that.op && this.args =~ that.args &&
         this.meta =~ that.meta && this.tags =~ that.tags
       case _ => false
     // TODO: consider algebraic equivalence be added here
@@ -1206,7 +1196,7 @@ object ProcessBlock:
       def copyWithNewRefs(using RefGen): this.type = this
     final case class List(refs: scala.List[DFVal.Ref]) extends Sensitivity:
       protected def `prot_=~`(that: Sensitivity)(using MemberGetSet): Boolean = that match
-        case that: List => this.refs.lazyZip(that.refs).forall(_ =~ _)
+        case that: List => this.refs =~ that.refs
         case _          => false
       lazy val getRefs: scala.List[DFRef.TwoWayAny] = refs
       def copyWithNewRefs(using RefGen): this.type =
@@ -1305,9 +1295,8 @@ object DFConditional:
       final case class Alternative(list: List[Pattern]) extends Pattern:
         protected def `prot_=~`(that: Pattern)(using MemberGetSet): Boolean =
           that match
-            case that: Alternative =>
-              this.list.lazyZip(that.list).forall(_ =~ _)
-            case _ => false
+            case that: Alternative => this.list =~ that.list
+            case _                 => false
         lazy val getRefs: List[DFRef.TwoWayAny] = list.flatMap(_.getRefs)
         def copyWithNewRefs(using RefGen): this.type = copy(
           list.map(_.copyWithNewRefs)
@@ -1315,12 +1304,8 @@ object DFConditional:
       final case class Struct(name: String, fieldPatterns: List[Pattern]) extends Pattern:
         protected def `prot_=~`(that: Pattern)(using MemberGetSet): Boolean =
           that match
-            case that: Struct =>
-              this.name == that.name &&
-              this.fieldPatterns
-                .lazyZip(that.fieldPatterns)
-                .forall(_ =~ _)
-            case _ => false
+            case that: Struct => this.name == that.name && this.fieldPatterns =~ that.fieldPatterns
+            case _            => false
         lazy val getRefs: List[DFRef.TwoWayAny] = fieldPatterns.flatMap(_.getRefs)
         def copyWithNewRefs(using RefGen): this.type = copy(
           fieldPatterns = fieldPatterns.map(_.copyWithNewRefs)
@@ -1356,10 +1341,7 @@ object DFConditional:
         protected def `prot_=~`(that: Pattern)(using MemberGetSet): Boolean =
           that match
             case that: BindSI =>
-              this.op == that.op && this.parts == that.parts &&
-              this.refs
-                .lazyZip(that.refs)
-                .forall(_ =~ _)
+              this.op == that.op && this.parts == that.parts && this.refs =~ that.refs
             case _ => false
         lazy val getRefs: List[DFRef.TwoWayAny] = refs
         def copyWithNewRefs(using RefGen): this.type = copy(
@@ -1485,6 +1467,7 @@ final case class DFDesignBlock(
     domainType: DomainType,
     dclMeta: Meta,
     instMode: DFDesignBlock.InstMode,
+    paramMap: ListMap[String, DFDesignBlock.ParamRef],
     ownerRef: DFOwner.Ref,
     meta: Meta,
     tags: DFTags
@@ -1496,11 +1479,13 @@ final case class DFDesignBlock(
       this.domainType =~ that.domainType &&
       this.dclMeta =~ that.dclMeta &&
       this.instMode == that.instMode &&
+      this.paramMap =~ that.paramMap &&
       this.meta =~ that.meta && this.tags =~ that.tags
     case _ => false
   protected def setMeta(meta: Meta): this.type = copy(meta = meta).asInstanceOf[this.type]
   protected def setTags(tags: DFTags): this.type = copy(tags = tags).asInstanceOf[this.type]
-  lazy val getRefs: List[DFRef.TwoWayAny] = domainType.getRefs ++ dclMeta.getRefs
+  lazy val getRefs: List[DFRef.TwoWayAny] =
+    domainType.getRefs ++ dclMeta.getRefs ++ paramMap.values.toList
 
   /** Whether this design is considered to be a device's top-level design. THIS MAY NOT BE THE TOP
     * DESIGN, for example if the design is in a simulation. A design is considered to be a device
@@ -1515,11 +1500,13 @@ final case class DFDesignBlock(
     meta = meta.copyWithNewRefs,
     dclMeta = dclMeta.copyWithNewRefs,
     domainType = domainType.copyWithNewRefs,
+    paramMap = paramMap.map((k, v) => k -> v.copyAsNewRef),
     ownerRef = ownerRef.copyAsNewRef
   ).asInstanceOf[this.type]
 end DFDesignBlock
 
 object DFDesignBlock:
+  type ParamRef = DFRef.TwoWay[DFVal, DFDesignBlock]
   import InstMode.BlackBox.Source
   enum InstMode derives CanEqual, ReadWriter:
     case Normal, Def, Simulation
@@ -1700,8 +1687,7 @@ final case class TextOut(
 ) extends Statement:
   protected def `prot_=~`(that: DFMember)(using MemberGetSet): Boolean = that match
     case that: TextOut =>
-      this.op =~ that.op && this.msgParts == that.msgParts &&
-      this.msgArgs.lazyZip(that.msgArgs).forall(_ =~ _) &&
+      this.op =~ that.op && this.msgParts == that.msgParts && this.msgArgs =~ that.msgArgs &&
       this.meta =~ that.meta && this.tags =~ that.tags
     case _ => false
   protected def setMeta(meta: Meta): this.type = copy(meta = meta).asInstanceOf[this.type]

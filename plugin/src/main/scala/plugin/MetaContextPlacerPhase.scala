@@ -51,6 +51,7 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
   var listMapEmptySym: TermSymbol = uninitialized
   var listMapSym: TermSymbol = uninitialized
   var dfhdlDFValIdentSym: TermSymbol = uninitialized
+  var prepareDesignParamValuesSym: TermSymbol = uninitialized
   val defaultParamMap = mutable.Map.empty[ClassSymbol, Map[Int, Tree]]
   override def prepareForTypeDef(tree: TypeDef)(using Context): Context =
     val sym = tree.symbol
@@ -269,8 +270,23 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
         val parent = nameArgs(tree)
         val od = dfcOverrideDef(cls, tree.srcPos)
         val cdef = ClassDefWithParents(cls, DefDef(constr), List(parent), List(od))
+        val prepareStatOpt: Option[Tree] =
+          if (tpe <:< designTpe) then
+            val allParams =
+              tpe.typeSymbol.primaryConstructor.paramSymss.flatten.filter(_.isTerm)
+            val dfValPairs = allParams.lazyZip(valDefs.reverse).collect {
+              case (sym, vd: ValDef) if sym.info.dfValTpeOpt.nonEmpty =>
+                (Literal(Constant(sym.name.toString)): Tree, ref(vd.symbol))
+            }.toList
+            if (dfValPairs.nonEmpty) then
+              val names = mkList(dfValPairs.map(_._1), Some(defn.StringType))
+              val values = mkList(dfValPairs.map(_._2))
+              val dfc = dfcArgStack.headOption.getOrElse(ref(emptyNoEODFCSym))
+              Some(ref(prepareDesignParamValuesSym).appliedTo(names, values).appliedTo(dfc))
+            else None
+          else None
         Block(
-          valDefs.reverse :+ cdef,
+          valDefs.reverse ++ prepareStatOpt.toList :+ cdef,
           Typed(New(Ident(cdef.namedType)).select(constr).appliedToNone, TypeTree(tpe))
         )
       case _ => tree
@@ -333,6 +349,8 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
     listMapEmptySym = requiredMethod("scala.collection.immutable.ListMap.empty")
     listMapSym = requiredModule("scala.collection.immutable.ListMap")
     dfhdlDFValIdentSym = requiredMethod("dfhdl.core.r__For_Plugin.identVal")
+    prepareDesignParamValuesSym =
+      requiredMethod("dfhdl.core.r__For_Plugin.prepareDesignParamValues")
     dfcArgStack = Nil
     defaultParamMap.clear()
     ctx

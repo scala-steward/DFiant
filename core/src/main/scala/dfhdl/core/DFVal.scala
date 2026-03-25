@@ -649,7 +649,6 @@ object DFVal extends DFValLP:
       val alias: ir.DFVal.DesignParam =
         ir.DFVal.DesignParam(
           dfVal.asIR.dfType.dropUnreachableRefs,
-          dfVal.asIR.refTW[ir.DFVal.DesignParam](knownReachable = true),
           default.map(_.asIR.refTW[ir.DFVal.DesignParam])
             .getOrElse(ir.DFMember.Empty.refTW[ir.DFVal.DesignParam]),
           dfc.ownerOrEmptyRef,
@@ -1869,8 +1868,8 @@ extension (dfVal: ir.DFVal)
           else
             dfVal match
               // design parameter, so recurse on the referenced value
-              case ir.DFVal.DesignParam(dfValRef = ir.DFRef(of)) =>
-                of.cloneUnreachable
+              case dp: ir.DFVal.DesignParam =>
+                dp.dfValRef.get.cloneUnreachable
               // named constant, so clone under a new name within relation to the current design
               case _ =>
                 val newMeta =

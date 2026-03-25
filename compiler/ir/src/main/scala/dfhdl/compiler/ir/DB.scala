@@ -1032,9 +1032,6 @@ final case class DB(
       membersNoGlobals.view.drop(1).flatMap {
         case _: PortByNameSelect => None
         case m                   =>
-          val isDesignParam = m match
-            case _: DFVal.DesignParam => true
-            case _                    => false
           m.getRefs.view.map(_.get).flatMap {
             // global values are ok to be referenced
             case dfVal: DFVal.CanBeGlobal if dfVal.isGlobal => None
@@ -1050,17 +1047,9 @@ final case class DB(
             case refMember: DFDesignBlock =>
               if (m.isMemberOf(refMember)) None
               else Some(refMember)
-            case refMember =>
-              m match
-                // design parameters are expected to reference values from their parent design
-                // or from the same design for default parameter values
-                case dp: DFVal.DesignParam =>
-                  if (refMember.isSameOwnerDesignAs(dp) && dp.defaultRef.get == refMember) None
-                  else if (m.isOneLevelBelow(refMember)) None
-                  else Some(refMember)
-                // the rest must be in the same design
-                case _ if !refMember.isSameOwnerDesignAs(m) => Some(refMember)
-                case _                                      => None
+            // the rest must be in the same design
+            case refMember if !refMember.isSameOwnerDesignAs(m) => Some(refMember)
+            case _                                              => None
           }.map(m -> _)
       }.toList
     val errorMessages = problemReferences.map { (from, to) =>
