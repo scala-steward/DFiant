@@ -156,8 +156,8 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
             originMember match
               case originVal: DFVal if originVal.isGlobal =>
               case _: DFVal.DesignParam                   =>
-              case _: DFDesignBlock                       => // paramMap entries may reference global anon vals
-              case _                                      =>
+              case _: DFDesignBlock => // paramMap entries may reference global anon vals
+              case _                =>
                 reportViolation(
                   s"""|A global anonymous member is referenced by a non-global member.
                       |Target member: ${targetVal}
@@ -239,8 +239,10 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
                   s"The global member ${m.hashString}:\n$m\nHas reference $r pointing to a later member ${rm.hashString}:\n${rm}"
                 )
               case _ =>
+                val hierarchy =
+                  if (m.ownerRef.get == DFMember.Empty) "<top>" else m.getOwnerNamed.getFullName
                 println(
-                  s"The member ${m.hashString}:\n$m\nIn hierarchy:\n${m.getOwnerNamed.getFullName}\nHas reference $r pointing to a later member ${rm.hashString}:\n${rm}"
+                  s"The member ${m.hashString}:\n$m\nIn hierarchy:\n$hierarchy\nHas reference $r pointing to a later member ${rm.hashString}:\n${rm}"
                 )
             hasViolations = true
             require(!hasViolations, "Failed member order check!")
