@@ -46,9 +46,13 @@ class GlobalizePortVectorParamsSpec extends StageSpec(stageCreatesUnrefAnons = t
     )
   test("Various vector params are globalized, only ports are affected"):
     class Foo(
-        val width: Int <> CONST  = 8,
-        val length: Int <> CONST = 10
+        val keepThisParam: Int <> CONST = 4,
+        val width: Int <> CONST         = 8,
+        val length: Int <> CONST        = 10
     ) extends RTDesign:
+      val x0 = Bits(keepThisParam) <> IN
+      val y0 = Bits(keepThisParam) <> OUT
+      y0 <> x0
       val x1 = Bits(width) X length <> IN
       val y1 = Bits(width) X length <> OUT
       val v1 = Bits(width) X length <> VAR
@@ -76,7 +80,10 @@ class GlobalizePortVectorParamsSpec extends StageSpec(stageCreatesUnrefAnons = t
       """|val Foo_length: Int <> CONST = 10
          |val Foo_width: Int <> CONST = 8
          |
-         |class Foo extends RTDesign:
+         |class Foo(val keepThisParam: Int <> CONST = 4) extends RTDesign:
+         |  val x0 = Bits(keepThisParam) <> IN
+         |  val y0 = Bits(keepThisParam) <> OUT
+         |  y0 <> x0
          |  val x1 = Bits(Foo_width) X Foo_length <> IN
          |  val y1 = Bits(Foo_width) X Foo_length <> OUT
          |  val v1 = Bits(Foo_width) X Foo_length <> VAR

@@ -8,7 +8,7 @@ import dfhdl.options.CompilerOptions
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import dfhdl.compiler.stages.vhdl.VHDLDialect
-import dfhdl.core.{DFTypeAny, asFE}
+import dfhdl.core.{DFTypeAny, asFE, refTW}
 import dfhdl.compiler.ir.DFVal.PortByNameSelect
 
 /** This stage globalizes design parameters that set port vector lengths. This is needed only for
@@ -157,7 +157,16 @@ case object GlobalizePortVectorParams extends Stage:
     )
 
     // patches to change the duplicated design declaration names to a unique identifier according
-    // to theie instance names
+    // to their instance names.
+    // Only remove globalized params from paramMap; keep unglobalized ones intact.
+    val globalizedParamNamesPerDesign: Map[DFDesignBlock, Set[String]] =
+      designParams.view.collect { case dp: DFVal.DesignParam => dp }
+        .groupBy(_.getOwnerDesign)
+        .view.mapValues(_.map(_.getName).toSet).toMap
+    def prunedParamMap(design: DFDesignBlock): ListMap[String, DFDesignBlock.ParamRef] =
+      val toRemove = globalizedParamNamesPerDesign.getOrElse(design, Set.empty)
+      if (toRemove.isEmpty) design.paramMap
+      else design.paramMap.filterNot((name, _) => toRemove.contains(name))
     val designPatches = dupDesignMap.view.flatMap {
       case (orig, dups) if dups.length >= 1 =>
         (orig :: dups).map { design =>
@@ -165,11 +174,26 @@ case object GlobalizePortVectorParams extends Stage:
             design.dclMeta.setName(
               s"${design.dclName}_${design.getFullName.replaceAll("\\.", "_")}"
             )
-          val updatedDesign = design.removeTagOf[DuplicateTag].copy(dclMeta = updatedDclMeta)
+          val updatedDesign = design.removeTagOf[DuplicateTag].copy(
+            dclMeta = updatedDclMeta,
+            paramMap = prunedParamMap(design)
+          )
           design -> Patch.Replace(updatedDesign, Patch.Replace.Config.FullReplacement)
         }
-      case _ => None
+      case (orig, _) =>
+        Some(
+          orig ->
+            Patch.Replace(
+              orig.copy(paramMap = prunedParamMap(orig)),
+              Patch.Replace.Config.FullReplacement
+            )
+        )
     }.toList
+    val paramReplacementMap = mutable.Map.empty[DFVal, DFVal]
+    def getUpdatedParamValue(param: DFVal.DesignParam): DFVal =
+      var dfVal = param.dfVal
+      while (paramReplacementMap.contains(dfVal)) dfVal = paramReplacementMap(dfVal)
+      dfVal
     // add global parameters before the design top
     val dsn = new MetaDesign(dupDesignDB.top, Patch.Add.Config.Before):
       // patches to replace with properly named parameter or just move the anonymous members
@@ -177,21 +201,17 @@ case object GlobalizePortVectorParams extends Stage:
         // design parameters are transformed into global as-is named aliases
         case param: DFVal.DesignParam =>
           val updatedMeta = param.meta.setName(param.getFullName.replaceAll("\\.", "_"))
-          val globalParam =
-            DFVal.Alias.AsIs(
-              param.dfType,
-              // TODO: the class tag here is incorrect (currently is DesignParam) and should be fixed or...
-              // do we really need the tags at all?
-              param.dfValRef.asInstanceOf[DFVal.Alias.PartialRef],
-              param.ownerRef,
-              updatedMeta,
-              param.tags
-            )
-          plantMember(globalParam)
+          val updatedParamVal = getUpdatedParamValue(param)
+          val globalParam = dfhdl.core.DFVal.Alias.AsIs.forced(
+            param.dfType,
+            updatedParamVal
+          )(using dfc.setMeta(updatedMeta))
+          paramReplacementMap += param -> globalParam
           param -> Patch.Replace(globalParam, Patch.Replace.Config.ChangeRefAndRemove)
-        case m if !m.isAnonymous =>
+        case m: DFVal if !m.isAnonymous =>
           val globalParam = m.setName(m.getFullName.replaceAll("\\.", "_"))
           plantMember(globalParam)
+          paramReplacementMap += m -> globalParam
           m -> Patch.Replace(globalParam, Patch.Replace.Config.ChangeRefAndRemove)
         case m =>
           plantMember(m)
