@@ -77,21 +77,39 @@ case object GlobalizePortVectorParams extends Stage:
           if !(lhsType == rhsType) && lhsType.isSimilarTo(rhsType) =>
         val lhsCnt = checkVector(lhsType)
         val rhsCnt = checkVector(rhsType)
-        if (lhsCnt < rhsCnt) vecTypeReplaceMap += lhsType -> rhsType
+        // when a PBNS connects to a non-PBNS, always unify to the child design's port type
+        // so that after globalization both sides share the same instance-specific globals
+        val lhsIsPbns = net.lhsRef.get.isInstanceOf[DFVal.PortByNameSelect]
+        val rhsIsPbns = net.rhsRef.get.isInstanceOf[DFVal.PortByNameSelect]
+        if (lhsIsPbns && !rhsIsPbns) vecTypeReplaceMap += rhsType -> lhsType
+        else if (rhsIsPbns && !lhsIsPbns) vecTypeReplaceMap += lhsType -> rhsType
+        else if (lhsCnt < rhsCnt) vecTypeReplaceMap += lhsType -> rhsType
         else if (lhsCnt > rhsCnt) vecTypeReplaceMap += rhsType -> lhsType
       case _ =>
     }
-    val vecTypeReplacePatches = designDB.members.collect {
+    // Split vecTypeReplace into PBNS patches and non-PBNS patches.
+    // PBNS replacements introduce TypeRefs from port declarations (shared TypeRefs).
+    // If applied in the same patch batch as port replacements (which purge those same TypeRefs),
+    // the TypeRefs get removed before the PBNS can reference them.
+    // Apply PBNS replacements first so the shared TypeRefs have a higher repeat count.
+    val (vecTypePbnsPatches, vecTypeOtherPatches) = designDB.members.collect {
       case dfVal @ DFVector.Val(dfType) if vecTypeReplaceMap.contains(dfType) =>
         dfVal -> Patch.Replace(
           dfVal.updateDFType(vecTypeReplaceMap(dfType)),
           Patch.Replace.Config.FullReplacement
         )
-    }
+    }.partition((m, _) => m.isInstanceOf[DFVal.PortByNameSelect])
     def movedMembers(namedParam: DFVal): List[DFVal] =
-      namedParam.collectRelMembers(true).filterNot(_.isGlobal)
+      namedParam match
+        // for DesignParams, also collect anonymous deps of the actual param value
+        // (from paramMap), since collectRelMembers only follows getRefs which
+        // does not include the paramMap value reference
+        case param: DFVal.DesignParam =>
+          param.dfVal.collectRelMembers(false).filterNot(_.isGlobal) ++ List(param)
+        case _ =>
+          namedParam.collectRelMembers(true).filterNot(_.isGlobal)
 
-    val addedGlobals = designParams.view.flatMap(movedMembers).toList
+    val addedGlobals = designParams.view.flatMap(movedMembers).toList.distinct
     val dupDesignSet = designParams.view.map(_.getOwnerDesign).toSet
     // origin -> duplicates design map
     val dupDesignMap = dupDesignSet.groupBy(_.dclName).values.map { grp =>
@@ -218,8 +236,11 @@ case object GlobalizePortVectorParams extends Stage:
           m -> Patch.Remove(isMoved = true)
       }
     // TODO: when combined to a single patch, there is a bug that prevents some members to get a global ownership
+    // Apply PBNS type patches first (they introduce shared TypeRefs), then other type patches
+    // (which may purge those same TypeRefs from the originals).
     dupDesignDB
-      .patch(dsn.patch :: dsn.replacePatches ++ vecTypeReplacePatches)
+      .patch(dsn.patch :: dsn.replacePatches ++ vecTypePbnsPatches)
+      .patch(vecTypeOtherPatches)
       .patch(designPatches)
   end transform
 end GlobalizePortVectorParams
