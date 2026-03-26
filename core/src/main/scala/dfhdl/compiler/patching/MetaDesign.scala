@@ -7,30 +7,30 @@ import dfhdl.compiler.ir.DFDesignBlock
 
 type MetaDesignAny = MetaDesign[DomainType]
 
-/** A base class for synthesising new IR members inside a compiler stage and injecting them into
-  * the DB at a precise position relative to an anchor member.
+/** A base class for synthesising new IR members inside a compiler stage and injecting them into the
+  * DB at a precise position relative to an anchor member.
   *
   * Extend this class anonymously inside a stage's `transform` method to write ordinary DFHDL DSL
   * code (ports, vars, assignments, etc.). The members created in the body are extracted and
   * inserted into the DB when `dsn.patch` is applied; the MetaDesign block itself is discarded.
   *
-  * === Constructing raw IR members inside the body ===
+  * ===Constructing raw IR members inside the body===
   *
   * To build an IR member directly (e.g. `ir.Goto`) rather than through the DSL, add
-  * `import dfhdl.core.*` at the top of the anonymous body. This brings `refTW` and `addMember`
-  * into scope. Use `dfc.ownerOrEmptyRef` to obtain the owner ref — do not use `dfc.owner.ref`
-  * as that extension method may conflict with other imports:
+  * `import dfhdl.core.*` at the top of the anonymous body. This brings `refTW` and `addMember` into
+  * scope. Use `dfc.ownerOrEmptyRef` to obtain the owner ref — do not use `dfc.owner.ref` as that
+  * extension method may conflict with other imports:
   * {{{
   *   val dsn = new MetaDesign(anchor, Patch.Add.Config.Before):
   *     import dfhdl.core.*
   *     ir.Goto(existingStep.refTW[ir.Goto], dfc.ownerOrEmptyRef, dfc.getMeta, dfc.tags).addMember
   * }}}
   *
-  * === Ownership ===
+  * ===Ownership===
   *
-  * For `Before` / `After` / `ReplaceWith*` configs, newly created members are placed as siblings
-  * of the anchor (same owner). For `InsideFirst` / `InsideLast`, members are placed as direct
-  * children of the anchor (which must be a `DFOwner`).
+  * For `Before` / `After` / `ReplaceWith*` configs, newly created members are placed as siblings of
+  * the anchor (same owner). For `InsideFirst` / `InsideLast`, members are placed as direct children
+  * of the anchor (which must be a `DFOwner`).
   */
 abstract class MetaDesign[+D <: DomainType](
     positionMember: ir.DFMember,
@@ -75,10 +75,7 @@ abstract class MetaDesign[+D <: DomainType](
   final lazy val __domainType: ir.DomainType = ir.DomainType.DF
 
   final def plantMember[T <: ir.DFMember](member: T): T =
-    if (globalInjection)
-      dfc.mutableDB.plantMember(ir.DFMember.Empty, member)
-    else
-      dfc.mutableDB.plantMember(dfc.owner.asIR, member)
+    dfc.mutableDB.plantMember(dfc.owner.asIR, member)
   final def plantMembers(baseOwner: ir.DFOwner, members: Iterable[ir.DFMember]): Unit =
     members.foreach { m =>
       val owner = m.getOwner

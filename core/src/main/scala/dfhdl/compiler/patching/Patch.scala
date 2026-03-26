@@ -105,6 +105,7 @@ object Patch:
       case object Via extends Config
     end Config
   end Add
+
   /** Moves `movedMembers` to a new position in the flat member list relative to the anchor member.
     *
     * `origOwner` is the original direct owner of the top-level moved members. During ownership
@@ -164,6 +165,7 @@ object Patch:
       // Moves members inside the given block, at the end.
       // The anchor must be a DFOwner; redirects to anchor.getVeryLastMember for placement.
       case object InsideLast extends Config
+    end Config
   end Move
 
   final case class ChangeRef(
@@ -229,13 +231,18 @@ extension (db: DB)
         case (rc, (origMember, Patch.Add(db, config))) =>
           // if the original member is a global value, the all references pointing to the top design in the patch
           // db should point to an empty member for global placement
-          val fixedGlobalRefTable = origMember match
-            case dfVal: DFVal.CanBeGlobal if dfVal.isGlobal =>
+          val globalPlacement =
+            (origMember, config) match
+              case (dfVal: DFVal.CanBeGlobal, _) if dfVal.isGlobal                  => true
+              case (design: DFDesignBlock, Patch.Add.Config.Before) if design.isTop => true
+              case _                                                                => false
+          val fixedGlobalRefTable =
+            if (globalPlacement)
               db.refTable.map { case (ref, member) =>
                 if (member == db.top) (ref, DFMember.Empty)
                 else (ref, member)
               }
-            case _ => db.refTable
+            else db.refTable
           // updating the patched DB reference table members with the newest members kept by the replacement context
           val updatedPatchRefTable = rc.getUpdatedRefTable(fixedGlobalRefTable)
           lazy val keepRefList = db.members.flatMap(_.getRefs)
