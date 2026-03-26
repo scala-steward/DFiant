@@ -4,7 +4,7 @@ import dfhdl.*
 import dfhdl.compiler.stages.globalizePortVectorParams
 // scalafmt: { align.tokens = [{code = "<>"}, {code = "="}, {code = "=>"}, {code = ":="}]}
 
-class GlobalizePortVectorParams extends StageSpec(stageCreatesUnrefAnons = true):
+class GlobalizePortVectorParamsSpec extends StageSpec(stageCreatesUnrefAnons = true):
   given options.CompilerOptions.Backend = backends.vhdl.v93
   test("Various vector params are kept"):
     val width: Int <> CONST  = 8
@@ -312,4 +312,4 @@ class GlobalizePortVectorParams extends StageSpec(stageCreatesUnrefAnons = true)
          |  y3 <> id3.y
          |end IDTop""".stripMargin
     )
-end GlobalizePortVectorParams
+end GlobalizePortVectorParamsSpec
