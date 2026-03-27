@@ -65,7 +65,7 @@ object StrippedPortByNameSelect:
 object DefaultOfDesignParam:
   def unapply(dfVal: DFVal)(using MemberGetSet): Option[DFVal.DesignParam] =
     dfVal.originMembers.collectFirst {
-      case dp: DFVal.DesignParam if dp.defaultRef.get == dfVal => dp
+      case dp: DFVal.DesignParam if dp.defaultValRef.get == dfVal => dp
     }
 
 object OpaqueActual:

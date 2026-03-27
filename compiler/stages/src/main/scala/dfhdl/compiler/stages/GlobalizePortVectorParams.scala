@@ -105,7 +105,7 @@ case object GlobalizePortVectorParams extends Stage:
         // (from paramMap), since collectRelMembers only follows getRefs which
         // does not include the paramMap value reference
         case param: DFVal.DesignParam =>
-          param.dfVal.collectRelMembers(false).filterNot(_.isGlobal) ++ List(param)
+          param.appliedOrDefaultVal.collectRelMembers(false).filterNot(_.isGlobal) ++ List(param)
         case _ =>
           namedParam.collectRelMembers(true).filterNot(_.isGlobal)
 
@@ -209,7 +209,7 @@ case object GlobalizePortVectorParams extends Stage:
     }.toList
     val paramReplacementMap = mutable.Map.empty[DFVal, DFVal]
     def getUpdatedParamValue(param: DFVal.DesignParam): DFVal =
-      var dfVal = param.dfVal
+      var dfVal = param.appliedOrDefaultVal
       while (paramReplacementMap.contains(dfVal)) dfVal = paramReplacementMap(dfVal)
       dfVal
     // add global parameters before the design top

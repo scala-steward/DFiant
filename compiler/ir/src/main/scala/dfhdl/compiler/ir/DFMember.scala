@@ -224,7 +224,7 @@ sealed trait DFVal extends DFMember.Named:
           if dfType == relVal.dfType =>
         stripAsIsAndDesignParam(relVal)
       case dp: DFVal.DesignParam =>
-        stripAsIsAndDesignParam(dp.dfVal)
+        stripAsIsAndDesignParam(dp.appliedOrDefaultVal)
       case _ => dfVal
     // TODO: maybe we need a better way to check equivalent expressions, with symbolic algebra comparison?
     // with such comparison, it is possible to simplify expressions at least in the common cases.
@@ -451,7 +451,7 @@ object DFVal:
 
   final case class DesignParam(
       dfType: DFType,
-      defaultRef: DesignParam.DefaultRef,
+      defaultValRef: DesignParam.DefaultValRef,
       ownerRef: DFOwner.Ref,
       meta: Meta,
       tags: DFTags
@@ -460,24 +460,28 @@ object DFVal:
     // the value will be cached during elaboration, because the reference via the design's paramMap
     // will not be available until the design is fully elaborated. during initial contruction and mutation,
     // the value will be cached in core.DFVal.DesignParam, and later cleared in core.Design
-    private var cachedVal: Option[DFVal] = None
-    protected[compiler] def dfValRef(using MemberGetSet): DFDesignBlock.ParamRef =
-      getOwnerDesign.paramMap(getName)
-    def dfVal(using MemberGetSet): DFVal =
-      if (getSet.isMutable) cachedVal.getOrElse(dfValRef.get)
-      else dfValRef.get
-    protected[dfhdl] def setCachedVal(dfVal: DFVal): Unit =
-      cachedVal = Some(dfVal)
-    protected[dfhdl] def clearCachedVal(): Unit = cachedVal = None
+    private var cachedAppliedVal: Option[DFVal] = None
+    protected[compiler] def appliedValRefOpt(using MemberGetSet): Option[DFDesignBlock.ParamRef] =
+      getOwnerDesign.paramMap.get(getName)
+    def appliedValOpt(using MemberGetSet): Option[DFVal] =
+      if (getSet.isMutable) cachedAppliedVal.orElse(appliedValRefOpt.map(_.get))
+      else appliedValRefOpt.map(_.get)
+    def appliedOrDefaultValRef(using MemberGetSet): DFVal.Ref =
+      appliedValRefOpt.getOrElse(defaultValRef.asInstanceOf[DFVal.Ref])
+    def appliedOrDefaultVal(using MemberGetSet): DFVal =
+      appliedValOpt.getOrElse(defaultValRef.get.asInstanceOf[DFVal])
+    protected[dfhdl] def setCachedAppliedVal(dfVal: DFVal): Unit = cachedAppliedVal = Some(dfVal)
+    protected[dfhdl] def clearCachedAppliedVal(): Unit = cachedAppliedVal = None
     protected def protIsFullyAnonymous(using MemberGetSet): Boolean = false
-    protected def protGetConstData(using MemberGetSet): Option[Any] = dfVal.getConstData
+    protected def protGetConstData(using MemberGetSet): Option[Any] =
+      appliedOrDefaultVal.getConstData
     protected def `prot_=~`(that: DFMember)(using MemberGetSet): Boolean = that match
       case that: DesignParam =>
         // design parameters are considered to be the same even if they are referencing
         // a different member (this should be quite common), because that member is
         // external to the design. however, different default value is considered to be a
         // different design parameter.
-        this.dfType =~ that.dfType && this.defaultRef =~ that.defaultRef &&
+        this.dfType =~ that.dfType && this.defaultValRef =~ that.defaultValRef &&
         this.meta =~ that.meta && this.tags =~ that.tags
       case _ => false
     protected[ir] def protIsSimilarTo(that: CanBeExpr)(using MemberGetSet): Boolean =
@@ -487,17 +491,17 @@ object DFVal:
     protected def setMeta(meta: Meta): this.type = copy(meta = meta).asInstanceOf[this.type]
     protected def setTags(tags: DFTags): this.type = copy(tags = tags).asInstanceOf[this.type]
     lazy val getRefs: List[DFRef.TwoWayAny] =
-      defaultRef :: dfType.getRefs ++ meta.getRefs
+      defaultValRef :: dfType.getRefs ++ meta.getRefs
     def updateDFType(dfType: DFType): this.type = copy(dfType = dfType).asInstanceOf[this.type]
     def copyWithNewRefs(using RefGen): this.type = copy(
       meta = meta.copyWithNewRefs,
       dfType = dfType.copyWithNewRefs,
       ownerRef = ownerRef.copyAsNewRef,
-      defaultRef = defaultRef.copyAsNewRef
+      defaultValRef = defaultValRef.copyAsNewRef
     ).asInstanceOf[this.type]
   end DesignParam
   object DesignParam:
-    type DefaultRef = DFRef.TwoWay[DFVal | DFMember.Empty, DesignParam]
+    type DefaultValRef = DFRef.TwoWay[DFVal | DFMember.Empty, DesignParam]
 
   final case class Special(
       dfType: DFType,

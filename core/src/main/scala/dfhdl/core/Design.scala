@@ -168,9 +168,9 @@ object Design:
         ListMap.from(
           dfc.mutableDB.DesignContext.current.getImmutableMemberList.view.collect {
             case dp: ir.DFVal.DesignParam =>
-              val dfVal = dp.dfVal
+              val dfVal = dp.appliedValOpt.get
               // invalidating the param cache value after design elaboration
-              dp.clearCachedVal()
+              dp.clearCachedAppliedVal()
               dp.getName -> dfVal.refTW[ir.DFDesignBlock](knownReachable = true)
           }.toMap
         )

@@ -202,14 +202,20 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
       s"def ${design.dclName}$designParamCS($defArgsCS)$retTypeCS =\n${bodyWithDcls.hindent}\nend ${design.dclName}"
     s"${printer.csAnnotations(design.dclMeta.annotations)}$dcl\n"
   end csDFDesignDefDcl
+  private def csDesignParamList(design: DFDesignBlock): List[String] =
+    design.members(MemberView.Folded).flatMap {
+      case param: DesignParam =>
+        param.appliedValRefOpt match
+          case Some(ref) => Some(s"${param.getName} = ${ref.refCodeString}")
+          case None      => None
+      case _ => None
+    }
   def csDFDesignDefInst(design: DFDesignBlock): String =
     val ports = design.members(MemberView.Folded).view.collect { case port @ DclIn() =>
       val DFNet.Connection(_, from: DFVal, _) = port.getConnectionTo.get.runtimeChecked
       printer.csDFValRef(from, design.getOwner)
     }.mkString(", ")
-    val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
-      s"${param.getName} = ${param.dfValRef.refCodeString}"
-    }
+    val designParamList = csDesignParamList(design)
     val designParamCS =
       if (designParamList.length == 0) ""
       else if (designParamList.length == 1) designParamList.mkString("(", ", ", ")")
@@ -219,9 +225,7 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
     else s"val ${design.getName} = $dcl"
   end csDFDesignDefInst
   def csDFDesignBlockParamInst(design: DFDesignBlock): String =
-    val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
-      s"${param.getName} = ${param.dfValRef.refCodeString}"
-    }
+    val designParamList = csDesignParamList(design)
     if (designParamList.length <= 1) designParamList.mkString("(", ", ", ")")
     else "(" + designParamList.mkString("\n", ",\n", "\n").hindent(2) + ")"
   def csDFDesignBlockDcl(design: DFDesignBlock): String =
@@ -247,11 +251,11 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
           case _ => "EDDesign"
     val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
       val defaultValue =
-        if (design.isTop) s" = ${param.dfValRef.refCodeString}"
+        if (design.isTop) s" = ${param.appliedOrDefaultValRef.refCodeString}"
         else
-          param.defaultRef.get match
+          param.defaultValRef.get match
             case DFMember.Empty => ""
-            case _              => s" = ${param.defaultRef.refCodeString}"
+            case _              => s" = ${param.defaultValRef.refCodeString}"
       s"val ${param.getName}${printer.csDFValConstType(param.dfType)}$defaultValue"
     }
     val designIsVendorIPBlackbox = design.isVendorIPBlackbox
@@ -279,9 +283,7 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
   end csDFDesignBlockDcl
   def csDFDesignBlockInst(design: DFDesignBlock): String =
     val body = csDFDesignLateBody(design)
-    val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
-      s"${param.getName} = ${param.dfValRef.refCodeString}"
-    }
+    val designParamList = csDesignParamList(design)
     val designParamCS =
       // for vendor IP blackbox, we define the parameters in the class extension instead of the
       // blackbox instantiation

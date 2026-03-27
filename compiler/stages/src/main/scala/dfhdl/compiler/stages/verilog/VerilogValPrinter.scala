@@ -34,7 +34,7 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
       // using the constant data only happens in verilog.v95, since parameters are declared in
       // the body and must have defaults.
       case param: DesignParam =>
-        param.defaultRef.get match
+        param.defaultValRef.get match
           case defaultVal: CanBeExpr if !param.getOwnerDesign.isTop => csDFValExpr(defaultVal)
           case _ => printer.csConstData(param.dfType, param.getConstData.get)
       case _ => csDFValExpr(dfVal)
@@ -85,7 +85,8 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
             val cellWidth = dfType.cellType.width
             val length = dfType.cellDimParamRefs.head.getInt
             val ret = for (i <- 0 until length)
-              yield s"${dfVal.getName}[$i] = ${initVal.getName}[${(length - i) * cellWidth - 1}:${(length - i) * cellWidth - cellWidth}];"
+              yield s"${dfVal.getName}[$i] = ${initVal.getName}[${(length - i) * cellWidth -
+                  1}:${(length - i) * cellWidth - cellWidth}];"
             ret.mkString("\n")
           case Func(op = Func.Op.++, args = args) =>
             args.view.zipWithIndex

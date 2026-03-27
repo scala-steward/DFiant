@@ -39,7 +39,7 @@ case object DropDesignParamDeps extends Stage:
     // Collect all design parameters that have dependencies on other design parameters
     designDB.members.foreach {
       case param: DFVal.DesignParam =>
-        param.defaultRef.get match
+        param.defaultValRef.get match
           case default: DFVal =>
             if (hasDesignParamDependency(default))
               designParamDefaultsToInline.add(default)

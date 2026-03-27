@@ -105,9 +105,9 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
     )
     val designParamList = designMembers.collect { case param: DesignParam =>
       val defaultValue =
-        if (design.isTop) s" = ${param.dfValRef.refCodeString}"
+        if (design.isTop) s" = ${param.appliedOrDefaultValRef.refCodeString}"
         else
-          param.defaultRef.get match
+          param.defaultValRef.get match
             case DFMember.Empty =>
               // missing default values are supported
               if (noDefaultParamSupport) ""
@@ -115,7 +115,7 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
               // (different instances may have different constant data, but for default,
               // a single module description can have any valid data, just to satisfy the standard)
               else s" = ${printer.csConstData(param.dfType, param.getConstData.get)}"
-            case _ => s" = ${param.defaultRef.refCodeString}"
+            case _ => s" = ${param.defaultValRef.refCodeString}"
       val csType = printer.csDFType(param.dfType).emptyOr(_ + " ")
       val csTypeNoLogic = if (printer.supportLogicType) csType else csType.replace("logic ", "")
       s"parameter ${csTypeNoLogic}${param.getName}$defaultValue"
@@ -162,8 +162,12 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
        |""".stripMargin
   def csDFDesignBlockInst(design: DFDesignBlock): String =
     val body = csDFDesignLateBody(design)
-    val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
-      s".${param.getName} (${param.dfValRef.refCodeString})"
+    val designParamList = design.members(MemberView.Folded).flatMap {
+      case param: DesignParam =>
+        param.appliedValRefOpt match
+          case Some(ref) => Some(s".${param.getName} (${ref.refCodeString})")
+          case None      => None
+      case _ => None
     }
     val designParamCS =
       if (designParamList.isEmpty || design.isVendorIPBlackbox) ""
