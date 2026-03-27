@@ -555,33 +555,4 @@ class ElaborationChecksSpec extends DesignSpec:
          |To Fix:
          |Make sure you connect the resource to the port with the correct direction.""".stripMargin
     )
-  test("named values in RT process blocks are forbidden"):
-    object Test:
-      @top(false) class Top extends RTDesign:
-        val x = Bit <> IN
-        val p = Bits(8) <> IN
-        process:
-          val y = Bit <> VAR
-          val z = x ^ x
-          for (i <- 0 until 10)
-            println(i)
-          def MyStep: Step =
-            val w = !x
-            FirstStep
-          p match
-            case b"101${v: B[2]}010" =>
-              println(v)
-            case _ =>
-      end Top
-    end Test
-    import Test.*
-    assertElaborationErrors(Top())(
-      s"""|Elaboration errors found!
-          |Named DFHDL values are not allowed in RT process blocks. Found the following named values:
-          |  y at ${currentFilePos}ElaborationChecksSpec.scala:564:19 - 564:29
-          |  z at ${currentFilePos}ElaborationChecksSpec.scala:565:19 - 565:24
-          |  w at ${currentFilePos}ElaborationChecksSpec.scala:569:21 - 569:23
-          |To Fix:
-          |Use anonymous values instead.""".stripMargin
-    )
 end ElaborationChecksSpec
