@@ -321,16 +321,20 @@ final case class DFVal.Alias.SelectField(
 ### DFVal.DesignParam
 ```scala
 final case class DFVal.DesignParam(
-    dfType:     DFType,
-    dfValRef:   DesignParam.Ref,         // → the actual parameter value
-    defaultRef: DesignParam.DefaultRef,  // → default value or DFMember.Empty
-    ownerRef:   DFOwner.Ref,
-    meta:       Meta,
-    tags:       DFTags
+    dfType:        DFType,
+    defaultValRef: DesignParam.DefaultValRef,  // → default value or DFMember.Empty
+    ownerRef:      DFOwner.Ref,
+    meta:          Meta,
+    tags:          DFTags
 )
-type DesignParam.Ref        = DFRef.TwoWay[DFVal, DesignParam]
-type DesignParam.DefaultRef = DFRef.TwoWay[DFVal | DFMember.Empty, DesignParam]
+type DesignParam.DefaultValRef = DFRef.TwoWay[DFVal | DFMember.Empty, DesignParam]
 ```
+
+Key accessor methods on `DesignParam`:
+- `param.appliedValRefOpt` — `Option[DFDesignBlock.ParamRef]` — `Some` when the owner design has an applied value in its `paramMap`, `None` otherwise
+- `param.appliedValOpt` — `Option[DFVal]` — resolved applied value (if any)
+- `param.appliedOrDefaultValRef` — `DFVal.Ref` — applied ref if present, else `defaultValRef`
+- `param.appliedOrDefaultVal` — `DFVal` — applied value if present, else default value
 
 ---
 
@@ -923,7 +927,7 @@ dfVal.getConnectionsFrom      // Set[DFNet]  — connections driven from this va
 dfVal.getAssignmentsTo        // Set[DFVal]  — values assigned to this
 dfVal.getAssignmentsFrom      // Set[DFVal]  — values assigned from this
 dfVal.getPortsByNameSelectors // List[DFVal.PortByNameSelect]  (ports only)
-dfVal.isReferencedByAnyDcl    // Boolean
+dfVal.isReferencedByAnyDclOrDesign // Boolean — true if referenced by a Dcl, DclConst, or DFDesignBlock
 dfVal.isConstVAR              // VAR never assigned/connected
 dfVal.isAllowedMultipleReferences // Boolean
 dfVal.isPartialNetDest        // Boolean — is a partial assignment/connection target
