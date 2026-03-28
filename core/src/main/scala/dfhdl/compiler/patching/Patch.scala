@@ -388,6 +388,32 @@ extension (db: DB)
                   Patch.Add(db2, Patch.Add.Config.After)
                 ) =>
               tbl + (m -> Patch.Add(db1 concat db2, config1))
+            // concatenating additions with Before and After configurations, respectively
+            case (
+                  Patch.Add(db1, Patch.Add.Config.Before),
+                  Patch.Add(db2, Patch.Add.Config.After)
+                ) =>
+              val combinedDB = (db1 concat db2).copy(members =
+                db1.members ++ (m :: db2.members.drop(1))
+              )
+              val config = Patch.Add.Config.ReplaceWithMemberN(
+                db1.members.length - 1,
+                Patch.Replace.Config.FullReplacement
+              )
+              tbl + (m -> Patch.Add(combinedDB, config))
+            // concatenating additions with After and Before configurations, respectively
+            case (
+                  Patch.Add(db1, Patch.Add.Config.After),
+                  Patch.Add(db2, Patch.Add.Config.Before)
+                ) =>
+              val combinedDB = (db1 concat db2).copy(members =
+                (db1.members.head :: db2.members.drop(1)) ++ (m :: db1.members.drop(1))
+              )
+              val config = Patch.Add.Config.ReplaceWithMemberN(
+                db2.members.length - 1,
+                Patch.Replace.Config.FullReplacement
+              )
+              tbl + (m -> Patch.Add(combinedDB, config))
             // concatenating moves with the same configuration
             // (the patch table does not care about original owner, so we ignore it.
             // only the patchList that has all the move patches uses the original owners
