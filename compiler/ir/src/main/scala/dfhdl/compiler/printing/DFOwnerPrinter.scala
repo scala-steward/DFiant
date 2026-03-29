@@ -26,14 +26,20 @@ trait AbstractOwnerPrinter extends AbstractPrinter:
         // a def design that is anonymous may not be referenced later,
         // so we need to check if it has an output port that is referenced later
         case design: DFDesignBlock if design.instMode == InstMode.Def && design.isAnonymous =>
-          design.members(MemberView.Folded).view.reverse.collectFirst { case port @ DclOut() =>
+          // For duplicate designs, ports may not be in the members list but are
+          // available via dupPortsByName (with DuplicationRef owners).
+          // For DuplicationRef-backed ports, we check the PBNS read deps instead.
+          val ports = getSet.designDB.dupPortsByName(design).view.values.collect {
+            case port @ DclOut() => port
+          }
+          val hasOutput = ports.lastOption.map(port =>
             // no dependencies means the output is not read (referenced later),
             // so we need to print now
-            port.getReadDeps.isEmpty
-          }
-            // no output port means a Unit return that cannot be referenced,
-            // so we need to print it now
-            .getOrElse(true)
+            port.getPortsByNameSelectors.forall(_.getReadDeps.isEmpty)
+          )
+          // no output port means a Unit return that cannot be referenced,
+          // so we need to print it now
+          hasOutput.getOrElse(true)
         // named members
         case m: DFMember.Named if !m.isAnonymous => true
         // excluding late (via) connections
