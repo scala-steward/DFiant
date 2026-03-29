@@ -343,20 +343,22 @@ final case class DB(
         case _                            => false
     domainOwnerMemberList.map { case (owner, members) =>
       owner match
-        case design: DFDesignBlock =>
-          if (design.isDuplicate)
-            val dupMembers =
-              domainOwnerMemberTable(design)
-                .view.filter(publicMemberFilter).map(getDupMember).toList
-            getDupMember(design) -> dupMembers
-          else owner -> members.filter(publicMemberFilter)
-        case domainBlock: DomainBlock =>
-          if (domainBlock.isDuplicate)
-            val dupMembers =
-              domainOwnerMemberTable(domainBlock)
-                .view.filter(publicMemberFilter).map(getDupMember).toList
-            getDupMember(domainBlock) -> dupMembers
-          else owner -> members.filter(publicMemberFilter)
+        case dupDesign: DFDesignBlock if dupDesign.isDuplicate =>
+          val origDesign = dupDesignToOrigMap(dupDesign)
+          val dupMembers =
+            domainOwnerMemberTable(origDesign)
+              .view.filter(publicMemberFilter).map(getDupMember).toList
+          dupDesign -> dupMembers
+        case origDesign: DFDesignBlock =>
+          origDesign -> members.filter(publicMemberFilter)
+        case dupDomainBlock: DomainBlock if dupDomainBlock.isDuplicate =>
+          val origDomainBlock = dupDomainBlockToOrigMap(dupDomainBlock)
+          val dupMembers =
+            domainOwnerMemberTable(origDomainBlock)
+              .view.filter(publicMemberFilter).map(getDupMember).toList
+          dupDomainBlock -> dupMembers
+        case origDomainBlock: DomainBlock =>
+          origDomainBlock -> members.filter(publicMemberFilter)
         // TODO: missing interface handling
         case interface: DFInterfaceOwner => ???
     }
@@ -766,53 +768,51 @@ final case class DB(
         owner.domainType match
           case _: DomainType.RT => Some(owner)
           case _                => None
-    members.view.flatMap {
-      case domainOwner: DFDomainOwner =>
-        domainOwner.domainType match
-          // only RT domain owners are saved
-          case DomainType.RT(cfg) =>
-            cfg match
-              // derived configuration dependency is set according to various factors:
-              case RTDomainCfg.Derived =>
-                domainOwner match
-                  // for designs, the derived configuration is defined by the owner RT design, if such exists.
-                  // if not, then there is no domain configuration dependency
-                  case design: DFDesignBlock =>
-                    if (design.isTop) None
-                    else design.getRTOwnerOption.map(design -> _)
-                  // for domains, the derived configuration is defined according to the input ports source,
-                  // if such ports exist (ignoring Clk/Rst ports).
-                  // otherwise, the derived configuration is defined by the domain's owner.
-                  case domain: DomainBlock =>
-                    val domainMembers = domainOwnerMemberTable(domain)
-                    val inPorts = domainMembers.collect {
-                      case dcl: DFVal.Dcl if dcl.isPortIn && !dcl.isClkDcl && !dcl.isRstDcl => dcl
-                    }
-                    val inSourceDomains = inPorts.view.flatMap { port =>
-                      connectionTable.getNets(port).headOption match
-                        case Some(DFNet.Connection(_, from, _)) => from.getRTOwnerOption
-                        case _                                  => None
-                    }.toSet
-                    if (inSourceDomains.isEmpty) domain.getRTOwnerOption.map(domain -> _)
-                    else if (inSourceDomains.size > 1)
-                      throw new IllegalArgumentException(
-                        s"""|Found ambiguous source RT configurations for the domain:
-                            |${domain.getFullName}
-                            |Sources:
-                            |${inSourceDomains.map(_.getFullName).mkString("\n")}
-                            |Possible solution:
-                            |Either explicitly define a configuration for the domain or drive it from a single source domain.
-                            |""".stripMargin
-                      )
-                    else Some(domain -> inSourceDomains.head)
-                  case ifc: DFInterfaceOwner =>
-                    ??? // TODO: decide what are the rules are for interfaces
-              // related configuration is just dependent on the its related domain
-              case RTDomainCfg.Related(relatedDomainRef) =>
-                Some(domainOwner -> relatedDomainRef.get)
-              case _ => None
-          case _ => None
-      case _ => None
+    // Use dupDomainOwnerPublicMemberList to include domain owners from duplicate designs
+    dupDomainOwnerPublicMemberList.view.flatMap { (domainOwner, domainMembers) =>
+      domainOwner.domainType match
+        // only RT domain owners are saved
+        case DomainType.RT(cfg) =>
+          cfg match
+            // derived configuration dependency is set according to various factors:
+            case RTDomainCfg.Derived =>
+              domainOwner match
+                // for designs, the derived configuration is defined by the owner RT design, if such exists.
+                // if not, then there is no domain configuration dependency
+                case design: DFDesignBlock =>
+                  if (design.isTop) None
+                  else design.getRTOwnerOption.map(design -> _)
+                // for domains, the derived configuration is defined according to the input ports source,
+                // if such ports exist (ignoring Clk/Rst ports).
+                // otherwise, the derived configuration is defined by the domain's owner.
+                case domain: DomainBlock =>
+                  val inPorts = domainMembers.collect {
+                    case dcl: DFVal.Dcl if dcl.isPortIn && !dcl.isClkDcl && !dcl.isRstDcl => dcl
+                  }
+                  val inSourceDomains = inPorts.view.flatMap { port =>
+                    connectionTable.getNets(port).headOption match
+                      case Some(DFNet.Connection(_, from, _)) => from.getRTOwnerOption
+                      case _                                  => None
+                  }.toSet
+                  if (inSourceDomains.isEmpty) domain.getRTOwnerOption.map(domain -> _)
+                  else if (inSourceDomains.size > 1)
+                    throw new IllegalArgumentException(
+                      s"""|Found ambiguous source RT configurations for the domain:
+                          |${domain.getFullName}
+                          |Sources:
+                          |${inSourceDomains.map(_.getFullName).mkString("\n")}
+                          |Possible solution:
+                          |Either explicitly define a configuration for the domain or drive it from a single source domain.
+                          |""".stripMargin
+                    )
+                  else Some(domain -> inSourceDomains.head)
+                case ifc: DFInterfaceOwner =>
+                  ??? // TODO: decide what are the rules are for interfaces
+            // related configuration is just dependent on the its related domain
+            case RTDomainCfg.Related(relatedDomainRef) =>
+              Some(domainOwner -> relatedDomainRef.get)
+            case _ => None
+        case _ => None
     }
       .toMap
   end dependentRTDomainOwners
