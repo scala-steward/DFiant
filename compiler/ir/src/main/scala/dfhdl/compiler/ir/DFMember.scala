@@ -1589,6 +1589,12 @@ final case class DomainBlock(
   ).asInstanceOf[this.type]
 end DomainBlock
 
+object DomainBlock:
+  extension (domainBlock: DomainBlock)
+    def isDuplicate: Boolean = domainBlock.ownerRef match
+      case _: DFRef.DuplicationRef => true
+      case _                       => false
+
 // sealed trait Timer extends DFMember.Named
 // object Timer:
 //   type Ref = DFRef.TwoWay[Timer, DFMember]

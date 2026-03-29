@@ -21,7 +21,7 @@ object DFRef:
     val id: Int = 0
     override def get(using getSet: MemberGetSet): DFMember.Empty = DFMember.Empty
   sealed trait OneWay[+M <: DFMember] extends DFRef[M]:
-    final def copyAsNewRef(using refGen: RefGen): this.type =
+    def copyAsNewRef(using refGen: RefGen): this.type =
       refGen.genOneWay[M].asInstanceOf[this.type]
   object OneWay:
     final case class Gen[M <: DFMember](grpId: (Int, Int), id: Int) extends OneWay[M]
@@ -32,6 +32,7 @@ object DFRef:
     val id: Int = -1
     override def get(using getSet: MemberGetSet): DFOwnerNamed = owner
     override def getOption(using getSet: MemberGetSet): Option[DFOwnerNamed] = Some(owner)
+    override def copyAsNewRef(using refGen: RefGen): this.type = this
 
   sealed trait TwoWay[+M <: DFMember, +O <: DFMember] extends DFRef[M]:
     def copyAsNewRef(using refGen: RefGen): this.type =
@@ -72,7 +73,7 @@ object DFRef:
           case TypeRef(grpId, id)    => s"TR_${grpId._1.toHexString}_${grpId._2.toHexString}_${id}"
           case TwoWay.Gen(grpId, id) => s"TW_${grpId._1.toHexString}_${grpId._2.toHexString}_${id}"
           case OneWay.Gen(grpId, id) => s"OW_${grpId._1.toHexString}_${grpId._2.toHexString}_${id}"
-          case _: DuplicationRef =>
+          case _: DuplicationRef     =>
             throw new IllegalArgumentException("DuplicationRef must never be serialized")
       ,
       str =>
