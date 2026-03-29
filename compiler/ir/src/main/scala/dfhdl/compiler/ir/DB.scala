@@ -43,13 +43,30 @@ final case class DB(
   // considered to be in build if not in simulation and has a device constraint
   lazy val inBuild: Boolean = !inSimulation && top.isDeviceTop
 
-  lazy val portsByName: Map[DFDesignInst, Map[String, DFVal.Dcl]] =
-    members.view
+  lazy val dupPortsByName: Map[DFDesignInst, ListMap[String, DFVal.Dcl]] =
+    val origMap = members.view
       .collect { case m: DFVal.Dcl if m.isPort => m }
       .groupBy(_.getOwnerDesign)
       .map { case (design, dcls) =>
-        design -> dcls.map(m => m.getRelativeName(design) -> m).toMap
+        design -> ListMap.from(dcls.view.map(m => m.getRelativeName(design) -> m))
       }.toMap
+    // Add entries for duplicate designs by copying origin Dcls with DuplicationRef owner.
+    // PBNS members carry the correct dfType for each duplicate's port (reflecting the
+    // actual instantiation parameters), so we use it to override the origin Dcl's dfType.
+    val pbnsByDesign = members.view
+      .collect { case m: DFVal.PortByNameSelect => m }
+      .groupBy(m => m.designInstRef.get)
+      .view.mapValues(_.map(m => m.portNamePath -> m.dfType).toMap).toMap
+    val dupEntries = dupDesignToOrigMap.map { (dupDesign, origDesign) =>
+      val pbnsTypes = pbnsByDesign.getOrElse(dupDesign, Map.empty)
+      dupDesign -> ListMap.from(origMap(origDesign).view.map { (name, dcl) =>
+        val dfType = pbnsTypes.getOrElse(name, dcl.dfType)
+        name -> dcl.copy(ownerRef = DFRef.DuplicationRef(dupDesign), dfType = dfType)
+      })
+    }
+    // dupEntries only fills in missing entries (designs without real port members)
+    dupEntries ++ origMap
+  end dupPortsByName
 
   lazy val topIOs: List[DFVal.Dcl] = designMemberTable(top).collect {
     case dcl: DFVal.Dcl if dcl.isPort => dcl
@@ -267,6 +284,37 @@ final case class DB(
   // holds the topological order of unique design block dependency
   lazy val uniqueDesignMemberList: List[(DFDesignBlock, List[DFMember])] =
     designMemberList.filterNot(_._1.isDuplicate)
+
+  // maps each duplicated design to its origin (first non-duplicate design with the same dclName)
+  lazy val dupDesignToOrigMap: Map[DFDesignBlock, DFDesignBlock] =
+    val origByName =
+      uniqueDesignMemberList.map(_._1).groupBy(_.dclName).view.mapValues(_.head).toMap
+    designMemberList.collect {
+      case (design, _) if design.isDuplicate => design -> origByName(design.dclName)
+    }.toMap
+
+  // maps each design (origin and duplicates) to its domain blocks.
+  // For duplicates, domain blocks are cloned from the origin with DuplicationRef owners.
+  // Nested domain blocks get DuplicationRef pointing to the duplicated parent block.
+  lazy val dupDesignDomainBlockMap: Map[DFDesignBlock, List[DomainBlock]] =
+    val origDomainBlocks: Map[DFDesignBlock, List[DomainBlock]] =
+      members.view
+        .collect { case db: DomainBlock => db }
+        .groupBy(_.getOwnerDesign)
+        .map { (design, blocks) => design -> blocks.toList }
+        .toMap
+    val dupDomainBlocks = dupDesignToOrigMap.map { (dupDesign, origDesign) =>
+      val origToDupMap = mutable.Map.empty[DFDomainOwner, DFDomainOwner]
+      origToDupMap += origDesign -> dupDesign
+      dupDesign -> origDomainBlocks.getOrElse(origDesign, Nil).map { origBlock =>
+        val dupOwner = origToDupMap(origBlock.getOwnerDomain)
+        val dupBlock = origBlock.copy(ownerRef = DFRef.DuplicationRef(dupOwner))
+        origToDupMap += origBlock -> dupBlock
+        dupBlock
+      }
+    }
+    origDomainBlocks ++ dupDomainBlocks
+  end dupDesignDomainBlockMap
 
   // holds a hash table that lists members of each owner block. The member list order is maintained.
   lazy val designMemberTable: Map[DFDesignBlock, List[DFMember]] =
@@ -638,24 +686,25 @@ final case class DB(
           )
         }
     // collect all ports that are not connected directly or implicitly as magnets
-    val danglingPorts = members.collect {
-      case p: DFVal.Dcl
-          if p.isPortIn && !p.isClkDcl && !p.isRstDcl && !connectionTable.contains(p) &&
-            !p.getOwnerDesign.isTop && !magnetConnectionTable.contains(p) =>
-        val ownerDesign = p.getOwnerDesign
-        s"""|DFiant HDL connectivity error!
-            |Position:  ${ownerDesign.meta.position}
-            |Hierarchy: ${ownerDesign.getFullName}
-            |Message:   Found a dangling (unconnected) input port `${p.getName}`.""".stripMargin
-      case p: DFVal.Dcl
-          if p.isPortOut && !p.getOwnerDesign.isDuplicate && !p.getOwnerDesign.isBlackBox &&
-            !connectionTable.contains(p) && !assignmentsDclTable.contains(p) &&
-            !magnetConnectionTable.contains(p) && !p.hasNonBubbleInit =>
-        val ownerDesign = p.getOwnerDesign
-        s"""|DFiant HDL connectivity error!
-            |Position:  ${p.meta.position}
-            |Hierarchy: ${ownerDesign.getFullName}
-            |Message:   Found a dangling (unconnected/unassigned and uninitialized) output port `${p.getName}`.""".stripMargin
+    val danglingPorts = dupPortsByName.view.flatMap { (ownerDesign, ports) =>
+      ports.collect {
+        case (_, p: DFVal.Dcl)
+            if p.isPortIn && !p.isClkDcl && !p.isRstDcl && !connectionTable.contains(p) &&
+              !ownerDesign.isTop && !magnetConnectionTable.contains(p) =>
+          s"""|DFiant HDL connectivity error!
+              |Position:  ${ownerDesign.meta.position}
+              |Hierarchy: ${ownerDesign.getFullName}
+              |Message:   Found a dangling (unconnected) input port `${p.getName}`.""".stripMargin
+        case (_, p: DFVal.Dcl)
+            if p.isPortOut && !ownerDesign.isDuplicate && !ownerDesign.isBlackBox &&
+              !connectionTable.contains(p) && !assignmentsDclTable.contains(p) &&
+              !magnetConnectionTable.contains(p) && !p.hasNonBubbleInit =>
+          val ownerDesign = p.getOwnerDesign
+          s"""|DFiant HDL connectivity error!
+              |Position:  ${p.meta.position}
+              |Hierarchy: ${ownerDesign.getFullName}
+              |Message:   Found a dangling (unconnected/unassigned and uninitialized) output port `${p.getName}`.""".stripMargin
+      }
     }
     if (danglingPorts.nonEmpty)
       throw new IllegalArgumentException(
@@ -1248,8 +1297,8 @@ end DB
   *   - `Folded`: returns only the direct children of the owner (members whose `getOwner == owner`).
   *   - `Flattened`: returns all descendants recursively. For a `DFDesignBlock` owner this returns
   *     every member in the design (via `designMemberTable`). For other owners it recurses into
-  *     nested blocks but does NOT cross `DFDesignBlock` boundaries — sub-designs appear as a
-  *     single opaque entry.
+  *     nested blocks but does NOT cross `DFDesignBlock` boundaries — sub-designs appear as a single
+  *     opaque entry.
   *
   * Use `Folded` when you only need to process immediate children (e.g. steps at one nesting level).
   * Use `Flattened` when you need to inspect or collect all descendants (e.g. all `Goto` members

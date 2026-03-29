@@ -364,7 +364,7 @@ final case class DFVal.PortByNameSelect(
 )
 type PortByNameSelect.Ref = DFRef.TwoWay[DFDesignInst, PortByNameSelect]
 
-portByNameSelect.getPortDcl   // resolve to actual DFVal.Dcl (via DB.portsByName)
+portByNameSelect.getPortDcl   // resolve to actual DFVal.Dcl (via DB.dupPortsByName)
 
 // Extractor:
 DFVal.PortByNameSelect.Of(dcl)  // unapply → Option[DFVal.Dcl]

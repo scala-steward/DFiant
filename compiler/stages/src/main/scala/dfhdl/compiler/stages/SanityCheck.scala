@@ -57,7 +57,7 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
         case pbns: DFVal.PortByNameSelect =>
           val design = pbns.designInstRef.get
           // check port existence
-          getSet.designDB.portsByName(design).get(pbns.portNamePath) match
+          getSet.designDB.dupPortsByName(design).get(pbns.portNamePath) match
             case None =>
               reportViolation(
                 s"Missing port ${pbns.portNamePath} for by-name port selection: ${pbns}"
@@ -164,6 +164,18 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
                       |Origin member: ${originMember}""".stripMargin
                 )
           case _ =>
+    }
+    // check that no DuplicationRef exists in refTable
+    refTable.foreach { (ref, _) =>
+      if (ref.isInstanceOf[DFRef.DuplicationRef])
+        reportViolation(s"DuplicationRef found in refTable: $ref")
+    }
+    // check that no member has a DuplicationRef ownerRef
+    getSet.designDB.members.foreach { member =>
+      if (member.ownerRef.isInstanceOf[DFRef.DuplicationRef])
+        reportViolation(
+          s"Member with DuplicationRef ownerRef found in members: $member"
+        )
     }
     require(!hasViolations, "Failed reference check!")
   end refCheck

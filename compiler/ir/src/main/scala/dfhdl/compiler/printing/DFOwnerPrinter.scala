@@ -203,15 +203,11 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
     s"${printer.csAnnotations(design.dclMeta.annotations)}$dcl\n"
   end csDFDesignDefDcl
   private def csDesignParamList(design: DFDesignBlock): List[String] =
-    design.members(MemberView.Folded).flatMap {
-      case param: DesignParam =>
-        param.appliedValRefOpt match
-          case Some(ref) => Some(s"${param.getName} = ${ref.refCodeString}")
-          case None      => None
-      case _ => None
-    }
+    design.paramMap.view.map { (name, ref) =>
+      s"${name} = ${ref.refCodeString}"
+    }.toList
   def csDFDesignDefInst(design: DFDesignBlock): String =
-    val ports = design.members(MemberView.Folded).view.collect { case port @ DclIn() =>
+    val ports = getSet.designDB.dupPortsByName(design).view.values.collect { case port @ DclIn() =>
       val DFNet.Connection(_, from: DFVal, _) = port.getConnectionTo.get.runtimeChecked
       printer.csDFValRef(from, design.getOwner)
     }.mkString(", ")
