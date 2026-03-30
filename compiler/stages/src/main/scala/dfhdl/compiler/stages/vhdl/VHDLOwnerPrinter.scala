@@ -15,11 +15,12 @@ protected trait VHDLOwnerPrinter extends AbstractOwnerPrinter:
   def packageName: String = s"${getSet.topName}_pkg"
   def csLibrary(inSimulation: Boolean, usesMathReal: Boolean): String =
     val default =
-      s"""library ieee;
-         |use ieee.std_logic_1164.all;
-         |use ieee.numeric_std.all;${if (usesMathReal) "\nuse ieee.math_real.all;" else ""}
-         |use work.dfhdl_pkg.all;
-         |use work.$packageName.all;""".stripMargin
+      sn"""|library ieee;
+           |use ieee.std_logic_1164.all;
+           |use ieee.numeric_std.all;
+           |${if (usesMathReal) "use ieee.math_real.all;" else ""}
+           |use work.dfhdl_pkg.all;
+           |${if (printer.hasGlobalContent) s"use work.$packageName.all;" else ""}"""
     if (useStdSimLibrary && inSimulation)
       s"""$default
          |

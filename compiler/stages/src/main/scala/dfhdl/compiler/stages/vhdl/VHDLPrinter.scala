@@ -159,67 +159,71 @@ class VHDLPrinter(val dialect: VHDLDialect)(using
   def dfhdlDefsFileName: String = s"dfhdl_pkg.vhd"
   def dfhdlSourceContents: String =
     scala.io.Source.fromResource(dfhdlDefsFileName).getLines().mkString("\n")
+  override protected def hasGlobalContentCheck: Boolean =
+    super.hasGlobalContentCheck || printer.globalVectorTypes.nonEmpty
   override def csGlobalFileContent: String =
-    // In VHDL the vectors need to be named, and put in dependency order of other named types.
-    // So first we prepare the vector type declarations in a mutable map and later we remove
-    // entries that were already placed in the final type printing.
-    val vectorTypeDcls = mutable.Map.from(
-      printer.globalVectorTypes.view.map { case (tpName, (vecType, depth)) =>
-        tpName -> printer.csDFVectorDclsGlobal(DclScope.Pkg)(tpName, vecType, depth)
-      }
-    )
-    // The body declarations can be in any order, as long as it's consistent between compilations.
-    val vectorTypeDclsBody =
-      printer.globalVectorTypes.view.map { case (tpName, (vecType, depth)) =>
-        printer.csDFVectorDclsGlobal(DclScope.PkgBody)(tpName, vecType, depth)
-      }.mkString("\n")
-    // collect the global named types, including vectors
-    val namedDFTypes = ListSet.from(getSet.designDB.members.view.collect {
-      case port @ DclPort()                     => port.dfType
-      case const @ DclConst() if const.isGlobal => const.dfType
-    }.flatMap(_.decompose { case dt: (DFVector | NamedDFType) => dt }))
-    // declarations of the types and relevant functions
-    val namedTypeConvFuncsDcl = namedDFTypes.view
-      .flatMap {
-        // vector types can have different dimensions, but we only need the declaration once
-        case dfType: DFVector =>
-          val tpName = printer.getVecDepthAndCellTypeName(dfType)._1
-          vectorTypeDcls.get(tpName) match
-            case Some(desc) =>
-              vectorTypeDcls -= tpName
-              Some(desc)
-            case None => None
-        case dfType: NamedDFType =>
-          List(
-            printer.csNamedDFTypeDcl(dfType, global = true),
-            printer.csNamedDFTypeConvFuncsDcl(dfType)
-          )
-      }
-      .mkString("\n")
-    val namedTypeConvFuncsBody =
-      getSet.designDB.getGlobalNamedDFTypes.view
-        .collect { case dfType: NamedDFType => printer.csNamedDFTypeConvFuncsBody(dfType) }
+    if (hasGlobalContent)
+      // In VHDL the vectors need to be named, and put in dependency order of other named types.
+      // So first we prepare the vector type declarations in a mutable map and later we remove
+      // entries that were already placed in the final type printing.
+      val vectorTypeDcls = mutable.Map.from(
+        printer.globalVectorTypes.view.map { case (tpName, (vecType, depth)) =>
+          tpName -> printer.csDFVectorDclsGlobal(DclScope.Pkg)(tpName, vecType, depth)
+        }
+      )
+      // The body declarations can be in any order, as long as it's consistent between compilations.
+      val vectorTypeDclsBody =
+        printer.globalVectorTypes.view.map { case (tpName, (vecType, depth)) =>
+          printer.csDFVectorDclsGlobal(DclScope.PkgBody)(tpName, vecType, depth)
+        }.mkString("\n")
+      // collect the global named types, including vectors
+      val namedDFTypes = ListSet.from(getSet.designDB.members.view.collect {
+        case port @ DclPort()                     => port.dfType
+        case const @ DclConst() if const.isGlobal => const.dfType
+      }.flatMap(_.decompose { case dt: (DFVector | NamedDFType) => dt }))
+      // declarations of the types and relevant functions
+      val namedTypeConvFuncsDcl = namedDFTypes.view
+        .flatMap {
+          // vector types can have different dimensions, but we only need the declaration once
+          case dfType: DFVector =>
+            val tpName = printer.getVecDepthAndCellTypeName(dfType)._1
+            vectorTypeDcls.get(tpName) match
+              case Some(desc) =>
+                vectorTypeDcls -= tpName
+                Some(desc)
+              case None => None
+          case dfType: NamedDFType =>
+            List(
+              printer.csNamedDFTypeDcl(dfType, global = true),
+              printer.csNamedDFTypeConvFuncsDcl(dfType)
+            )
+        }
         .mkString("\n")
-    val usesMathReal = getSet.designDB.membersGlobals.exists {
-      _.dfType.decompose { case dt: DFDouble => dt }.nonEmpty
-    }
-    sn"""|library ieee;
-         |use ieee.std_logic_1164.all;
-         |use ieee.numeric_std.all;
-         |${if (usesMathReal) "use ieee.math_real.all;" else ""}
-         |use work.dfhdl_pkg.all;
-         |
-         |package ${printer.packageName} is
-         |${csGlobalConstIntDcls}
-         |${namedTypeConvFuncsDcl}
-         |${csGlobalConstNonIntDcls}
-         |end package ${printer.packageName};
-         |
-         |package body ${printer.packageName} is
-         |${namedTypeConvFuncsBody}
-         |${vectorTypeDclsBody}
-         |end package body ${printer.packageName};
-         |"""
+      val namedTypeConvFuncsBody =
+        getSet.designDB.getGlobalNamedDFTypes.view
+          .collect { case dfType: NamedDFType => printer.csNamedDFTypeConvFuncsBody(dfType) }
+          .mkString("\n")
+      val usesMathReal = getSet.designDB.membersGlobals.exists {
+        _.dfType.decompose { case dt: DFDouble => dt }.nonEmpty
+      }
+      sn"""|library ieee;
+          |use ieee.std_logic_1164.all;
+          |use ieee.numeric_std.all;
+          |${if (usesMathReal) "use ieee.math_real.all;" else ""}
+          |use work.dfhdl_pkg.all;
+          |
+          |package ${printer.packageName} is
+          |${csGlobalConstIntDcls}
+          |${namedTypeConvFuncsDcl}
+          |${csGlobalConstNonIntDcls}
+          |end package ${printer.packageName};
+          |
+          |package body ${printer.packageName} is
+          |${namedTypeConvFuncsBody}
+          |${vectorTypeDclsBody}
+          |end package body ${printer.packageName};
+          |"""
+    else ""
   end csGlobalFileContent
   def alignCode(cs: String): String =
     cs

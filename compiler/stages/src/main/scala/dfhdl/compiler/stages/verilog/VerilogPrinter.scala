@@ -173,30 +173,32 @@ class VerilogPrinter(val dialect: VerilogDialect)(using
   def globalFileName: String =
     s"${printer.defsName}.$verilogFileHeaderSuffix"
   override def csGlobalFileContent: String =
-    val defName = printer.defsName.toUpperCase
-    // the module defs are alternating between outside of and inside of the module
-    // because we will include the module defs twice, once in the top of the file
-    // and second time inside the module.
-    val globalParams =
-      if (printer.supportGlobalParameters) super.csGlobalFileContent else ""
-    val globalToLocalParams =
-      if (printer.supportGlobalParameters) "" else super.csGlobalFileContent
-    val moduleDefs =
-      if (printer.allowTypeDef) ""
-      else
-        sn"""|`ifndef ${defName}_MODULE
-             |`define ${defName}_MODULE
-             |`else
-             |$globalToLocalParams
-             |${printer.csGlobalTypeFuncDcls}
-             |`undef ${defName}_MODULE
-             |`endif"""
-    sn"""|`ifndef $defName
-         |`define $defName
-         |$globalParams
-         |`endif
-         |$moduleDefs
-         |"""
+    if (hasGlobalContent)
+      val defName = printer.defsName.toUpperCase
+      // the module defs are alternating between outside of and inside of the module
+      // because we will include the module defs twice, once in the top of the file
+      // and second time inside the module.
+      val globalParams =
+        if (printer.supportGlobalParameters) super.csGlobalFileContent else ""
+      val globalToLocalParams =
+        if (printer.supportGlobalParameters) "" else super.csGlobalFileContent
+      val moduleDefs =
+        if (printer.allowTypeDef) ""
+        else
+          sn"""|`ifndef ${defName}_MODULE
+              |`define ${defName}_MODULE
+              |`else
+              |$globalToLocalParams
+              |${printer.csGlobalTypeFuncDcls}
+              |`undef ${defName}_MODULE
+              |`endif"""
+      sn"""|`ifndef $defName
+          |`define $defName
+          |$globalParams
+          |`endif
+          |$moduleDefs
+          |"""
+    else ""
   end csGlobalFileContent
   def dfhdlDefsFileName: String = s"dfhdl_defs.$verilogFileHeaderSuffix"
   def dfhdlSourceContents: String =

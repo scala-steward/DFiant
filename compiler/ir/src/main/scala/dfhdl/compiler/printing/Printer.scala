@@ -145,6 +145,9 @@ trait Printer
   end csDFMember
   def designFileName(designName: String): String
   def globalFileName: String
+  protected def hasGlobalContentCheck: Boolean =
+    getSet.designDB.membersGlobals.nonEmpty || csGlobalTypeDcls.nonEmpty
+  lazy val hasGlobalContent: Boolean = hasGlobalContentCheck
   def csGlobalFileContent: String =
     sn"""|$csGlobalConstIntDcls
          |$csGlobalTypeDcls
@@ -183,16 +186,20 @@ trait Printer
           )
         )
       else None
-    val globalSourceFile =
-      SourceFile(
-        SourceOrigin.Compiled,
-        SourceType.GlobalDef,
-        hdlFolderName + separatorChar + globalFileName,
-        formatCode(csGlobalFileContent, withColor = false)
-      )
+    val globalSourceFile: Option[SourceFile] =
+      if (hasGlobalContent)
+        Some(
+          SourceFile(
+            SourceOrigin.Compiled,
+            SourceType.GlobalDef,
+            hdlFolderName + separatorChar + globalFileName,
+            formatCode(csGlobalFileContent, withColor = false)
+          )
+        )
+      else None
     val compiledFiles = Iterable(
       dfhdlSourceFile,
-      Some(globalSourceFile),
+      globalSourceFile,
       designDB.uniqueDesignMemberList.view.map { case (block: DFDesignBlock, _) =>
         val sourceType = block.instMode match
           case _: DFDesignBlock.InstMode.BlackBox => SourceType.BlackBox

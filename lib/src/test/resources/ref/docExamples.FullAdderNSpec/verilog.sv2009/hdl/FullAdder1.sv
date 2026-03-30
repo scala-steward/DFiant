@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "FullAdderN_defs.svh"
 
 module FullAdder1(
   input  wire logic a,

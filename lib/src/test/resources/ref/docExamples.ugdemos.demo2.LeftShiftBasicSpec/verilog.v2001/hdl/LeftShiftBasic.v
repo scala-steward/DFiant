@@ -1,7 +1,6 @@
 /* A basic left shifter */
 `default_nettype none
 `timescale 1ns/1ps
-`include "LeftShiftBasic_defs.vh"
 
 module LeftShiftBasic(
   /* bits input */
@@ -12,6 +11,5 @@ module LeftShiftBasic(
   output wire [7:0] oBits
 );
   `include "dfhdl_defs.vh"
-  `include "LeftShiftBasic_defs.vh"
   assign oBits = iBits << shift;
 endmodule

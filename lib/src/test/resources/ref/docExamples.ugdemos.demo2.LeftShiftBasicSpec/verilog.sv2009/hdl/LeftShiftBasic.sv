@@ -1,7 +1,6 @@
 /* A basic left shifter */
 `default_nettype none
 `timescale 1ns/1ps
-`include "LeftShiftBasic_defs.svh"
 
 module LeftShiftBasic(
   /* bits input */

@@ -41,7 +41,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       id,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "ID_defs.svh"
          |
          |module ID(
          |  input  wire logic signed [15:0] x,
@@ -62,7 +61,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "IDTop_defs.svh"
          |
          |module ID(
          |  input  wire logic signed [15:0] x,
@@ -76,7 +74,6 @@ class PrintVerilogCodeSpec extends StageSpec:
          |
          |`default_nettype none
          |`timescale 1ns/1ps
-         |`include "IDTop_defs.svh"
          |
          |module IDTop(
          |  input  wire logic signed [15:0] x,
@@ -295,7 +292,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Top_defs.svh"
          |
          |module Top(
          |  input  wire logic        clk,
@@ -353,7 +349,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Top_defs.svh"
          |
          |module Top;
          |  `include "dfhdl_defs.svh"
@@ -415,7 +410,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       """|/* HasDocs has docs */
          |`default_nettype none
          |`timescale 1ns/1ps
-         |`include "HasDocs_defs.svh"
          |
          |module HasDocs(
          |  /* My in */
@@ -600,7 +594,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "IDTop_defs.svh"
          |
          |module IDTop(
          |  input  wire logic clk,
@@ -637,7 +630,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       id,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "SelOp_defs.svh"
          |
          |module SelOp(
          |  input  wire logic c,
@@ -668,7 +660,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Empty_defs.svh"
          |
          |module Empty;
          |  `include "dfhdl_defs.svh"
@@ -688,7 +679,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "HighZ_defs.svh"
          |
          |module HighZ(
          |  input  wire logic [7:0] x,
@@ -718,7 +708,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.svh"
          |
          |module Foo(
          |  input  wire logic [15:0] x,
@@ -751,14 +740,12 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.vh"
          |
          |module Foo(
          |  x,
          |  y
          |);
          |  `include "dfhdl_defs.vh"
-         |  `include "Foo_defs.vh"
          |  input  wire [15:0] x;
          |  output reg [15:0] y;
          |  always @(x)
@@ -864,7 +851,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.svh"
          |
          |module Foo(
          |  output logic x,
@@ -915,7 +901,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.svh"
          |
          |module Foo(
          |  output logic [9:0] matrix [0:7] [0:7]
@@ -979,13 +964,11 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.vh"
          |
          |module Foo(
          |  output reg [639:0] matrix
          |);
          |  `include "dfhdl_defs.vh"
-         |  `include "Foo_defs.vh"
          |
          |  always
          |  begin
@@ -1036,7 +1019,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.svh"
          |
          |module Foo(
          |  output logic x,
@@ -1135,7 +1117,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |    $display("These are the values: %d", param3, ", %d", param4, ", %h", param5, ", %h", param6, ", %d", param7, ", %b", param8, ", %s", param9 ? "true" : "false", ", %s", param10.name(), "");
          |    $info(
          |      "Debug at Foo\n",
-         |      "compiler/stages/src/test/scala/StagesSpec/PrintVerilogCodeSpec.scala:1087:9\n",
+         |      "compiler/stages/src/test/scala/StagesSpec/PrintVerilogCodeSpec.scala:1069:9\n",
          |      "param3 = %d\n", param3,
          |      "param4 = %d\n", param4,
          |      "param5 = %h\n", param5,
@@ -1207,7 +1189,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |    $display("These are the values: %d", param3, ", %d", param4, ", %h", param5, ", %h", param6, ", %d", param7, ", %b", param8, ", %s", param9 ? "true" : "false", ", %s", MyEnum_to_string(param10), "");
          |    $display("INFO: ", 
          |      "Debug at Foo\n",
-         |      "compiler/stages/src/test/scala/StagesSpec/PrintVerilogCodeSpec.scala:1087:9\n",
+         |      "compiler/stages/src/test/scala/StagesSpec/PrintVerilogCodeSpec.scala:1069:9\n",
          |      "param3 = %d\n", param3,
          |      "param4 = %d\n", param4,
          |      "param5 = %h\n", param5,
@@ -1455,7 +1437,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.svh"
          |
          |module Foo(
          |  input  wire logic clk,
@@ -1484,7 +1465,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.svh"
          |
          |module Foo(
          |  input  wire logic signed [7:0] x,
@@ -1508,14 +1488,12 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.vh"
          |
          |module Foo(
          |  x,
          |  y
          |);
          |  `include "dfhdl_defs.vh"
-         |  `include "Foo_defs.vh"
          |  input  wire [7:0] x;
          |  output wire [7:0] y;
          |  assign y = `ABS(x);

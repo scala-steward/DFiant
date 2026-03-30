@@ -39,7 +39,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.ID_pkg.all;
          |
          |entity ID is
          |port (
@@ -64,7 +63,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.IDTop_pkg.all;
          |
          |entity ID is
          |port (
@@ -82,7 +80,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.IDTop_pkg.all;
          |
          |entity IDTop is
          |port (
@@ -223,7 +220,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Top_pkg.all;
          |
          |entity Top is
          |port (
@@ -290,7 +286,6 @@ class PrintVHDLCodeSpec extends StageSpec:
           |use ieee.numeric_std.all;
           |use ieee.math_real.all;
           |use work.dfhdl_pkg.all;
-          |use work.Top_pkg.all;
           |
           |entity Top is
           |end Top;
@@ -414,7 +409,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Example_pkg.all;
          |
          |entity Example is
          |port (
@@ -611,7 +605,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.IDTop_pkg.all;
          |
          |entity IDTop is
          |port (
@@ -657,7 +650,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.SelOp_pkg.all;
          |
          |entity SelOp is
          |port (
@@ -694,7 +686,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Empty_pkg.all;
          |
          |entity Empty is
          |end Empty;
@@ -719,7 +710,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.HighZ_pkg.all;
          |
          |entity HighZ is
          |port (
@@ -756,7 +746,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Foo_pkg.all;
          |
          |entity Foo is
          |port (
@@ -795,7 +784,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Foo_pkg.all;
          |
          |entity Foo is
          |port (
@@ -907,7 +895,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Foo_pkg.all;
          |
          |entity Foo is
          |port (
@@ -960,7 +947,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Foo_pkg.all;
          |
          |entity Foo is
          |port (
@@ -1077,7 +1063,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Foo_pkg.all;
          |
          |entity Foo is
          |port (
@@ -1122,7 +1107,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Foo_pkg.all;
          |
          |entity Foo is
          |port (
@@ -1231,7 +1215,7 @@ class PrintVHDLCodeSpec extends StageSpec:
          |    println("These are the values: " & to_string(param3) & ", " & to_string(param4) & ", " & to_string(param5) & ", " & to_string(param6) & ", " & to_string(param7) & ", " & to_string(param8) & ", " & to_string(param9) & ", " & t_enum_MyEnum'image(param10) & "");
          |    report
          |      "Debug at Foo" & LF &
-         |      "compiler/stages/src/test/scala/StagesSpec/PrintVHDLCodeSpec.scala:1177:9" & LF &
+         |      "compiler/stages/src/test/scala/StagesSpec/PrintVHDLCodeSpec.scala:1161:9" & LF &
          |      "param3 = " & to_string(param3) & LF &
          |      "param4 = " & to_string(param4) & LF &
          |      "param5 = " & to_string(param5) & LF &
@@ -1293,7 +1277,7 @@ class PrintVHDLCodeSpec extends StageSpec:
          |    println("These are the values: " & to_string(param3) & ", " & to_string(param4) & ", " & to_string(param5) & ", " & to_string(param6) & ", " & to_string(param7) & ", " & to_string(param8) & ", " & to_string(param9) & ", " & t_enum_MyEnum'image(param10) & "");
          |    report
          |      "Debug at Foo" & LF &
-         |      "compiler/stages/src/test/scala/StagesSpec/PrintVHDLCodeSpec.scala:1177:9" & LF &
+         |      "compiler/stages/src/test/scala/StagesSpec/PrintVHDLCodeSpec.scala:1161:9" & LF &
          |      "param3 = " & to_string(param3) & LF &
          |      "param4 = " & to_string(param4) & LF &
          |      "param5 = " & to_string(param5) & LF &
@@ -1374,7 +1358,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Foo_pkg.all;
          |
          |entity Foo is
          |port (
@@ -1517,7 +1500,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Foo_pkg.all;
          |
          |entity Foo is
          |port (

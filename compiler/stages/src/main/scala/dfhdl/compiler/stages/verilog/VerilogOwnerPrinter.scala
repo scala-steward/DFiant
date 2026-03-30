@@ -24,9 +24,9 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
       val precisionUnit = unitToStr(TimeNumber(1e-3, unit).normalize.unit)
       s"`timescale 1${scaleUnit}/1${precisionUnit}"
     }.getOrElse(s"`timescale 1ns/1ps")
-    s"""`default_nettype none
-       |$csTimeScale
-       |`include "${printer.globalFileName}"""".stripMargin
+    sn"""|`default_nettype none
+         |$csTimeScale
+         |${if (printer.hasGlobalContent) s"""`include "${printer.globalFileName}"""" else ""}"""
   def moduleName(design: DFDesignBlock): String = design.dclName
   val parameterizedModuleSupport: Boolean =
     printer.dialect match
@@ -125,7 +125,8 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
       else if (designParamList.length == 1) designParamList.mkString("#(", ", ", ")")
       else "#(" + designParamList.mkString("\n", ",\n", "\n").hindent(2) + ")"
     val includeModuleDefs =
-      if (printer.allowTypeDef) "" else s"""`include "${printer.globalFileName}""""
+      if (printer.allowTypeDef || !printer.hasGlobalContent) ""
+      else s"""`include "${printer.globalFileName}""""
     // include parameter definitions only when parameters are used in the design
     val paramDefines =
       if (printer.supportGlobalParameters) ""

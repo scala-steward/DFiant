@@ -2,7 +2,6 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use work.dfhdl_pkg.all;
-use work.FullAdder1_pkg.all;
 
 entity FullAdder1 is
 port (
