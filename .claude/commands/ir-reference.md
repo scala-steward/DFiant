@@ -474,7 +474,8 @@ enum InstMode.BlackBox: NA, Files(path), Library(libName, nameSpace), VendorIP(v
 
 **Extension methods:**
 ```scala
-design.isDuplicate          // tagged DuplicateTag (multiple identical instantiations)
+design.isDuplicate          // tagged DuplicateTag — has NO members in DB (ports/domains removed)
+                            // Use dupPortsByName/dupDesignDomainBlockMap for synthetic members
 design.isBlackBox           // instMode is BlackBox
 design.isVendorIPBlackbox
 design.inSimulation         // instMode is Simulation
@@ -786,7 +787,7 @@ DFTags.empty
 
 **Built-in tags:**
 ```scala
-case object DuplicateTag      // design has multiple identical instantiations
+case object DuplicateTag      // duplicate design instance — NO members in DB; use dupPortsByName
 case object IteratorTag       // Dcl is a for-loop iterator variable
 case object IdentTag          // Alias.AsIs is a pure identity (named alias of itself)
 case object BindTag           // Alias is a pattern-match bind variable
@@ -817,6 +818,7 @@ type DFRefAny = DFRef[DFMember]
 - `DFRef.OneWay[M]` — unidirectional (e.g. `ownerRef`)
 - `DFRef.TwoWay[M, O]` — bidirectional; `O` is the member that owns this ref (enables reverse lookup)
 - `DFRef.TypeRef` — used for `IntParamRef` (width/index parameters)
+- `DFRef.DuplicationRef(owner: DFOwnerNamed)` — special `OneWay` ref for analysis-only members (not in `refTable` or `members`). Overrides `get` to return `owner` directly, bypassing `MemberGetSet` lookup. Used by `dupPortsByName` and `dupDesignDomainBlockMap` to create synthetic port Dcls and domain blocks for duplicate designs.
 
 **Pattern extractor** (very common in stages):
 ```scala
@@ -866,6 +868,25 @@ db.membersGlobals         // global CanBeGlobal values only
 db.inSimulation           // top has no ports (simulation context)
 db.inBuild                // top has a device constraint tag
 ```
+
+**Design duplication properties:**
+
+Duplicate designs (tagged `DuplicateTag`) have **no members** in the DB — their ports, domain blocks, and other members are removed during immutable DB creation. Instead, synthetic members with `DuplicationRef` owners are created on-demand:
+
+```scala
+db.dupDesignToOrigMap     // Map[DFDesignBlock, DFDesignBlock] — dup design → origin design
+db.dupPortsByName         // Map[DFDesignInst, ListMap[String, DFVal.Dcl]] — design → named ports
+                          //   includes both real ports (for origins) and DuplicationRef-backed
+                          //   synthetic ports (for duplicates, with PBNS dfType overrides)
+db.dupDesignDomainBlockMap // Map[(DFDesignBlock, DomainBlock), DomainBlock]
+                          //   maps (dupDesign, origDomainBlock) → dupDomainBlock
+db.dupDomainOwnerPublicMemberList  // List[(DFDomainOwner, List[DFMember])]
+                          //   domain owners with their public members (ports, designs, domains),
+                          //   including dup-copy entries for duplicate designs
+db.dupDomainOwnerPublicMemberTable // Map form of the above
+```
+
+**Important:** `dupPortsByName` is the primary port lookup — use it instead of iterating `members` for ports. It handles duplicate designs transparently. `getPortDcl` on `PortByNameSelect` uses it internally.
 
 **Patching:**
 ```scala
