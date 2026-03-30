@@ -272,17 +272,26 @@ final case class DB(
       case (design, _) if design.isDuplicate => design -> origByName(design.dclName)
     }.toMap
 
-  // Maps each DomainBlock to a copy with DuplicationRef as ownerRef.
-  // Nested domain blocks get DuplicationRef pointing to the duplicated parent block.
-  lazy val dupDomainBlockToOrigMap: Map[DomainBlock, DomainBlock] =
-    val origToDupMap = mutable.Map.empty[DFDomainOwner, DFDomainOwner]
-    members.collect { case db: DomainBlock =>
-      val ownerDomain = db.getOwnerDomain
-      val dupBlock =
-        db.copy(ownerRef = DFRef.DuplicationRef(origToDupMap.getOrElse(ownerDomain, ownerDomain)))
-      origToDupMap += db -> dupBlock
-      dupBlock -> db
-    }.toMap
+  // For each duplicate design, maps origin DomainBlocks to dup-copy DomainBlocks
+  // with DuplicationRef owners pointing to the correct dup design/domain hierarchy.
+  // Key: (dupDesign, origDomainBlock) -> dupDomainBlock
+  lazy val dupDesignDomainBlockMap: Map[(DFDesignBlock, DomainBlock), DomainBlock] =
+    val origDomainBlocks: Map[DFDesignBlock, List[DomainBlock]] =
+      members.view
+        .collect { case db: DomainBlock => db }
+        .groupBy(_.getOwnerDesign)
+        .map { (design, blocks) => design -> blocks.toList }
+        .toMap
+    dupDesignToOrigMap.flatMap { (dupDesign, origDesign) =>
+      val origToDupMap = mutable.Map.empty[DFDomainOwner, DFDomainOwner]
+      origToDupMap += origDesign -> dupDesign
+      origDomainBlocks.getOrElse(origDesign, Nil).map { origBlock =>
+        val dupOwner = origToDupMap(origBlock.getOwnerDomain)
+        val dupBlock = origBlock.copy(ownerRef = DFRef.DuplicationRef(dupOwner))
+        origToDupMap += origBlock -> dupBlock
+        (dupDesign, origBlock) -> dupBlock
+      }
+    }
 
   lazy val dupPortsByName: Map[DFDesignInst, ListMap[String, DFVal.Dcl]] =
     val origMap = members.view
@@ -298,16 +307,14 @@ final case class DB(
       .collect { case m: DFVal.PortByNameSelect => m }
       .groupBy(m => m.designInstRef.get)
       .view.mapValues(_.map(m => m.portNamePath -> m.dfType).toMap).toMap
-    val dupDomainBlocksByFullName = dupDomainBlockToOrigMap.map { case (dup, orig) =>
-      orig.getFullName -> dup
-    }
     val dupEntries = dupDesignToOrigMap.map { (dupDesign, origDesign) =>
       val pbnsTypes = pbnsByDesign.getOrElse(dupDesign, Map.empty)
       dupDesign -> ListMap.from(origMap(origDesign).view.map { (name, dcl) =>
         val dfType = pbnsTypes.getOrElse(name, dcl.dfType)
         val dupOwnerDomain = dcl.getOwnerDomain match
           case _: DFDesignBlock         => dupDesign
-          case domainBlock: DomainBlock => dupDomainBlocksByFullName(domainBlock.getFullName)
+          case domainBlock: DomainBlock =>
+            dupDesignDomainBlockMap((dupDesign, domainBlock))
           // TODO: missing interface handling
           case interface: DFInterfaceOwner => ???
         name -> dcl.copy(ownerRef = DFRef.DuplicationRef(dupOwnerDomain), dfType = dfType)
@@ -318,47 +325,45 @@ final case class DB(
   end dupPortsByName
 
   lazy val dupDomainOwnerPublicMemberList: List[(DFDomainOwner, List[DFMember])] =
-    val dupDomainBlocksByFullName = dupDomainBlockToOrigMap.map { case (dup, orig) =>
-      orig.getFullName -> dup
-    }
-    val dupDesignsByFullName = dupDesignToOrigMap.map { case (dup, orig) =>
-      orig.getFullName -> dup
-    }
-    val dupPortsByFullName = dupPortsByName.view.values.flatMap { case ports =>
-      ports.map { case (_, dcl) => dcl.getFullName -> dcl }
-    }.toMap
-    def getDupMember[M <: DFMember](m: M): M =
-      m.runtimeChecked match
-        case dcl: DFVal.Dcl =>
-          dupPortsByFullName.getOrElse(dcl.getFullName, dcl).asInstanceOf[M]
-        case design: DFDesignBlock =>
-          dupDesignsByFullName.getOrElse(design.getFullName, design).asInstanceOf[M]
-        case domainBlock: DomainBlock =>
-          dupDomainBlocksByFullName.getOrElse(domainBlock.getFullName, domainBlock).asInstanceOf[M]
     def publicMemberFilter(member: DFMember): Boolean =
       member match
         case dcl: DFVal.Dcl if dcl.isPort => true
         case design: DFDesignBlock        => true
         case domainBlock: DomainBlock     => true
         case _                            => false
-    domainOwnerMemberList.map { case (owner, members) =>
+    // For duplicate designs, generate entries for their dup-copy domain blocks
+    // by mirroring the origin's domain owner structure.
+    def dupEntriesFor(
+        origOwner: DFDomainOwner,
+        dupDesign: DFDesignBlock
+    ): List[(DFDomainOwner, List[DFMember])] =
+      val dupOwner: DFDomainOwner = origOwner match
+        case _: DFDesignBlock    => dupDesign
+        case db: DomainBlock     => dupDesignDomainBlockMap((dupDesign, db))
+        case _: DFInterfaceOwner => ??? // TODO
+      val origMembers = domainOwnerMemberTable(origOwner)
+        .view.filter(publicMemberFilter).toList
+      val dupDesignPorts = dupPortsByName.getOrElse(dupDesign, ListMap.empty)
+      val dupMembers = origMembers.map {
+        case dcl: DFVal.Dcl =>
+          val relName = dcl.getRelativeName(origOwner.getThisOrOwnerDesign)
+          dupDesignPorts.getOrElse(relName, dcl)
+        case design: DFDesignBlock => design // nested designs stay as-is
+        case db: DomainBlock       => dupDesignDomainBlockMap((dupDesign, db))
+        case m                     => m
+      }
+      (dupOwner -> dupMembers) :: origMembers.collect { case db: DomainBlock =>
+        dupEntriesFor(db, dupDesign)
+      }.flatten
+    domainOwnerMemberList.flatMap { case (owner, members) =>
       owner match
         case dupDesign: DFDesignBlock if dupDesign.isDuplicate =>
           val origDesign = dupDesignToOrigMap(dupDesign)
-          val dupMembers =
-            domainOwnerMemberTable(origDesign)
-              .view.filter(publicMemberFilter).map(getDupMember).toList
-          dupDesign -> dupMembers
+          dupEntriesFor(origDesign, dupDesign)
         case origDesign: DFDesignBlock =>
-          origDesign -> members.filter(publicMemberFilter)
-        case dupDomainBlock: DomainBlock if dupDomainBlock.isDuplicate =>
-          val origDomainBlock = dupDomainBlockToOrigMap(dupDomainBlock)
-          val dupMembers =
-            domainOwnerMemberTable(origDomainBlock)
-              .view.filter(publicMemberFilter).map(getDupMember).toList
-          dupDomainBlock -> dupMembers
+          List(origDesign -> members.filter(publicMemberFilter))
         case origDomainBlock: DomainBlock =>
-          origDomainBlock -> members.filter(publicMemberFilter)
+          List(origDomainBlock -> members.filter(publicMemberFilter))
         // TODO: missing interface handling
         case interface: DFInterfaceOwner => ???
     }
