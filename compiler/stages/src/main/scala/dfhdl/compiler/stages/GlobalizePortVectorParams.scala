@@ -31,24 +31,39 @@ case object GlobalizePortVectorParams extends Stage:
     val dupDesignDB =
       val dupRefTable = mutable.Map.empty[DFRefAny, DFMember]
       val dupDesignMembersMap = mutable.Map.empty[DFDesignBlock, List[DFMember]]
-      designDB.dupDesignToOrigMap.groupBy(_._2).foreach { (orig, dupMap) =>
+      // Duplicate all members of a design, recursively handling nested designs.
+      def duplicateDesignMembers(
+          orig: DFDesignBlock,
+          dup: DFDesignBlock
+      ): Unit =
         val origMembers = designDB.designMemberTable(orig)
-        dupMap.keys.foreach { dup =>
-          val origToDupMemberMap = mutable.Map.empty[DFMember, DFMember]
-          origToDupMemberMap += orig -> dup
-          def getReplacement(member: DFMember): DFMember =
-            origToDupMemberMap.getOrElse(member, member)
-          val dupMembers = origMembers.map { origMember =>
-            val dupMember = origMember.copyWithNewRefs
-            origToDupMemberMap += origMember -> dupMember
-            dupRefTable += dupMember.ownerRef -> getReplacement(origMember.getOwner)
-            origMember.getRefs.lazyZip(dupMember.getRefs).foreach { (origRef, dupRef) =>
-              dupRefTable += dupRef -> getReplacement(origRef.get)
-            }
-            dupMember
+        val origToDupMemberMap = mutable.Map.empty[DFMember, DFMember]
+        origToDupMemberMap += orig -> dup
+        def getReplacement(member: DFMember): DFMember =
+          origToDupMemberMap.getOrElse(member, member)
+        val dupMembers = origMembers.map { origMember =>
+          val dupMember0 = origMember.copyWithNewRefs
+          // Tag nested design blocks as duplicates
+          val dupMember = dupMember0 match
+            case dsn: DFDesignBlock => dsn.setTags(_.tag(DuplicateTag)).asInstanceOf[dupMember0.type]
+            case _                 => dupMember0
+          origToDupMemberMap += origMember -> dupMember
+          dupRefTable += dupMember.ownerRef -> getReplacement(origMember.getOwner)
+          origMember.getRefs.lazyZip(dupMember.getRefs).foreach { (origRef, dupRef) =>
+            dupRefTable += dupRef -> getReplacement(origRef.get)
           }
-          dupDesignMembersMap += dup -> dupMembers
+          dupMember
         }
+        dupDesignMembersMap += dup -> dupMembers
+        // Recursively duplicate nested designs that were also removed
+        origMembers.lazyZip(dupMembers).foreach {
+          case (origNested: DFDesignBlock, dupNested: DFDesignBlock)
+              if !designDB.designMemberTable.contains(dupNested) =>
+            duplicateDesignMembers(origNested, dupNested)
+          case _ =>
+        }
+      designDB.dupDesignToOrigMap.groupBy(_._2).foreach { (orig, dupMap) =>
+        dupMap.keys.foreach { dup => duplicateDesignMembers(orig, dup) }
       }
       def populateWithDupMembers(members: List[DFMember]): List[DFMember] =
         members.flatMap {

@@ -319,4 +319,52 @@ class GlobalizePortVectorParamsSpec extends StageSpec(stageCreatesUnrefAnons = t
          |  y3 <> id3.y
          |end IDTop""".stripMargin
     )
+
+  test("Duplicate designs with nested design instances"):
+    class ID extends EDDesign:
+      val x = Bits(8) <> IN
+      val y = Bits(8) <> OUT
+      y <> x
+    end ID
+
+    class Internal(val param: Bits[8] <> CONST) extends EDDesign:
+      val x  = Bits(8) <> IN
+      val y  = Bits(8) <> OUT
+      val id = ID()
+      id.x <> x
+      y    <> id.y
+    end Internal
+
+    class Foo extends EDDesign:
+      val state = Bits(8) <> IN
+      val o00   = Internal(param = h"02")
+      val o01   = Internal(param = h"01")
+      o00.x <> state
+      o01.x <> state
+    val top = (new Foo).globalizePortVectorParams
+    assertCodeString(
+      top,
+      """|class ID extends EDDesign:
+         |  val x = Bits(8) <> IN
+         |  val y = Bits(8) <> OUT
+         |  y <> x
+         |end ID
+         |
+         |class Internal(val param: Bits[8] <> CONST) extends EDDesign:
+         |  val x = Bits(8) <> IN
+         |  val y = Bits(8) <> OUT
+         |  val id = ID()
+         |  id.x <> x
+         |  y <> id.y
+         |end Internal
+         |
+         |class Foo extends EDDesign:
+         |  val state = Bits(8) <> IN
+         |  val o00 = Internal(param = h"02")
+         |  val o01 = Internal(param = h"01")
+         |  o00.x <> state
+         |  o01.x <> state
+         |end Foo
+         |""".stripMargin
+    )
 end GlobalizePortVectorParamsSpec
