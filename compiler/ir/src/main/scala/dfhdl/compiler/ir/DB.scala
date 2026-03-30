@@ -272,57 +272,50 @@ final case class DB(
       case (design, _) if design.isDuplicate => design -> origByName(design.dclName)
     }.toMap
 
-  // For each duplicate design, maps origin DomainBlocks to dup-copy DomainBlocks
-  // with DuplicationRef owners pointing to the correct dup design/domain hierarchy.
-  // Key: (dupDesign, origDomainBlock) -> dupDomainBlock
-  lazy val dupDesignDomainBlockMap: Map[(DFDesignBlock, DomainBlock), DomainBlock] =
+  // Single pass: for each duplicate design, compute dup domain blocks AND dup ports together.
+  // dupDesignDomainBlockMap: maps (dupDesign, origDomainBlock) -> dupDomainBlock
+  // dupPortsByName: maps design -> port name -> Dcl (including dup entries with DuplicationRef)
+  lazy val (dupDesignDomainBlockMap, dupPortsByName) =
     val origDomainBlocks: Map[DFDesignBlock, List[DomainBlock]] =
       members.view
         .collect { case db: DomainBlock => db }
         .groupBy(_.getOwnerDesign)
         .map { (design, blocks) => design -> blocks.toList }
         .toMap
-    dupDesignToOrigMap.flatMap { (dupDesign, origDesign) =>
-      val origToDupMap = mutable.Map.empty[DFDomainOwner, DFDomainOwner]
-      origToDupMap += origDesign -> dupDesign
-      origDomainBlocks.getOrElse(origDesign, Nil).map { origBlock =>
-        val dupOwner = origToDupMap(origBlock.getOwnerDomain)
-        val dupBlock = origBlock.copy(ownerRef = DFRef.DuplicationRef(dupOwner))
-        origToDupMap += origBlock -> dupBlock
-        (dupDesign, origBlock) -> dupBlock
-      }
-    }
-
-  lazy val dupPortsByName: Map[DFDesignInst, ListMap[String, DFVal.Dcl]] =
-    val origMap = members.view
+    val origPortMap = members.view
       .collect { case m: DFVal.Dcl if m.isPort => m }
       .groupBy(_.getOwnerDesign)
       .map { case (design, dcls) =>
         design -> ListMap.from(dcls.view.map(m => m.getRelativeName(design) -> m))
       }.toMap
-    // Add entries for duplicate designs by copying origin Dcls with DuplicationRef owner.
     // PBNS members carry the correct dfType for each duplicate's port (reflecting the
     // actual instantiation parameters), so we use it to override the origin Dcl's dfType.
     val pbnsByDesign = members.view
       .collect { case m: DFVal.PortByNameSelect => m }
       .groupBy(m => m.designInstRef.get)
       .view.mapValues(_.map(m => m.portNamePath -> m.dfType).toMap).toMap
-    val dupEntries = dupDesignToOrigMap.map { (dupDesign, origDesign) =>
+    val domainBlockMap = mutable.Map.empty[(DFDesignBlock, DomainBlock), DomainBlock]
+    val portEntries = mutable.Map.empty[DFDesignInst, ListMap[String, DFVal.Dcl]]
+    dupDesignToOrigMap.foreach { (dupDesign, origDesign) =>
+      // 1. Build domain block copies
+      val origToDupMap = mutable.Map.empty[DFDomainOwner, DFDomainOwner]
+      origToDupMap += origDesign -> dupDesign
+      origDomainBlocks.getOrElse(origDesign, Nil).foreach { origBlock =>
+        val dupOwner = origToDupMap(origBlock.getOwnerDomain)
+        val dupBlock = origBlock.copy(ownerRef = DFRef.DuplicationRef(dupOwner))
+        origToDupMap += origBlock -> dupBlock
+        domainBlockMap += (dupDesign, origBlock) -> dupBlock
+      }
+      // 2. Build port copies (reusing origToDupMap from step 1)
       val pbnsTypes = pbnsByDesign.getOrElse(dupDesign, Map.empty)
-      dupDesign -> ListMap.from(origMap(origDesign).view.map { (name, dcl) =>
+      portEntries += dupDesign -> ListMap.from(origPortMap(origDesign).view.map { (name, dcl) =>
         val dfType = pbnsTypes.getOrElse(name, dcl.dfType)
-        val dupOwnerDomain = dcl.getOwnerDomain match
-          case _: DFDesignBlock         => dupDesign
-          case domainBlock: DomainBlock =>
-            dupDesignDomainBlockMap((dupDesign, domainBlock))
-          // TODO: missing interface handling
-          case interface: DFInterfaceOwner => ???
+        val dupOwnerDomain = origToDupMap(dcl.getOwnerDomain)
         name -> dcl.copy(ownerRef = DFRef.DuplicationRef(dupOwnerDomain), dfType = dfType)
       })
     }
     // dupEntries only fills in missing entries (designs without real port members)
-    dupEntries ++ origMap
-  end dupPortsByName
+    (domainBlockMap.toMap, portEntries.toMap ++ origPortMap)
 
   lazy val dupDomainOwnerPublicMemberList: List[(DFDomainOwner, List[DFMember])] =
     def publicMemberFilter(member: DFMember): Boolean =
