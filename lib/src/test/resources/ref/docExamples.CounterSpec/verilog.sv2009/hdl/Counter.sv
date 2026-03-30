@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "Counter_defs.svh"
 
 module Counter#(parameter int width = 8)(
   input  wire logic clk,

@@ -423,6 +423,9 @@ trait DFApp:
               printDFHDLCode = mode.`print-compile`.toOption.get,
               printBackendCode = mode.`print-backend`.toOption.get
             )
+            printerOptions = printerOptions.copy(
+              globalDefsFileName = mode.`global-defs-name`.toOption.get
+            )
           case _ =>
         // update linter options from command line
         parsedCommandLine.mode match

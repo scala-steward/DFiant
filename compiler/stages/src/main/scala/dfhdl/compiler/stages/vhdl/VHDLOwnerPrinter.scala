@@ -12,7 +12,12 @@ protected trait VHDLOwnerPrinter extends AbstractOwnerPrinter:
   type TPrinter <: VHDLPrinter
   val useStdSimLibrary: Boolean = true
   def fileSuffix = "vhdl"
-  def packageName: String = s"${getSet.topName}_pkg"
+  def packageName: String =
+    val name = printerOptions.globalDefsFileName
+    if (name.nonEmpty)
+      val dotIdx = name.lastIndexOf('.')
+      if (dotIdx > 0) name.substring(0, dotIdx) else name
+    else s"${getSet.topName}_pkg"
   def csLibrary(inSimulation: Boolean, usesMathReal: Boolean): String =
     val default =
       sn"""|library ieee;

@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "RegFile_defs.svh"
 
 module RegFile#(
     parameter int DATA_WIDTH = 32,

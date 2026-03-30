@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "TrueDPR_defs.vh"
 
 module TrueDPR(
   a_clk,
@@ -15,7 +14,6 @@ module TrueDPR(
   b_we
 );
   `include "dfhdl_defs.vh"
-  `include "TrueDPR_defs.vh"
   parameter integer DATA_WIDTH = 8;
   parameter integer ADDR_WIDTH = 8;
   input  wire                    a_clk;

@@ -121,7 +121,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "IDTop_defs.svh"
          |
          |module ID#(parameter int width = 7)(
          |  input  wire logic signed [width - 1:0] x,
@@ -133,7 +132,6 @@ class PrintVerilogCodeSpec extends StageSpec:
          |
          |`default_nettype none
          |`timescale 1ns/1ps
-         |`include "IDTop_defs.svh"
          |
          |module IDTop#(parameter int width = 16)(
          |  input  wire logic signed [width - 1:0] x,
@@ -184,14 +182,12 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "IDTop_defs.vh"
          |
          |module ID(
          |  x,
          |  y
          |);
          |  `include "dfhdl_defs.vh"
-         |  `include "IDTop_defs.vh"
          |  parameter integer width = 7;
          |  input  wire [width - 1:0] x;
          |  output wire [width - 1:0] y;
@@ -200,14 +196,12 @@ class PrintVerilogCodeSpec extends StageSpec:
          |
          |`default_nettype none
          |`timescale 1ns/1ps
-         |`include "IDTop_defs.vh"
          |
          |module IDTop(
          |  x,
          |  y
          |);
          |  `include "dfhdl_defs.vh"
-         |  `include "IDTop_defs.vh"
          |  parameter integer width = 16;
          |  input  wire [width - 1:0] x;
          |  output wire [width - 1:0] y;
@@ -438,7 +432,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Counter_defs.svh"
          |
          |module Counter#(parameter int width = 8)(
          |  input  wire logic clk,
@@ -476,7 +469,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Test_defs.svh"
          |
          |module Test#(parameter int width = 10)(
          |  output logic [width - 1:0] x,
@@ -509,7 +501,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Counter_defs.svh"
          |
          |module Counter#(parameter int width = 8)(
          |  input  wire logic clk,
@@ -551,7 +542,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       """|/* This is a led blinker */
          |`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Blinker_defs.svh"
          |
          |module Blinker#(
          |    parameter int CLK_FREQ_KHz = 50000,
@@ -1078,7 +1068,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       sv2005.csTop,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.svh"
          |
          |module Foo#(parameter string param = "Hello\n..\"World\"!");
          |  `include "dfhdl_defs.svh"
@@ -1117,7 +1106,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |    $display("These are the values: %d", param3, ", %d", param4, ", %h", param5, ", %h", param6, ", %d", param7, ", %b", param8, ", %s", param9 ? "true" : "false", ", %s", param10.name(), "");
          |    $info(
          |      "Debug at Foo\n",
-         |      "compiler/stages/src/test/scala/StagesSpec/PrintVerilogCodeSpec.scala:1069:9\n",
+         |      "compiler/stages/src/test/scala/StagesSpec/PrintVerilogCodeSpec.scala:1059:9\n",
          |      "param3 = %d\n", param3,
          |      "param4 = %d\n", param4,
          |      "param5 = %h\n", param5,
@@ -1134,11 +1123,9 @@ class PrintVerilogCodeSpec extends StageSpec:
       v95.csTop,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.vh"
          |
          |module Foo;
          |  `include "dfhdl_defs.vh"
-         |  `include "Foo_defs.vh"
          |  parameter param = "Hello\n..\"World\"!";
          |  parameter integer param3 = 42;
          |  `define MyEnum_A 0
@@ -1189,7 +1176,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |    $display("These are the values: %d", param3, ", %d", param4, ", %h", param5, ", %h", param6, ", %d", param7, ", %b", param8, ", %s", param9 ? "true" : "false", ", %s", MyEnum_to_string(param10), "");
          |    $display("INFO: ", 
          |      "Debug at Foo\n",
-         |      "compiler/stages/src/test/scala/StagesSpec/PrintVerilogCodeSpec.scala:1069:9\n",
+         |      "compiler/stages/src/test/scala/StagesSpec/PrintVerilogCodeSpec.scala:1059:9\n",
          |      "param3 = %d\n", param3,
          |      "param4 = %d\n", param4,
          |      "param5 = %h\n", param5,
@@ -1219,7 +1206,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.svh"
          |
          |module Foo#(parameter int PORT_WIDTH = 5)(
          |  input  wire logic clk,
@@ -1259,11 +1245,9 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.vh"
          |
          |module Foo;
          |  `include "dfhdl_defs.vh"
-         |  `include "Foo_defs.vh"
          |  parameter integer PORT_WIDTH = 8;
          |  parameter integer PORT_DEPTH = 4;
          |  parameter [(PORT_WIDTH * PORT_DEPTH) - 1:0] initArg = {8'h01, 8'h02, 8'h03, 8'h04};
@@ -1409,7 +1393,6 @@ class PrintVerilogCodeSpec extends StageSpec:
       top,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "Foo_defs.svh"
          |
          |module Foo(
          |  input  wire logic x,
@@ -1498,6 +1481,66 @@ class PrintVerilogCodeSpec extends StageSpec:
          |  output wire [7:0] y;
          |  assign y = `ABS(x);
          |endmodule""".stripMargin
+    )
+  }
+  test("globalDefsFileName override") {
+    given options.PrinterOptions.GlobalDefsFileName = "otherGlobal"
+    enum MyEnum extends Encoded:
+      case A, B
+    class Foo extends RTDesign:
+      val x = MyEnum <> IN
+      val y = MyEnum <> OUT
+      y := x
+    val top = (new Foo).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|typedef enum logic [0:0] {
+         |  MyEnum_A = 0,
+         |  MyEnum_B = 1
+         |} t_enum_MyEnum;
+         |
+         |`default_nettype none
+         |`timescale 1ns/1ps
+         |`include "otherGlobal.svh"
+         |
+         |module Foo(
+         |  input  wire t_enum_MyEnum x,
+         |  output t_enum_MyEnum y
+         |);
+         |  `include "dfhdl_defs.svh"
+         |  assign y = x;
+         |endmodule
+         |""".stripMargin
+    )
+  }
+  test("globalDefsFileName override with suffix") {
+    given options.PrinterOptions.GlobalDefsFileName = "otherGlobal.svh"
+    enum MyEnum extends Encoded:
+      case A, B
+    class Foo extends RTDesign:
+      val x = MyEnum <> IN
+      val y = MyEnum <> OUT
+      y := x
+    val top = (new Foo).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|typedef enum logic [0:0] {
+         |  MyEnum_A = 0,
+         |  MyEnum_B = 1
+         |} t_enum_MyEnum;
+         |
+         |`default_nettype none
+         |`timescale 1ns/1ps
+         |`include "otherGlobal.svh"
+         |
+         |module Foo(
+         |  input  wire t_enum_MyEnum x,
+         |  output t_enum_MyEnum y
+         |);
+         |  `include "dfhdl_defs.svh"
+         |  assign y = x;
+         |endmodule
+         |""".stripMargin
     )
   }
 end PrintVerilogCodeSpec

@@ -5,7 +5,6 @@
   */
 `default_nettype none
 `timescale 1ns/1ps
-`include "LeftShiftGen_defs.vh"
 
 module LeftShiftGen#(parameter integer width = 8)(
   /* bits input */
@@ -16,6 +15,5 @@ module LeftShiftGen#(parameter integer width = 8)(
   output wire [width - 1:0]        oBits
 );
   `include "dfhdl_defs.vh"
-  `include "LeftShiftGen_defs.vh"
   assign oBits = iBits << shift;
 endmodule

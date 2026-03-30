@@ -171,7 +171,9 @@ class VerilogPrinter(val dialect: VerilogDialect)(using
       case VerilogDialect.v2001 | VerilogDialect.v95 => "vh"
       case _                                         => "svh"
   def globalFileName: String =
-    s"${printer.defsName}.$verilogFileHeaderSuffix"
+    val name = printerOptions.globalDefsFileName
+    if (name.nonEmpty && name.contains('.')) name
+    else s"${printer.defsName}.$verilogFileHeaderSuffix"
   override def csGlobalFileContent: String =
     if (hasGlobalContent)
       val defName = printer.defsName.toUpperCase

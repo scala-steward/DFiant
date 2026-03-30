@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "UART_Tx_defs.svh"
 
 module UART_Tx#(
     parameter int CLK_FREQ_KHz = 50000,

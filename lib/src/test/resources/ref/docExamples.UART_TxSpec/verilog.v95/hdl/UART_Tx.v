@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "UART_Tx_defs.vh"
 
 module UART_Tx(
   clk,
@@ -12,7 +11,6 @@ module UART_Tx(
   tx_done
 );
   `include "dfhdl_defs.vh"
-  `include "UART_Tx_defs.vh"
   parameter integer CLK_FREQ_KHz = 50000;
   parameter integer BAUD_RATE_BPS = 115200;
   parameter integer BIT_CLOCKS = (CLK_FREQ_KHz * 1000) / BAUD_RATE_BPS;

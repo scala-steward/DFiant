@@ -146,7 +146,7 @@ trait Printer
   def designFileName(designName: String): String
   def globalFileName: String
   protected def hasGlobalContentCheck: Boolean =
-    getSet.designDB.membersGlobals.nonEmpty || csGlobalTypeDcls.nonEmpty
+    getSet.designDB.membersGlobals.exists(!_.isAnonymous) || csGlobalTypeDcls.nonEmpty
   lazy val hasGlobalContent: Boolean = hasGlobalContentCheck
   def csGlobalFileContent: String =
     sn"""|$csGlobalConstIntDcls

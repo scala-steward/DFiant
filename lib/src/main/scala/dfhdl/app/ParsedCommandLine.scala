@@ -13,6 +13,7 @@ class ParsedCommandLine(
 )(using
     eo: ElaborationOptions,
     co: CompilerOptions,
+    pto: PrinterOptions,
     lo: LinterOptions,
     so: SimulatorOptions,
     bo: BuilderOptions,
@@ -80,6 +81,12 @@ class ParsedCommandLine(
         default = Some(co.printBackendCode),
         hidden = hidden,
         noshort = true
+      )
+      val `global-defs-name` = opt[String](
+        descr = "override the global definitions file name (without suffix)",
+        default = Some(pto.globalDefsFileName),
+        noshort = true,
+        hidden = hidden
       )
     end CompileMode
     trait CommitMode extends CompileMode:

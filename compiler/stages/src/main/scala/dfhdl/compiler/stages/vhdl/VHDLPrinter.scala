@@ -154,7 +154,10 @@ class VHDLPrinter(val dialect: VHDLDialect)(using
   def csDocString(doc: String): String = doc.linesIterator.mkString("--", "\n--", "")
   def csAnnotations(annotations: List[annotation.HWAnnotation]): String = ""
   // def csTimer(timer: Timer): String = unsupported
-  def globalFileName: String = s"${printer.packageName}.vhd"
+  def globalFileName: String =
+    val name = printerOptions.globalDefsFileName
+    if (name.nonEmpty && name.contains('.')) name
+    else s"${printer.packageName}.vhd"
   def designFileName(designName: String): String = s"$designName.vhd"
   def dfhdlDefsFileName: String = s"dfhdl_pkg.vhd"
   def dfhdlSourceContents: String =

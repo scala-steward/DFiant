@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "RegFile_defs.vh"
 
 module RegFile#(
     parameter integer DATA_WIDTH = 32,
@@ -16,7 +15,6 @@ module RegFile#(
   input  wire                        rd_wren
 );
   `include "dfhdl_defs.vh"
-  `include "RegFile_defs.vh"
   reg [DATA_WIDTH - 1:0] regs [0:REG_NUM - 1];
   always @(posedge clk)
   begin

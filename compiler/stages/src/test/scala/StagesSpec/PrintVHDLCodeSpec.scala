@@ -130,7 +130,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.IDTop_pkg.all;
          |
          |entity ID is
          |generic (
@@ -151,7 +150,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.IDTop_pkg.all;
          |
          |entity IDTop is
          |generic (
@@ -355,7 +353,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Blinker_pkg.all;
          |
          |entity Blinker is
          |generic (
@@ -1172,7 +1169,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Foo_pkg.all;
          |
          |entity Foo is
          |generic (
@@ -1215,7 +1211,7 @@ class PrintVHDLCodeSpec extends StageSpec:
          |    println("These are the values: " & to_string(param3) & ", " & to_string(param4) & ", " & to_string(param5) & ", " & to_string(param6) & ", " & to_string(param7) & ", " & to_string(param8) & ", " & to_string(param9) & ", " & t_enum_MyEnum'image(param10) & "");
          |    report
          |      "Debug at Foo" & LF &
-         |      "compiler/stages/src/test/scala/StagesSpec/PrintVHDLCodeSpec.scala:1161:9" & LF &
+         |      "compiler/stages/src/test/scala/StagesSpec/PrintVHDLCodeSpec.scala:1158:9" & LF &
          |      "param3 = " & to_string(param3) & LF &
          |      "param4 = " & to_string(param4) & LF &
          |      "param5 = " & to_string(param5) & LF &
@@ -1234,7 +1230,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Foo_pkg.all;
          |
          |entity Foo is
          |generic (
@@ -1277,7 +1272,7 @@ class PrintVHDLCodeSpec extends StageSpec:
          |    println("These are the values: " & to_string(param3) & ", " & to_string(param4) & ", " & to_string(param5) & ", " & to_string(param6) & ", " & to_string(param7) & ", " & to_string(param8) & ", " & to_string(param9) & ", " & t_enum_MyEnum'image(param10) & "");
          |    report
          |      "Debug at Foo" & LF &
-         |      "compiler/stages/src/test/scala/StagesSpec/PrintVHDLCodeSpec.scala:1161:9" & LF &
+         |      "compiler/stages/src/test/scala/StagesSpec/PrintVHDLCodeSpec.scala:1158:9" & LF &
          |      "param3 = " & to_string(param3) & LF &
          |      "param4 = " & to_string(param4) & LF &
          |      "param5 = " & to_string(param5) & LF &
@@ -1309,7 +1304,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Foo_pkg.all;
          |
          |entity Foo is
          |generic (
@@ -1458,7 +1452,6 @@ class PrintVHDLCodeSpec extends StageSpec:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.Foo_pkg.all;
          |
          |entity Foo is
          |port (
@@ -1512,6 +1505,76 @@ class PrintVHDLCodeSpec extends StageSpec:
          |begin
          |  y <= abs(x);
          |end Foo_arch;""".stripMargin
+    )
+  }
+  test("globalDefsFileName override") {
+    given options.PrinterOptions.GlobalDefsFileName = "otherGlobal"
+    enum MyEnum extends Encoded:
+      case A, B
+    class Foo extends RTDesign:
+      val x = MyEnum <> IN
+      val y = MyEnum <> OUT
+      y := x
+    val top = (new Foo).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|type t_enum_MyEnum is (
+         |  MyEnum_A, MyEnum_B
+         |);
+         |
+         |library ieee;
+         |use ieee.std_logic_1164.all;
+         |use ieee.numeric_std.all;
+         |use work.dfhdl_pkg.all;
+         |use work.otherGlobal.all;
+         |
+         |entity Foo is
+         |port (
+         |  x : in t_enum_MyEnum;
+         |  y : out t_enum_MyEnum
+         |);
+         |end Foo;
+         |
+         |architecture Foo_arch of Foo is
+         |begin
+         |  y <= x;
+         |end Foo_arch;
+         |""".stripMargin
+    )
+  }
+  test("globalDefsFileName override with suffix") {
+    given options.PrinterOptions.GlobalDefsFileName = "otherGlobal.vhd"
+    enum MyEnum extends Encoded:
+      case A, B
+    class Foo extends RTDesign:
+      val x = MyEnum <> IN
+      val y = MyEnum <> OUT
+      y := x
+    val top = (new Foo).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|type t_enum_MyEnum is (
+         |  MyEnum_A, MyEnum_B
+         |);
+         |
+         |library ieee;
+         |use ieee.std_logic_1164.all;
+         |use ieee.numeric_std.all;
+         |use work.dfhdl_pkg.all;
+         |use work.otherGlobal.all;
+         |
+         |entity Foo is
+         |port (
+         |  x : in t_enum_MyEnum;
+         |  y : out t_enum_MyEnum
+         |);
+         |end Foo;
+         |
+         |architecture Foo_arch of Foo is
+         |begin
+         |  y <= x;
+         |end Foo_arch;
+         |""".stripMargin
     )
   }
 end PrintVHDLCodeSpec

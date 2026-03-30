@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "TrueDPR_defs.vh"
 
 module TrueDPR#(
     parameter integer DATA_WIDTH = 8,
@@ -18,7 +17,6 @@ module TrueDPR#(
   input  wire                    b_we
 );
   `include "dfhdl_defs.vh"
-  `include "TrueDPR_defs.vh"
   reg [DATA_WIDTH - 1:0] ram [0:(2 ** ADDR_WIDTH) - 1];
   always @(posedge a_clk)
   begin
