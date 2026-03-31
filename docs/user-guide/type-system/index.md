@@ -469,12 +469,37 @@ val idx = UInt(3) <> VAR
 val dynbit = b8(idx)   // Single bit at position idx (returns Bit)
 ```
 
-!!! tip "Dynamic bit indexing"
-    You can index into a `Bits` value using a `UInt` variable, not just integer literals. This is equivalent to Verilog's `bits_val[idx]` where `idx` is a register or wire. Dynamic indexing works for both reads and writes inside processes:
+!!! tip "Dynamic bit indexing (reads and writes)"
+    You can index into a `Bits` value using a `UInt` variable, not just integer literals. This is equivalent to Verilog's `data[idx]` where `idx` is a register or wire.
+
+    The index must be a `UInt` whose width equals `clog2(bits_width)`. For example, indexing into `Bits(8)` requires a `UInt(3)` index. If the width does not match, the compiler will report an error and suggest a fix:
+
+    - **Index too wide**: use `.truncate` to automatically narrow it to the expected width.
+    - **Index too narrow**: use `.extend` to automatically widen it to the expected width.
+    - You can also use `.resize(N)` for an explicit target width, or a range slice `(hi, lo)` to extract specific bits.
+
+    Dynamic indexing works for both reads and writes:
     ```scala
+    val data = Bits(8) <> VAR init all(0)
+    val pos  = UInt(3) <> VAR init 0
+    val din  = Bit     <> IN
+
+    // Dynamic read
+    val bit_out = data(pos)  // read single bit at position
+
+    // Dynamic write inside a clocked process
     process(clk):
       if (clk.rising)
-        data(bitpos) :== rx   // dynamic bit-indexed write
+        data(pos) :== din  // write single bit at position
+    ```
+
+    When the index register is wider than needed, narrow it with `.truncate` or a range slice:
+    ```scala
+    val wide_pos = UInt(5) <> VAR
+    // .truncate automatically narrows to clog2(8) = 3 bits
+    data(wide_pos.truncate) :== din
+    // Alternatively, use a range slice to pick specific bits
+    data(wide_pos(2, 0)) :== din
     ```
 
 ### Bit Operations
@@ -1209,6 +1234,46 @@ sd"8'42"  // SInt[8], value = 42
 sd"8'255" // Error: width too small to represent value with sign bit
 ```
 
+#### Bit Selection and Slicing
+
+`UInt` and `SInt` values support the same bit-selection syntax as `Bits`:
+
+- **Range slice**: `value(hi, lo)` extracts bits `hi` down to `lo`, returning a narrower `UInt` or `SInt`.
+- **Single-bit access**: `value(idx)` returns the bit at position `idx` (as `Bit`).
+
+```scala
+val u6 = UInt(6) <> VAR
+val u4 = u6(3, 0)   // lower 4 bits, returns UInt[4]
+val b  = u6(5)       // MSB, returns Bit
+
+val s6 = SInt(6) <> VAR
+val s4 = s6(3, 0)   // lower 4 bits, returns SInt[4]
+```
+
+#### Width Adjustment: `.resize`, `.truncate`, `.extend`
+
+- `.resize(N)` sets the width to exactly `N` bits. For `UInt` and `Bits`, widening zero-extends; for `SInt`, widening sign-extends. Narrowing truncates the most-significant bits.
+- `.truncate` automatically narrows to the width expected by the assignment or operation context.
+- `.extend` automatically widens to the width expected by the context.
+
+```scala
+val u8 = UInt(8) <> VAR
+val u6 = UInt(6) <> VAR
+u6 := u8.resize(6)    // explicit truncate to 6 bits
+u6 := u8.truncate     // auto-narrow to match u6's width
+u8 := u6.resize(8)    // explicit zero-extend to 8 bits
+u8 := u6.extend       // auto-widen to match u8's width
+```
+
+!!! note "Scala `Int` constants auto-lift in comparisons"
+    Plain Scala `Int` values can be used directly in comparisons and arithmetic with DFHDL typed variables. No explicit coercion is needed:
+    ```scala
+    val LIMIT: Int <> CONST = 5208
+    val counter = UInt.until(LIMIT) <> VAR
+    if (counter == LIMIT - 1)  // Int <> CONST compared with UInt -- works directly
+      counter := 0
+    ```
+
 ### Examples
 
 ```scala
@@ -1277,6 +1342,8 @@ enum MyEnum(val value: UInt[8] <> CONST) extends Encoded.Manual(8):
   case B extends MyEnum(100)
   case C extends MyEnum(50)
 ```
+
+    Note: the Manual encoding enum class **must** declare a constructor parameter `(val value: UInt[N] <> CONST)` and the bit width `N` must match the argument to `Encoded.Manual(N)`. Each `case` must explicitly extend the enum class and pass a constant value. Omitting the constructor parameter will cause a compile error.
 
 ### Operations
 

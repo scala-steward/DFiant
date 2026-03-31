@@ -230,6 +230,80 @@ val counter = UInt(8) <> VAR init 0
 ```
 
 </div>
+
+An `output reg` with an initial value maps directly to `OUT init`:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+module Foo(
+  input  clk,
+  input  din,
+  output reg dout
+);
+  initial dout = 1'b1;
+  always @(posedge clk)
+    dout <= din;
+endmodule
+```
+
+```scala linenums="0" title="DFHDL"
+@top class Foo extends EDDesign:
+  val clk  = Bit <> IN
+  val din  = Bit <> IN
+  val dout = Bit <> OUT init 1
+  process(clk):
+    if (clk.rising)
+      dout :== din
+```
+
+</div>
+///
+
+/// admonition | FSM State Encoding
+    type: verilog
+Verilog FSMs typically use `parameter` constants and `case`/`if` chains. In DFHDL, the idiomatic translation uses an `enum extends Encoded` and `match`:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+parameter IDLE  = 2'b00,
+          START = 2'b01,
+          DATA  = 2'b10,
+          STOP  = 2'b11;
+reg [1:0] state = IDLE;
+
+always @(posedge clk)
+  case (state)
+    IDLE:  if (go) state <= START;
+    START: state <= DATA;
+    DATA:  state <= STOP;
+    STOP:  state <= IDLE;
+  endcase
+```
+
+```scala linenums="0" title="DFHDL"
+enum State extends Encoded:
+  case Idle, Start, Data, Stop
+
+val state = State <> VAR init State.Idle
+
+process(clk):
+  if (clk.rising)
+    state match
+      case State.Idle =>
+        if (go) state :== State.Start
+      case State.Start =>
+        state :== State.Data
+      case State.Data =>
+        state :== State.Stop
+      case State.Stop =>
+        state :== State.Idle
+```
+
+</div>
+
+If the Verilog state values are non-sequential, use `Encoded.Manual` (see [Manual Encoding](../../user-guide/type-system/index.md#DFEnum)). Avoid modelling FSM states as `Bits` constants -- `match` does not support matching on `Bits <> CONST` names. Use `enum extends Encoded` instead, or fall back to `if`/`else if` chains.
 ///
 
 /// admonition | Multi-File Projects
