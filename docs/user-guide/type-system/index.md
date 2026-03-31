@@ -460,10 +460,22 @@ val ms1 = b8(7, 7)    // MSB only
 val ls7 = b8(6, 0)    // 7 LSBs
 val ls1 = b8(0, 0)    // LSB only
 
-// Single bit access
+// Single bit access (static index)
 val msbit = b8(7)      // MSB
 val lsbit = b8(0)      // LSB
+
+// Dynamic bit access (index is a UInt variable)
+val idx = UInt(3) <> VAR
+val dynbit = b8(idx)   // Single bit at position idx (returns Bit)
 ```
+
+!!! tip "Dynamic bit indexing"
+    You can index into a `Bits` value using a `UInt` variable, not just integer literals. This is equivalent to Verilog's `bits_val[idx]` where `idx` is a register or wire. Dynamic indexing works for both reads and writes inside processes:
+    ```scala
+    process(clk):
+      if (clk.rising)
+        data(bitpos) :== rx   // dynamic bit-indexed write
+    ```
 
 ### Bit Operations
 ```scala
@@ -660,6 +672,24 @@ These operations propagate constant modifiers, meaning that if the casted argume
 | `lhs.bool`  | Cast to a DFHDL `Boolean` value | `Bit` DFHDL value     | `Boolean` DFHDL value |
 | `lhs.bit`   | Cast to a DFHDL `Bit` value     | `Boolean` DFHDL value | `Bit` DFHDL value     |
 ///
+
+!!! note "Comparison results are `Boolean`, not `Bit`"
+    All comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) return `Boolean`. To assign a comparison result to a `Bit` port or variable, apply `.bit`:
+    ```scala
+    val tick = Bit <> OUT
+    val counter = UInt(8) <> VAR
+    val limit   = UInt(8) <> IN
+    tick := (counter == limit).bit  // Boolean -> Bit conversion
+    ```
+    Conversely, `Bit` values can be used directly in `if` conditions (they are accepted as boolean expressions), and you can compare a `Bit` with integer literals `0` and `1`.
+
+!!! note "`Bit` does not have `.uint` -- use `.bits.uint`"
+    The `.uint` method is available on `Bits` values but not directly on `Bit`. To convert a `Bit` to `UInt(1)`, go through `Bits(1)` first:
+    ```scala
+    val b = Bit <> IN
+    val u = UInt(1) <> VAR
+    u := b.bits.uint  // Bit -> Bits(1) -> UInt(1)
+    ```
 
 ```scala
 val bt1 = Bit <> VAR
@@ -1106,7 +1136,7 @@ These operations propagate constant modifiers and maintain proper bit widths:
 | `lhs % rhs` | Modulo | Both decimal types | Result with rhs width |
 
 #### Comparison Operations
-Return Boolean values:
+Return `Boolean` values (not `Bit`). To assign a comparison result to a `Bit` port or variable, use `.bit`:
 
 /// html | div.operations
 | Operation    | Description | LHS/RHS Constraints | Returns |
@@ -1117,6 +1147,15 @@ Return Boolean values:
 | `lhs >= rhs` | Greater than or equal | Both decimal types | Boolean |
 | `lhs == rhs` | Equal | Both decimal types | Boolean |
 | `lhs != rhs` | Not equal | Both decimal types | Boolean |
+
+```scala
+val counter = UInt(8) <> VAR
+val limit   = UInt(8) <> IN
+val tick    = Bit <> OUT
+
+// Comparison returns Boolean; convert to Bit for assignment to a Bit port
+tick := (counter == limit).bit
+```
 
 ### Constant Generation
 
