@@ -184,6 +184,29 @@ else
    - Optimizes bit pattern matching into efficient comparisons
    - Extracts struct fields into temporary variables when needed
 
+!!! warning "Match patterns only support literal values and enum members"
+    DFHDL `match` patterns work with integer literals, bit-string literals (e.g., `b"00"`, `h"F"`), enum members, and wildcards. You **cannot** use named `Bits` constants as match patterns -- even with Scala's backtick stable-identifier syntax (e.g., `` case `MY_STATE` => ``), the DFHDL compiler will reject them with an "Unknown pattern" error.
+
+    If you need to branch on named constants (common when translating Verilog `case` statements over `reg` state variables), use `if`/`else if` chains instead:
+    ```scala
+    // These are Bits constants used as state encodings
+    val STATE_IDLE  = b"2'00"
+    val STATE_START = b"2'01"
+    val STATE_DATA  = b"2'10"
+
+    // WRONG: match with named constants fails
+    // state match
+    //   case `STATE_IDLE` => ...   // Error: Unknown pattern
+
+    // CORRECT: use if/else if chains
+    if (state == STATE_IDLE)
+      // idle logic
+    else if (state == STATE_START)
+      // start logic
+    else if (state == STATE_DATA)
+      // data logic
+    ```
+
 ### Best Practices
 
 1. **Use Match for Multi-Way Branching**: When dealing with multiple cases, match is often clearer than nested if-else
