@@ -138,7 +138,10 @@ d"5’27"         // 5-bit unsigned decimal
 
 /// admonition | Elaboration-Time Computation (System Functions)
     type: verilog
-Verilog system functions like `$clog2` have no DFHDL equivalent because DFHDL designs are Scala programs. Use standard Scala expressions at elaboration time instead.
+Instead of computing widths manually with `$clog2`, use `UInt.until` / `UInt.to` (or `Bits.until` / `Bits.to`) which set the width automatically based on the value range:
+
+- `.until(sup)` — width = `clog2(sup)` (value can be 0 to sup-1)
+- `.to(max)` — width = `clog2(max+1)` (value can be 0 to max)
 
 <div class="grid" markdown>
 
@@ -150,16 +153,12 @@ reg [WIDTH-1:0] counter;
 
 ```scala linenums="0" title="DFHDL"
 val RATE: Int <> CONST = 5208
-val WIDTH = scala.math.ceil(
-  scala.math.log(RATE.toDouble) /
-  scala.math.log(2)
-).toInt
-val counter = UInt(WIDTH) <> VAR
+val counter = UInt.until(RATE) <> VAR
 ```
 
 </div>
 
-Any Scala expression can be used to compute widths, initial values, and other elaboration-time parameters. This replaces `$clog2`, `$bits`, `$size`, and similar Verilog system functions.
+See [UInt constructors](../../user-guide/type-system/index.md#unsigned-integer-uint) and [Bits constructors](../../user-guide/type-system/index.md#bit-vector-bits) for details.
 ///
 
 /// admonition | Process Blocks (always)

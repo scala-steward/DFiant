@@ -184,27 +184,26 @@ else
    - Optimizes bit pattern matching into efficient comparisons
    - Extracts struct fields into temporary variables when needed
 
-!!! warning "Match patterns only support literal values and enum members"
-    DFHDL `match` patterns work with integer literals, bit-string literals (e.g., `b"00"`, `h"F"`), enum members, and wildcards. You **cannot** use named `Bits` constants as match patterns -- even with Scala's backtick stable-identifier syntax (e.g., `` case `MY_STATE` => ``), the DFHDL compiler will reject them with an "Unknown pattern" error.
+!!! tip "Use enumerations for state matching"
+    For FSM-style `match` over states, define an enumeration with the appropriate [encoding](../type-system/index.md#dfhdl-enumeration-enum--extends-encoded) and match on its members:
 
-    If you need to branch on named constants (common when translating Verilog `case` statements over `reg` state variables), use `if`/`else if` chains instead:
     ```scala
-    // These are Bits constants used as state encodings
-    val STATE_IDLE  = b"2'00"
-    val STATE_START = b"2'01"
-    val STATE_DATA  = b"2'10"
+    enum State extends Encoded:  // 00, 01, 10
+      case Idle, Start, Data
 
-    // WRONG: match with named constants fails
-    // state match
-    //   case `STATE_IDLE` => ...   // Error: Unknown pattern
+    val state = State <> VAR
+    state match
+      case State.Idle  => // idle logic
+      case State.Start => // start logic
+      case State.Data  => // data logic
+    ```
 
-    // CORRECT: use if/else if chains
-    if (state == STATE_IDLE)
-      // idle logic
-    else if (state == STATE_START)
-      // start logic
-    else if (state == STATE_DATA)
-      // data logic
+    For non-sequential state encodings, use `Encoded.Manual`:
+    ```scala
+    enum State(val value: UInt[3] <> CONST) extends Encoded.Manual(3):
+      case Idle  extends State(d"3'0")
+      case Start extends State(d"3'3")
+      case Data  extends State(d"3'5")
     ```
 
 ### Best Practices
