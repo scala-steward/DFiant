@@ -195,13 +195,18 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
   def csDFCaseKeyword: String = ""
   def csDFCaseSeparator: String = ":"
   def csDFCaseGuard(guardRef: DFConditional.Block.GuardRef): String = printer.unsupported
-  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean): String =
+  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean, isUnique: Boolean): String =
     val insideSupport = printer.dialect match
       case VerilogDialect.v2001 | VerilogDialect.v95 => false
       case _                                         => true
+    val uniqueSupport = printer.dialect match
+      case VerilogDialect.v2001 | VerilogDialect.v95 => false
+      case _                                         => true
+    val uniquePrefix =
+      if (isUnique && uniqueSupport) "unique " else ""
     val keyWord = if (wildcardSupport && !insideSupport) "casez" else "case"
     val insideStr = if (wildcardSupport && insideSupport) " inside" else ""
-    s"$keyWord ($csSelector)$insideStr"
+    s"$uniquePrefix$keyWord ($csSelector)$insideStr"
   def csDFMatchEnd: String = "endcase"
   val sensitivityListSep =
     printer.dialect match

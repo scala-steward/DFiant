@@ -1072,7 +1072,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |module Foo#(parameter string param = "Hello\n..\"World\"!");
          |  `include "dfhdl_defs.svh"
          |  localparam int param3 = 42;
-         |  typedef enum {
+         |  typedef enum logic [1:0] {
          |    MyEnum_A = 0,
          |    MyEnum_B = 1,
          |    MyEnum_C = 2

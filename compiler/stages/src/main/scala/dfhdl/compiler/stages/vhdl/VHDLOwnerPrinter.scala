@@ -217,7 +217,7 @@ protected trait VHDLOwnerPrinter extends AbstractOwnerPrinter:
   def csDFCaseKeyword: String = "when "
   def csDFCaseSeparator: String = " =>"
   def csDFCaseGuard(guardRef: DFConditional.Block.GuardRef): String = printer.unsupported
-  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean): String =
+  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean, isUnique: Boolean): String =
     s"case $csSelector is"
   def csDFMatchEnd: String = "end case;"
   def csProcessBlock(pb: ProcessBlock): String =

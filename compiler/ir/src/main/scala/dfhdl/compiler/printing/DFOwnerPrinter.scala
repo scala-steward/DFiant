@@ -122,7 +122,10 @@ trait AbstractOwnerPrinter extends AbstractPrinter:
         case DFMember.Empty => ""
         case _              => csDFCaseGuard(caseBlock.guardRef)
     s"$csDFCaseKeyword${csDFCasePattern(caseBlock.pattern)}$csGuard$csDFCaseSeparator"
-  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean): String
+  // isUnique is true when the selector is a local enum type, enabling `unique case` in
+  // SystemVerilog to avoid lint warnings. Global enums are excluded because
+  // their full set of entries is not guaranteed to be covered at every match site.
+  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean, isUnique: Boolean): String
   def csDFMatchEnd: String
   def csStepBlock(stepBlock: StepBlock): String
   def csDFForBlock(forBlock: DFLoop.DFForBlock): String
@@ -162,7 +165,10 @@ trait AbstractOwnerPrinter extends AbstractPrinter:
     ch match
       case mh: DFConditional.DFMatchHeader =>
         val csSelector = mh.selectorRef.refCodeString.applyBrackets()
-        sn"""|${csDFMatchStatement(csSelector, mh.hasWildcards)}
+        val isUnique = mh.selectorRef.get.dfType match
+          case e: DFEnum => !getSet.designDB.getGlobalNamedDFTypes.contains(e)
+          case _         => false
+        sn"""|${csDFMatchStatement(csSelector, mh.hasWildcards, isUnique)}
              |${csChains.hindent}
              |${csDFMatchEnd}"""
       case ih: DFConditional.DFIfHeader => csChains
@@ -348,7 +354,7 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
   def csDFCaseKeyword: String = "case "
   def csDFCaseSeparator: String = " =>"
   def csDFMatchEnd: String = "end match"
-  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean): String =
+  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean, isUnique: Boolean): String =
     s"$csSelector match"
   def csProcessBlock(pb: ProcessBlock): String =
     val body = csDFOwnerBody(pb)
