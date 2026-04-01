@@ -433,9 +433,9 @@ class foo extends EDDesign:
 </div>
 ///
 
-/// admonition | Bits Initialization
+/// admonition | `Bits` Initialization or Assignment
     type: verilog
-`Bits` values cannot be initialized with plain integers. Use `all(0)` or a sized literal:
+`Bits` values cannot be initialized or assigned with plain integers. Use `all(0)` or a sized literal:
 
 <div class="grid" markdown>
 
@@ -452,7 +452,7 @@ val mask  = Bits(8) <> VAR init h"8'FF"
 
 </div>
 
-`UInt` and `SInt` accept plain integer `0` for init; `Bits` does not.
+Note: `UInt` and `SInt` can be initialized or assigned with plain integers.
 ///
 
 /// admonition | Inline Conditional Expressions
