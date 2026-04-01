@@ -184,27 +184,29 @@ else
    - Optimizes bit pattern matching into efficient comparisons
    - Extracts struct fields into temporary variables when needed
 
-!!! tip "Use enumerations for state matching"
-    For FSM-style `match` over states, define an enumeration with the appropriate [encoding](../type-system/index.md#dfhdl-enumeration-enum--extends-encoded) and match on its members:
+/// admonition | Use enumerations for state matching
+    type: tip
+For FSM-style `match` over states, define an enumeration with the appropriate [encoding](../type-system/index.md#dfhdl-enumeration-enum--extends-encoded) and match on its members:
 
-    ```scala
-    enum State extends Encoded:  // 00, 01, 10
-      case Idle, Start, Data
+```scala
+enum State extends Encoded:  // 00, 01, 10
+  case Idle, Start, Data
 
-    val state = State <> VAR
-    state match
-      case State.Idle  => // idle logic
-      case State.Start => // start logic
-      case State.Data  => // data logic
-    ```
+val state = State <> VAR
+state match
+  case State.Idle  => // idle logic
+  case State.Start => // start logic
+  case State.Data  => // data logic
+```
 
-    For non-sequential state encodings, use `Encoded.Manual`:
-    ```scala
-    enum State(val value: UInt[3] <> CONST) extends Encoded.Manual(3):
-      case Idle  extends State(d"3'0")
-      case Start extends State(d"3'3")
-      case Data  extends State(d"3'5")
-    ```
+For non-sequential state encodings, use `Encoded.Manual`:
+```scala
+enum State(val value: UInt[3] <> CONST) extends Encoded.Manual(3):
+  case Idle  extends State(d"3'0")
+  case Start extends State(d"3'3")
+  case Data  extends State(d"3'5")
+```
+///
 
 ### Best Practices
 

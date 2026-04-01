@@ -190,8 +190,10 @@ process(clk):
     counter :== counter + 1   // register update
 ```
 
-!!! tip "Rule of thumb"
-    Use `:=` for combinational (e.g. in `process(all)` or combinational branches). Use `:==` for register and sequential outputs in clocked processes.
+/// admonition | Rule of thumb
+    type: tip
+Use `:=` for combinational (e.g. in `process(all)` or combinational branches). Use `:==` for register and sequential outputs in clocked processes.
+///
 
 ## Local variables
 

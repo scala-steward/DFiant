@@ -469,38 +469,40 @@ val idx = UInt(3) <> VAR
 val dynbit = b8(idx)   // Single bit at position idx (returns Bit)
 ```
 
-!!! tip "Dynamic bit indexing (reads and writes)"
-    You can index into a `Bits` value using a `UInt` variable, not just integer literals. This is equivalent to Verilog's `data[idx]` where `idx` is a register or wire.
+/// admonition | Dynamic bit indexing (reads and writes)
+    type: tip
+You can index into a `Bits` value using a `UInt` variable, not just integer literals. This is equivalent to Verilog's `data[idx]` where `idx` is a register or wire.
 
-    The index must be a `UInt` whose width equals `clog2(bits_width)`. For example, indexing into `Bits(8)` requires a `UInt(3)` index. If the width does not match, the compiler will report an error and suggest a fix:
+The index must be a `UInt` whose width equals `clog2(bits_width)`. For example, indexing into `Bits(8)` requires a `UInt(3)` index. If the width does not match, the compiler will report an error and suggest a fix:
 
-    - **Index too wide**: use `.truncate` to automatically narrow it to the expected width.
-    - **Index too narrow**: use `.extend` to automatically widen it to the expected width.
-    - You can also use `.resize(N)` for an explicit target width, or a range slice `(hi, lo)` to extract specific bits.
+- **Index too wide**: use `.truncate` to automatically narrow it to the expected width.
+- **Index too narrow**: use `.extend` to automatically widen it to the expected width.
+- You can also use `.resize(N)` for an explicit target width, or a range slice `(hi, lo)` to extract specific bits.
 
-    Dynamic indexing works for both reads and writes:
-    ```scala
-    val data = Bits(8) <> VAR init all(0)
-    val pos  = UInt(3) <> VAR init 0
-    val din  = Bit     <> IN
+Dynamic indexing works for both reads and writes:
+```scala
+val data = Bits(8) <> VAR init all(0)
+val pos  = UInt(3) <> VAR init 0
+val din  = Bit     <> IN
 
-    // Dynamic read
-    val bit_out = data(pos)  // read single bit at position
+// Dynamic read
+val bit_out = data(pos)  // read single bit at position
 
-    // Dynamic write inside a clocked process
-    process(clk):
-      if (clk.rising)
-        data(pos) :== din  // write single bit at position
-    ```
+// Dynamic write inside a clocked process
+process(clk):
+  if (clk.rising)
+    data(pos) :== din  // write single bit at position
+```
 
-    When the index register is wider than needed, narrow it with `.truncate` or a range slice:
-    ```scala
-    val wide_pos = UInt(5) <> VAR
-    // .truncate automatically narrows to clog2(8) = 3 bits
-    data(wide_pos.truncate) :== din
-    // Alternatively, use a range slice to pick specific bits
-    data(wide_pos(2, 0)) :== din
-    ```
+When the index register is wider than needed, narrow it with `.truncate` or a range slice:
+```scala
+val wide_pos = UInt(5) <> VAR
+// .truncate automatically narrows to clog2(8) = 3 bits
+data(wide_pos.truncate) :== din
+// Alternatively, use a range slice to pick specific bits
+data(wide_pos(2, 0)) :== din
+```
+///
 
 ### Bit Operations
 ```scala
@@ -631,7 +633,7 @@ Although they are interchangeable, it's generally recommended to use `Boolean` D
 ///
 
 /// details | Why have both `Bit` and `Boolean` DFTypes?
-    type: note    
+    type: note
 The main reason to differentiate between `Bit` and `Boolean` is that VHDL has both `std_logic` and `boolean` types, respectively. Verilog has only a single `logic` or `wire` to represent both. Indeed VHDL'2008 has relaxed some of the type constraints, but not enough. And nevertheless, DFHDL aims to support various HDL dialects, and thus enables simple implicit or explicit conversion between these two DFType values.
 ///
 
@@ -698,23 +700,27 @@ These operations propagate constant modifiers, meaning that if the casted argume
 | `lhs.bit`   | Cast to a DFHDL `Bit` value     | `Boolean` DFHDL value | `Bit` DFHDL value     |
 ///
 
-!!! note "Comparison results are `Boolean`, not `Bit`"
-    All comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) return `Boolean`. To assign a comparison result to a `Bit` port or variable, apply `.bit`:
-    ```scala
-    val tick = Bit <> OUT
-    val counter = UInt(8) <> VAR
-    val limit   = UInt(8) <> IN
-    tick := (counter == limit).bit  // Boolean -> Bit conversion
-    ```
-    Conversely, `Bit` values can be used directly in `if` conditions (they are accepted as boolean expressions), and you can compare a `Bit` with integer literals `0` and `1`.
+/// admonition | Comparison results are `Boolean`, not `Bit`
+    type: note
+All comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) return `Boolean`. To assign a comparison result to a `Bit` port or variable, apply `.bit`:
+```scala
+val tick = Bit <> OUT
+val counter = UInt(8) <> VAR
+val limit   = UInt(8) <> IN
+tick := (counter == limit).bit  // Boolean -> Bit conversion
+```
+Conversely, `Bit` values can be used directly in `if` conditions (they are accepted as boolean expressions), and you can compare a `Bit` with integer literals `0` and `1`.
+///
 
-!!! note "`Bit` does not have `.uint` -- use `.bits.uint`"
-    The `.uint` method is available on `Bits` values but not directly on `Bit`. To convert a `Bit` to `UInt(1)`, go through `Bits(1)` first:
-    ```scala
-    val b = Bit <> IN
-    val u = UInt(1) <> VAR
-    u := b.bits.uint  // Bit -> Bits(1) -> UInt(1)
-    ```
+/// admonition | `Bit` does not have `.uint` -- use `.bits.uint`
+    type: note
+The `.uint` method is available on `Bits` values but not directly on `Bit`. To convert a `Bit` to `UInt(1)`, go through `Bits(1)` first:
+```scala
+val b = Bit <> IN
+val u = UInt(1) <> VAR
+u := b.bits.uint  // Bit -> Bits(1) -> UInt(1)
+```
+///
 
 ```scala
 val bt1 = Bit <> VAR
@@ -812,8 +818,10 @@ val e3 = 0 ^ true
 val sc: Boolean = true && true
 ```
 
-!!! tip "Logical `||`/`&&` and bitwise `|`/`&` on Bit and Boolean values"
-    In DFHDL, the operators `||` and `&&` are equivalent to `|` and `&`, respectively, when applied on either DFHDL `Bit` or `Boolean` types. In Verilog, the actual operator printed depends on the LHS argument of the operation: if it's `Bit`, the operator will be `|`/`&`; if it's `Boolean`, the operator will be `||`/`&&`.
+/// admonition | Logical `||`/`&&` and bitwise `|`/`&` on Bit and Boolean values
+    type: tip
+In DFHDL, the operators `||` and `&&` are equivalent to `|` and `&`, respectively, when applied on either DFHDL `Bit` or `Boolean` types. In Verilog, the actual operator printed depends on the LHS argument of the operation: if it's `Bit`, the operator will be `|`/`&`; if it's `Boolean`, the operator will be `||`/`&&`.
+///
 
 /// details | Transitioning from Verilog
     type: verilog
@@ -1248,16 +1256,18 @@ val u8 = UInt(8) <> VAR
 u8 := s8.bits.uint
 ```
 
-!!! warning "Unsigned/signed mixing in arithmetic"
-    DFHDL does not allow mixing `UInt` and `SInt` in arithmetic expressions. Convert explicitly before operating:
-    ```scala
-    val counter = UInt(3) <> VAR
-    val offset  = SInt(8) <> VAR
-    // ERROR: Cannot mix unsigned and signed
-    // val result = offset - counter
-    // CORRECT: convert counter to SInt first
-    val result = offset - counter.bits.sint.resize(8)
-    ```
+/// admonition | Unsigned/signed mixing in arithmetic
+    type: warning
+DFHDL does not allow mixing `UInt` and `SInt` in arithmetic expressions. Convert explicitly before operating:
+```scala
+val counter = UInt(3) <> VAR
+val offset  = SInt(8) <> VAR
+// ERROR: Cannot mix unsigned and signed
+// val result = offset - counter
+// CORRECT: convert counter to SInt first
+val result = offset - counter.bits.sint.resize(8)
+```
+///
 
 ### Constant Generation
 
@@ -1327,18 +1337,20 @@ val s6 = SInt(6) <> VAR
 val s4 = s6(3, 0)   // lower 4 bits, returns SInt[4]
 ```
 
-!!! note "Range slices preserve the original type"
-    A range slice on `UInt` returns `UInt`, and on `SInt` returns `SInt` -- it does **not** return `Bits`. This means a `UInt` range slice can be used directly as a dynamic index into `Bits` without `.uint`:
-    ```scala
-    val scratch = Bits(8) <> VAR
-    val bitpos  = UInt(4) <> VAR  // 4-bit counter
+/// admonition | Range slices preserve the original type
+    type: note
+A range slice on `UInt` returns `UInt`, and on `SInt` returns `SInt` -- it does **not** return `Bits`. This means a `UInt` range slice can be used directly as a dynamic index into `Bits` without `.uint`:
+```scala
+val scratch = Bits(8) <> VAR
+val bitpos  = UInt(4) <> VAR  // 4-bit counter
 
-    // CORRECT: range slice of UInt returns UInt, usable directly as index
-    scratch(bitpos(2, 0)) :== din
+// CORRECT: range slice of UInt returns UInt, usable directly as index
+scratch(bitpos(2, 0)) :== din
 
-    // WRONG: .uint is not needed and will cause a compile error
-    // scratch(bitpos(2, 0).uint) :== din
-    ```
+// WRONG: .uint is not needed and will cause a compile error
+// scratch(bitpos(2, 0).uint) :== din
+```
+///
 
 #### Width Adjustment: `.resize`, `.truncate`, `.extend`
 
@@ -1355,14 +1367,16 @@ u8 := u6.resize(8)    // explicit zero-extend to 8 bits
 u8 := u6.extend       // auto-widen to match u8's width
 ```
 
-!!! note "Scala `Int` constants auto-lift in comparisons"
-    Plain Scala `Int` values can be used directly in comparisons and arithmetic with DFHDL typed variables. No explicit coercion is needed:
-    ```scala
-    val LIMIT: Int <> CONST = 5208
-    val counter = UInt.until(LIMIT) <> VAR
-    if (counter == LIMIT - 1)  // Int <> CONST compared with UInt -- works directly
-      counter := 0
-    ```
+/// details | Scala `Int` constants auto-lift in comparisons
+    type: note
+Plain Scala `Int` values can be used directly in comparisons and arithmetic with DFHDL typed variables. No explicit coercion is needed:
+```scala
+val LIMIT: Int <> CONST = 5208
+val counter = UInt.until(LIMIT) <> VAR
+if (counter == LIMIT - 1)  // Int <> CONST compared with UInt -- works directly
+  counter := 0
+```
+///
 
 ### Examples
 
