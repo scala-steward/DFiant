@@ -810,6 +810,26 @@ val e3 = 0 ^ true
 val sc: Boolean = true && true
 ```
 
+!!! tip "Bitwise `|`/`&` vs logical `||`/`&&` on Bit values"
+    For `Bit` values, both bitwise (`|`, `&`) and logical (`||`, `&&`) operators are available, but they behave differently:
+
+    - **`|`, `&`**: Bitwise operators. When both operands are `Bit`, the result is `Bit`.
+    - **`||`, `&&`**: Logical operators. The result type matches the LHS type, but chaining multiple `||`/`&&` can produce intermediate types that do not support `.bit` conversion.
+
+    **For combining `Bit` signals in assignments, always use `|` and `&`:**
+    ```scala
+    val a, b, c = Bit <> IN
+    val out     = Bit <> OUT
+
+    // CORRECT: bitwise OR returns Bit directly
+    out := a | b | c
+
+    // PROBLEMATIC: logical OR chain may not convert cleanly to Bit
+    // out := (a || b || c).bit  // may fail
+    ```
+
+    Use `||`/`&&` primarily in `if` conditions, where the result is consumed as a boolean, not assigned to a `Bit` port.
+
 /// details | Transitioning from Verilog
     type: verilog
 Under the ED domain, the following operations are equivalent:
@@ -1053,7 +1073,19 @@ This interpolation covers the VHDL hexadecimal literal use-cases, but also adds 
   * DFHDL `Bit` or `Boolean` values. This candidate produces a single bit `Bits[1]` vector. 
   * DFHDL `UInt` values
   * Scala `Tuple` combination of any DFHDL values and `1`/`0` literal values. This candidate performs bit concatenation of all values, according their order in the tuple, encoded from the most-significant value position down to the least-significant value position.
-  * Application-only candidate - Same-Element Vector (`all(elem)`).  
+  * Application-only candidate - Same-Element Vector (`all(elem)`).
+
+!!! warning "`Bits` does not accept plain integer candidates"
+    Unlike `UInt`/`SInt`, `Bits` values **cannot** be initialized or assigned with plain integers. Use `all(0)` for zero initialization, or a sized literal:
+    ```scala
+    // CORRECT
+    val b8 = Bits(8) <> VAR init all(0)     // zero via all(0)
+    val b4 = Bits(4) <> VAR init b"4'0"     // zero via binary literal
+    val b6 = Bits(6) <> VAR init h"6'00"    // zero via hex literal
+
+    // WRONG: integer 0 is not a Bits candidate
+    // val b8 = Bits(8) <> VAR init 0        // compile error
+    ```  
 
 ```scala
 val b8   = Bits(8) <> VAR
@@ -1135,8 +1167,8 @@ DFHDL provides three decimal numeric types:
 | Constructor  | Description | Arg Constraints     | Returns |
 | ------------ | ----------- | ------------------- | ------- |
 | `UInt(width)`| Construct an unsigned integer DFType with the given `width` as number of bits. | `width` is a positive Scala `Int` or constant DFHDL `Int` value. | `UInt[width.type]` DFType  |
-| `UInt.until(sup)`| Construct an unsigned integer DFType with the given `sup` supremum number the value is expected to reach. The number of bits is set as `clog2(sup)`. | `sup` is a Scala `Int` or constant DFHDL `Int` value larger than 1. | `UInt[CLog2[width.type]]` DFType  |
-| `UInt.to(max)`| Construct an unsigned integer DFType with the given `max` maximum number the value is expected to reach. The number of bits is set as `clog2(max+1)`. | `max` is a positive Scala `Int` or constant DFHDL `Int` value. | `UInt[CLog2[width.type+1]]` DFType  |
+| `UInt.until(sup)`| Construct an unsigned integer DFType with the given `sup` supremum number the value is expected to reach. The number of bits is set as `clog2(sup)`. | `sup` is a Scala `Int` or constant DFHDL `Int` value **larger than 1**. `UInt.until(1)` is invalid (would produce 0-bit width). | `UInt[CLog2[width.type]]` DFType  |
+| `UInt.to(max)`| Construct an unsigned integer DFType with the given `max` maximum number the value is expected to reach. The number of bits is set as `clog2(max+1)`. | `max` is a positive Scala `Int` or constant DFHDL `Int` value. `UInt.to(1)` is valid (produces 1-bit width). | `UInt[CLog2[width.type+1]]` DFType  |
 | `SInt(width)`| Construct a signed integer DFType with the given `width` as number of bits. | `width` is a positive Scala `Int` or constant DFHDL `Int` value. | `SInt[width.type]` DFType  |
 | `Int`| Construct a constant integer DFType. Used mainly for parameters. | None | `Int` DFType |
 
@@ -1155,7 +1187,7 @@ These operations propagate constant modifiers and maintain proper bit widths:
 | Operation    | Description | LHS/RHS Constraints | Returns |
 | ------------ | ----------- | ------------------- | ------- |
 | `lhs + rhs` | Addition | Both decimal types | Result with appropriate width |
-| `lhs - rhs` | Subtraction | Both decimal types | Result with appropriate width |
+| `lhs - rhs` | Subtraction (LHS must be at least as wide as RHS) | Both decimal types | Result with appropriate width |
 | `lhs * rhs` | Multiplication | Both decimal types | Result with width = lhs.width + rhs.width |
 | `lhs / rhs` | Division | Both decimal types | Result with lhs width |
 | `lhs % rhs` | Modulo | Both decimal types | Result with rhs width |
@@ -1181,6 +1213,62 @@ val tick    = Bit <> OUT
 // Comparison returns Boolean; convert to Bit for assignment to a Bit port
 tick := (counter == limit).bit
 ```
+
+#### Shift Operations
+
+/// html | div.operations
+| Operation    | Description | LHS/RHS Constraints | Returns |
+| ------------ | ----------- | ------------------- | ------- |
+| `lhs << rhs` | Left shift | LHS: `UInt`/`SInt`, RHS: unsigned or `Int` | Same type as LHS |
+| `lhs >> rhs` | Right shift (logical for `UInt`, arithmetic for `SInt`) | LHS: `UInt`/`SInt`, RHS: unsigned or `Int` | Same type as LHS |
+
+The `>>` operator is **type-aware**: on `UInt` it performs a logical (zero-filling) right shift, and on `SInt` it performs an arithmetic (sign-extending) right shift. There is no separate `>>>` operator in DFHDL -- the operand type determines the behavior.
+
+```scala
+val u = UInt(8) <> VAR
+val s = SInt(8) <> VAR
+
+val u_shifted = u >> 2  // logical right shift (zero-fills MSBs)
+val s_shifted = s >> 2  // arithmetic right shift (sign-extends MSBs)
+```
+
+#### Type Conversion Between UInt, SInt, and Bits {#type-conversion}
+
+DFHDL does not provide direct `.toSInt` or `.toUInt` methods. Instead, conversions go through `Bits` as an intermediate:
+
+| From | To | Method |
+|------|-----|--------|
+| `UInt` | `Bits` | `.bits` |
+| `SInt` | `Bits` | `.bits` |
+| `Bits` | `UInt` | `.uint` |
+| `Bits` | `SInt` | `.sint` |
+| `UInt` | `SInt` | `.bits.sint` |
+| `SInt` | `UInt` | `.bits.uint` |
+
+When converting `UInt` to `SInt`, the bit pattern is reinterpreted (not sign-extended). If you need the unsigned value represented as a wider signed value, `.resize` after conversion:
+
+```scala
+val u3 = UInt(3) <> VAR  // range 0..7
+val s8 = SInt(8) <> VAR
+
+// UInt(3) -> Bits(3) -> SInt(3) -> SInt(8)
+s8 := u3.bits.sint.resize(8)
+
+// SInt(8) -> Bits(8) -> UInt(8)
+val u8 = UInt(8) <> VAR
+u8 := s8.bits.uint
+```
+
+!!! warning "Unsigned/signed mixing in arithmetic"
+    DFHDL does not allow mixing `UInt` and `SInt` in arithmetic expressions. Convert explicitly before operating:
+    ```scala
+    val counter = UInt(3) <> VAR
+    val offset  = SInt(8) <> VAR
+    // ERROR: Cannot mix unsigned and signed
+    // val result = offset - counter
+    // CORRECT: convert counter to SInt first
+    val result = offset - counter.bits.sint.resize(8)
+    ```
 
 ### Constant Generation
 
@@ -1249,6 +1337,19 @@ val b  = u6(5)       // MSB, returns Bit
 val s6 = SInt(6) <> VAR
 val s4 = s6(3, 0)   // lower 4 bits, returns SInt[4]
 ```
+
+!!! note "Range slices preserve the original type"
+    A range slice on `UInt` returns `UInt`, and on `SInt` returns `SInt` -- it does **not** return `Bits`. This means a `UInt` range slice can be used directly as a dynamic index into `Bits` without `.uint`:
+    ```scala
+    val scratch = Bits(8) <> VAR
+    val bitpos  = UInt(4) <> VAR  // 4-bit counter
+
+    // CORRECT: range slice of UInt returns UInt, usable directly as index
+    scratch(bitpos(2, 0)) :== din
+
+    // WRONG: .uint is not needed and will cause a compile error
+    // scratch(bitpos(2, 0).uint) :== din
+    ```
 
 #### Width Adjustment: `.resize`, `.truncate`, `.extend`
 

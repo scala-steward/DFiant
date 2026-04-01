@@ -323,3 +323,270 @@ given options.CompilerOptions.PrintBackendCode = true
 Individual design files should `import dfhdl.*` but not redeclare the shared `given` options.
 ///
 
+/// admonition | Shift Operators
+    type: verilog
+Verilog has separate `>>` (logical) and `>>>` (arithmetic) right shift operators. DFHDL uses only `>>`, but the behavior depends on the operand type:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+// Logical right shift (unsigned)
+out = data >> 2;
+
+// Arithmetic right shift (signed)
+out = $signed(data) >>> 2;
+```
+
+```scala linenums="0" title="DFHDL"
+// Logical right shift (UInt or Bits)
+out := data >> 2
+
+// Arithmetic right shift (SInt)
+out := data_signed >> 2
+```
+
+</div>
+
+There is no `>>>` operator in DFHDL. The type of the LHS determines the shift semantics: `>>` on `UInt`/`Bits` zero-fills, `>>` on `SInt` sign-extends.
+///
+
+/// admonition | UInt/SInt Conversion
+    type: verilog
+Verilog implicitly converts between signed and unsigned in mixed expressions. DFHDL requires explicit conversion through `Bits`:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+reg [2:0] counter;  // unsigned
+reg signed [7:0] offset;
+
+// Verilog auto-converts
+offset = 180 - 5 * counter;
+```
+
+```scala linenums="0" title="DFHDL"
+val counter = UInt(3) <> VAR
+val offset  = SInt(8) <> VAR
+
+// Must convert UInt -> SInt explicitly
+// UInt -> .bits -> .sint -> .resize
+val cnt_s = counter.bits.sint.resize(8)
+offset := sd"8'180" - cnt_s * 5
+```
+
+</div>
+
+Conversion summary: `uint_val.bits.sint` for UInt-to-SInt, `sint_val.bits.uint` for SInt-to-UInt. See [Type Conversion](../../user-guide/type-system/index.md#type-conversion) for details.
+///
+
+/// admonition | Bit Operators: `|` and `&` vs `||` and `&&`
+    type: verilog
+In Verilog, `|` and `||` on single-bit wires produce the same result. In DFHDL, they behave differently:
+
+- `a | b` (bitwise OR) on `Bit` values returns `Bit` -- use for assignments to `Bit` ports/variables.
+- `a || b` (logical OR) on `Bit` values returns `Boolean` -- use in `if` conditions.
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+wire a, b, c;
+wire out;
+assign out = a | b | c;
+// or: assign out = a || b || c;
+// (same result for 1-bit)
+```
+
+```scala linenums="0" title="DFHDL"
+val a, b, c = Bit <> IN
+val out     = Bit <> OUT
+
+// Use bitwise | for Bit assignment
+out := a | b | c
+
+// Use || only in conditions:
+// if (a || b) ...
+```
+
+</div>
+///
+
+/// admonition | Scalar Reserved Keywords as Port Names
+    type: verilog
+Some Verilog port names (`val`, `type`, `class`, `match`, `case`, `object`, etc.) are reserved in Scala. Use backtick escaping:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+module mul(
+  output reg signed [15:0] val
+);
+```
+
+```scala linenums="0" title="DFHDL"
+class mul extends EDDesign:
+  val `val` = SInt(16) <> OUT
+```
+
+</div>
+
+When connecting to a backtick-escaped port from a parent: `inst.`\``val`\`` <> parent_signal`.
+///
+
+/// admonition | Bits Initialization
+    type: verilog
+`Bits` values cannot be initialized with plain integers. Use `all(0)` or a sized literal:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+reg [7:0] flags = 8'd0;
+reg [7:0] mask  = 8'hFF;
+```
+
+```scala linenums="0" title="DFHDL"
+val flags = Bits(8) <> VAR init all(0)
+val mask  = Bits(8) <> VAR init h"8'FF"
+// NOT: Bits(8) <> VAR init 0  // error
+```
+
+</div>
+
+`UInt` and `SInt` accept plain integer `0` for init; `Bits` does not.
+///
+
+/// admonition | Inline Conditional Expressions
+    type: verilog
+Verilog's ternary operator `cond ? a : b` maps to Scala's `if`/`else`, but in process blocks the inline form requires parentheses:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+assign out = sel ? a : b;
+
+always @(*)
+  out = sel ? a : b;
+```
+
+```scala linenums="0" title="DFHDL"
+// Continuous: use <> with inline if
+out <> (if (sel) a else b)
+
+// In process blocks: wrap in parentheses
+process(all):
+  out := (if (sel) a else b)
+
+// Or use statement form:
+process(all):
+  if (sel) out := a
+  else out := b
+```
+
+</div>
+
+Without parentheses, `out := if (sel) a else b` causes a parse error. Either wrap the `if` in parentheses or use the statement form.
+///
+
+/// admonition | Unsigned Literal Minus Signed Expression
+    type: verilog
+In Verilog, `2 - signed_expr` works because integer literals are implicitly 32-bit. In DFHDL, a plain `2` is unsigned and cannot be subtracted from by a wider signed value. Restructure as negation plus addition:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+// Works: 2 is 32-bit integer
+err <= 2 - (2 * r0);
+```
+
+```scala linenums="0" title="DFHDL"
+// Restructure: negate then add
+err :== (-(r0_wide + r0_wide) + sd"2").truncate
+
+// Or make the signed literal wide enough:
+val two = sd"${CORDW+2}'2"
+err :== (two - (r0_wide + r0_wide)).truncate
+```
+
+</div>
+///
+
+/// admonition | Parametric Bit-Vector Constants
+    type: verilog
+DFHDL does not support `Bits` CONST parameters whose width depends on another parameter. Use `Int <> CONST` and extract bits internally:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+parameter LEN=8;
+parameter TAPS=8'b10111000;
+// TAPS width depends on LEN
+```
+
+```scala linenums="0" title="DFHDL"
+val LEN:  Int <> CONST = 8
+val TAPS: Int <> CONST = 0xB8
+
+// Extract bits internally
+val taps_b = Bits(LEN) <> VAR
+taps_b <> TAPS.bits(LEN-1, 0)
+```
+
+</div>
+
+Note: `.bits(hi, lo)` is an extension method on `Int <> CONST` DFHDL values. It does **not** work on plain Scala `Int`. If you have a compile-time constant, pass it as an `Int <> CONST` parameter, or use a hex/binary literal directly: `h"21'140000"`.
+///
+
+/// admonition | `$clog2` Mapping: `.until` vs `.to`
+    type: verilog
+When translating Verilog `$clog2` expressions, choose the right constructor:
+
+| Verilog | DFHDL | Bits |
+|---------|-------|------|
+| `$clog2(N)` | `UInt.until(N)` | `clog2(N)` bits, valid for N >= 2 |
+| `$clog2(N+1)` | `UInt.to(N)` | `clog2(N+1)` bits, valid for N >= 1 |
+
+`UInt.until(1)` is **invalid** (would produce 0-bit width). For counters that count 0 to N inclusive (common with `$clog2(N+1)`), use `UInt.to(N)`:
+
+```scala linenums="0" title="DFHDL"
+// Verilog: reg [$clog2(SCALE+1)-1:0] cnt = 0;
+val cnt = UInt.to(SCALE) <> VAR init 0
+```
+///
+
+/// admonition | Enum FSM and `unique case`
+    type: verilog
+When you use `enum extends Encoded` with `match` in DFHDL, the generated SystemVerilog uses `unique case`. This has implications for formal verification:
+
+- **Exhaustive enums** (all bit patterns used, e.g., 4 states in 2 bits): `unique case` is safe because every possible value has a branch.
+- **Sparse enums** (not all bit patterns used, e.g., 3 states in 2 bits): `unique case` has no `default` for the unused bit patterns. Formal tools may find counterexamples for unreachable states.
+
+If the original Verilog FSM has a `default` branch that handles invalid/unreachable states, use `if`/`else if` chains with a final `else` instead of `match` on an enum:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog (3 states, has default)"
+case (state)
+  IDLE:  ...
+  DATA:  ...
+  STOP:  ...
+  default: state <= IDLE;
+endcase
+```
+
+```scala linenums="0" title="DFHDL (if/else for default coverage)"
+// Use Bits constants + if/else if/else
+val IDLE = b"2'00"
+val DATA = b"2'01"
+val STOP = b"2'10"
+val state = Bits(2) <> VAR init IDLE
+
+if (state == IDLE) ...
+else if (state == DATA) ...
+else if (state == STOP) ...
+else state :== IDLE  // covers 2'b11
+```
+
+</div>
+
+Use `enum` + `match` when the enum is exhaustive or when `default` coverage is not needed.
+///
+
