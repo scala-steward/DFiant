@@ -131,7 +131,10 @@ case object ExplicitNamedVars extends Stage:
                     plantedNewVar := anonValue
                     plantedNewReg.din := plantedNewVar
                   else if (varUse)
-                    plantedNewVar := anonValue
+                    if (named.isInEDDomain && !named.isInProcess)
+                      plantedNewVar <> anonValue
+                    else
+                      plantedNewVar := anonValue
                   else if (regUse)
                     plantedNewReg.din := anonValue
             val varPatchOpt =

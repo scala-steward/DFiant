@@ -233,4 +233,32 @@ class ExplicitNamedVarsSpec extends StageSpec:
          |end ID""".stripMargin
     )
   }
+  test("EDDomain rules") {
+    class ID extends EDDesign:
+      val x  = SInt(16) <> IN
+      val y  = SInt(16) <> OUT
+      val py = SInt(16) <> OUT
+      val v  = x
+      y <> v
+      process:
+        val pv = x
+        py := pv
+    end ID
+    val id = (new ID).explicitNamedVars
+    assertCodeString(
+      id,
+      """|class ID extends EDDesign:
+         |  val x = SInt(16) <> IN
+         |  val y = SInt(16) <> OUT
+         |  val py = SInt(16) <> OUT
+         |  val v = SInt(16) <> VAR
+         |  v <> x
+         |  y <> v
+         |  process:
+         |    val pv = SInt(16) <> VAR
+         |    pv := x
+         |    py := pv
+         |end ID""".stripMargin
+    )
+  }
 end ExplicitNamedVarsSpec
