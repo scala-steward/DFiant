@@ -379,7 +379,7 @@ offset := sd"8'180" - cnt_s * 5
 Conversion summary: `uint_val.bits.sint` for UInt-to-SInt, `sint_val.bits.uint` for SInt-to-UInt. See [Type Conversion](../../user-guide/type-system/index.md#type-conversion) for details.
 ///
 
-/// admonition | Bit Operators: `|`/`&` and `||`/`&&`
+/// admonition | Bit/Boolean Operators: `|`/`&` and `||`/`&&`
     type: verilog
 In DFHDL, `||` and `&&` are equivalent to `|` and `&`, respectively, when applied on `Bit` or `Boolean` types. In the generated Verilog, the operator depends on the LHS type: `Bit` produces `|`/`&`, `Boolean` produces `||`/`&&`.
 
