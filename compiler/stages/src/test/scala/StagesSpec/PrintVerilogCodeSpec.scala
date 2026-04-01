@@ -258,8 +258,8 @@ class PrintVerilogCodeSpec extends StageSpec:
 
   test("Boolean logical operators") {
     class BoolLogic extends RTDesign:
-      val a = Boolean <> IN
-      val b = Boolean <> IN
+      val a  = Boolean <> IN
+      val b  = Boolean <> IN
       val y1 = Boolean <> OUT
       val y2 = Boolean <> OUT
       y1 := a || b
@@ -1569,6 +1569,33 @@ class PrintVerilogCodeSpec extends StageSpec:
          |  assign y = x;
          |endmodule
          |""".stripMargin
+    )
+  }
+  test("vector to bits conversion") {
+    class Foo extends EDDesign:
+      val i1 = Bit X 8 <> IN
+      val o1 = Bits(8) <> OUT
+      val i2 = Bits(8) <> IN
+      val o2 = Bit X 8 <> OUT
+      o1 <> i1.bits
+      o2 <> i2.as(Bit X 8)
+    end Foo
+    val top = (new Foo).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|`default_nettype none
+         |`timescale 1ns/1ps
+         |
+         |module Foo(
+         |  input  wire logic i1 [0:7],
+         |  output logic [7:0] o1,
+         |  input  wire logic [7:0] i2,
+         |  output logic o2 [0:7]
+         |);
+         |  `include "dfhdl_defs.svh"
+         |  assign o1 = {i1[0], i1[1], i1[2], i1[3], i1[4], i1[5], i1[6], i1[7]};
+         |  assign o2 = '{i2[7], i2[6], i2[5], i2[4], i2[3], i2[2], i2[1], i2[0]};
+         |endmodule""".stripMargin
     )
   }
 end PrintVerilogCodeSpec

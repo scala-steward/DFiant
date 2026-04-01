@@ -151,7 +151,7 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
               case _         => ">>"
           case Func.Op.| if argL.get.dfType == DFBool => "||"
           case Func.Op.& if argL.get.dfType == DFBool => "&&"
-          case _ => commonOpStr
+          case _                                      => commonOpStr
         (argL.get.dfType, dfVal.op) match
           case (
                 DFSInt(widthRef),
@@ -322,9 +322,14 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
               List.tabulate(vecLength)(i =>
                 s"$relValStr[${relHighIdx - i * cellWidth}:${relHighIdx - (i + 1) * cellWidth + 1}]"
               ).csList(literalGroupOpen, ",", "}")
+            case _: DFBoolOrBit =>
+              List.tabulate(vecLength)(i =>
+                s"$relValStr[${relHighIdx - i}]"
+              ).csList(literalGroupOpen, ",", "}")
             case x =>
               println(x)
               printer.unsupported
+          end match
         end to_vector_conv
         to_vector_conv(toVector, toVector.width - 1)
       case (DFBits(Int(tWidth)), fromVector: DFVector) =>
@@ -335,7 +340,8 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
               List.tabulate(vecLength)(i => from_vector_conv(cellType, s"[$i]"))
                 .csList("{", ",", "}")
             case cellType: DFBits =>
-              val cellWidth = cellType.width
+              List.tabulate(vecLength)(i => s"$relValStr$prevSelect[$i]").csList("{", ",", "}")
+            case _: DFBoolOrBit =>
               List.tabulate(vecLength)(i => s"$relValStr$prevSelect[$i]").csList("{", ",", "}")
             case x =>
               println(x)
