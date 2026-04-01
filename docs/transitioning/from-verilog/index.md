@@ -418,19 +418,19 @@ Some Verilog port names (`val`, `type`, `class`, `match`, `case`, `object`, etc.
 <div class="grid" markdown>
 
 ```sv linenums="0" title="Verilog"
-module mul(
+module foo(
   output reg signed [15:0] val
 );
+  assign val = 16'sd42;
 ```
 
 ```scala linenums="0" title="DFHDL"
-class mul extends EDDesign:
+class foo extends EDDesign:
   val `val` = SInt(16) <> OUT
+  `val` <> 42
 ```
 
 </div>
-
-When connecting to a backtick-escaped port from a parent: `inst.`\``val`\`` <> parent_signal`.
 ///
 
 /// admonition | Bits Initialization
