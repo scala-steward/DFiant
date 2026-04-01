@@ -379,32 +379,33 @@ offset := sd"8'180" - cnt_s * 5
 Conversion summary: `uint_val.bits.sint` for UInt-to-SInt, `sint_val.bits.uint` for SInt-to-UInt. See [Type Conversion](../../user-guide/type-system/index.md#type-conversion) for details.
 ///
 
-/// admonition | Bit Operators: `|` and `&` vs `||` and `&&`
+/// admonition | Bit Operators: `|`/`&` and `||`/`&&`
     type: verilog
-In Verilog, `|` and `||` on single-bit wires produce the same result. In DFHDL, they behave differently:
-
-- `a | b` (bitwise OR) on `Bit` values returns `Bit` -- use for assignments to `Bit` ports/variables.
-- `a || b` (logical OR) on `Bit` values returns `Boolean` -- use in `if` conditions.
+In DFHDL, `||` and `&&` are equivalent to `|` and `&`, respectively, when applied on `Bit` or `Boolean` types. In the generated Verilog, the operator depends on the LHS type: `Bit` produces `|`/`&`, `Boolean` produces `||`/`&&`.
 
 <div class="grid" markdown>
 
 ```sv linenums="0" title="Verilog"
-wire a, b, c;
-wire out;
-assign out = a | b | c;
-// or: assign out = a || b || c;
-// (same result for 1-bit)
+input  a, b, c;
+output o1, o2, o3;
+// same result for 1-bit
+assign o1 = a | b | c;
+assign o2 = a | b | c;
+assign o3 = a || b || c;
 ```
 
 ```scala linenums="0" title="DFHDL"
 val a, b, c = Bit <> IN
-val out     = Bit <> OUT
+val o1, o2, o3 = Bit <> OUT
 
-// Use bitwise | for Bit assignment
-out := a | b | c
-
-// Use || only in conditions:
-// if (a || b) ...
+// Both are equivalent for Bit LHS:
+o1 <> a | b | c
+o2 <> a || b || c
+// a.bool makes the LHS Boolean, so RHS
+// auto-converts to Boolean and the result
+// auto-converts back to Bit.
+// Produces || in Verilog.
+o3 <> a.bool || b || c
 ```
 
 </div>

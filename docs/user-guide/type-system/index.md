@@ -777,7 +777,9 @@ These operations propagate constant modifiers, meaning that if all arguments are
 | Operation    | Description | LHS/RHS Constraints | Returns |
 | ------------ | ----------- | ------------------- | ------- |
 | `lhs && rhs` | Logical AND | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
-| `lhs || rhs` | Logical OR  | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
+| `lhs \|\| rhs` | Logical OR  | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
+| `lhs & rhs`  | Logical AND | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
+| `lhs \| rhs` | Logical OR  | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
 | `lhs ^ rhs`  | Logical XOR | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
 | `!lhs`       | Logical NOT | The argument must be a `Bit`/`Boolean` DFHDL value. | LHS-Type DFHDL value |
 ///
@@ -810,36 +812,21 @@ val e3 = 0 ^ true
 val sc: Boolean = true && true
 ```
 
-!!! tip "Bitwise `|`/`&` vs logical `||`/`&&` on Bit values"
-    For `Bit` values, both bitwise (`|`, `&`) and logical (`||`, `&&`) operators are available, but they behave differently:
-
-    - **`|`, `&`**: Bitwise operators. When both operands are `Bit`, the result is `Bit`.
-    - **`||`, `&&`**: Logical operators. The result type matches the LHS type, but chaining multiple `||`/`&&` can produce intermediate types that do not support `.bit` conversion.
-
-    **For combining `Bit` signals in assignments, always use `|` and `&`:**
-    ```scala
-    val a, b, c = Bit <> IN
-    val out     = Bit <> OUT
-
-    // CORRECT: bitwise OR returns Bit directly
-    out := a | b | c
-
-    // PROBLEMATIC: logical OR chain may not convert cleanly to Bit
-    // out := (a || b || c).bit  // may fail
-    ```
-
-    Use `||`/`&&` primarily in `if` conditions, where the result is consumed as a boolean, not assigned to a `Bit` port.
+!!! tip "Logical `||`/`&&` and bitwise `|`/`&` on Bit and Boolean values"
+    In DFHDL, the operators `||` and `&&` are equivalent to `|` and `&`, respectively, when applied on either DFHDL `Bit` or `Boolean` types. In Verilog, the actual operator printed depends on the LHS argument of the operation: if it's `Bit`, the operator will be `|`/`&`; if it's `Boolean`, the operator will be `||`/`&&`.
 
 /// details | Transitioning from Verilog
     type: verilog
 Under the ED domain, the following operations are equivalent:
 
-| DFHDL Operation | Verilog Operation |
-|-----------------|-------------------|
-| `lhs && rhs`    | `lhs & rhs`       |
-| `lhs || rhs`    | `lhs | rhs`       |
-| `lhs ^ rhs`     | `lhs ^ rhs`       |
-| `!lhs`          | `!lhs`            |
+| DFHDL Operation | Verilog Operation (Bit LHS) | Verilog Operation (Boolean LHS) |
+|-----------------|-----------------------------|---------------------------------|
+| `lhs && rhs`    | `lhs & rhs`                | `lhs && rhs`                    |
+| `lhs \|\| rhs`  | `lhs \| rhs`               | `lhs \|\| rhs`                  |
+| `lhs & rhs`     | `lhs & rhs`                | `lhs && rhs`                    |
+| `lhs \| rhs`    | `lhs \| rhs`               | `lhs \|\| rhs`                  |
+| `lhs ^ rhs`     | `lhs ^ rhs`                | `lhs ^ rhs`                     |
+| `!lhs`          | `!lhs`                      | `!lhs`                          |
 ///
 
 /// details | Transitioning from VHDL

@@ -149,6 +149,8 @@ protected trait VerilogValPrinter extends AbstractValPrinter:
             argL.get.dfType match
               case DFSInt(_) => ">>>"
               case _         => ">>"
+          case Func.Op.| if argL.get.dfType == DFBool => "||"
+          case Func.Op.& if argL.get.dfType == DFBool => "&&"
           case _ => commonOpStr
         (argL.get.dfType, dfVal.op) match
           case (

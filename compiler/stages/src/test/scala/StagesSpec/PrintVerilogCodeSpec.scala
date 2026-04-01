@@ -256,6 +256,34 @@ class PrintVerilogCodeSpec extends StageSpec:
     )
   }
 
+  test("Boolean logical operators") {
+    class BoolLogic extends RTDesign:
+      val a = Boolean <> IN
+      val b = Boolean <> IN
+      val y1 = Boolean <> OUT
+      val y2 = Boolean <> OUT
+      y1 := a || b
+      y2 := a && b
+    val top = (new BoolLogic).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|`default_nettype none
+         |`timescale 1ns/1ps
+         |
+         |module BoolLogic(
+         |  input  wire logic a,
+         |  input  wire logic b,
+         |  output logic y1,
+         |  output logic y2
+         |);
+         |  `include "dfhdl_defs.svh"
+         |  assign y1 = a || b;
+         |  assign y2 = a && b;
+         |endmodule
+         |""".stripMargin
+    )
+  }
+
   test("process block") {
     given options.PrinterOptions.Align = true
     class Top extends EDDesign:
@@ -740,7 +768,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |  output reg [15:0] y;
          |  always @(x)
          |  begin
-         |    if ((x[15:8] == 8'h12) | (x[15:4] == 12'h345)) y = 16'h22??;
+         |    if ((x[15:8] == 8'h12) || (x[15:4] == 12'h345)) y = 16'h22??;
          |    else y = 16'hffff;
          |  end
          |endmodule
@@ -1106,7 +1134,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |    $display("These are the values: %d", param3, ", %d", param4, ", %h", param5, ", %h", param6, ", %d", param7, ", %b", param8, ", %s", param9 ? "true" : "false", ", %s", param10.name(), "");
          |    $info(
          |      "Debug at Foo\n",
-         |      "compiler/stages/src/test/scala/StagesSpec/PrintVerilogCodeSpec.scala:1059:9\n",
+         |      "compiler/stages/src/test/scala/StagesSpec/PrintVerilogCodeSpec.scala:1087:9\n",
          |      "param3 = %d\n", param3,
          |      "param4 = %d\n", param4,
          |      "param5 = %h\n", param5,
@@ -1176,7 +1204,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |    $display("These are the values: %d", param3, ", %d", param4, ", %h", param5, ", %h", param6, ", %d", param7, ", %b", param8, ", %s", param9 ? "true" : "false", ", %s", MyEnum_to_string(param10), "");
          |    $display("INFO: ", 
          |      "Debug at Foo\n",
-         |      "compiler/stages/src/test/scala/StagesSpec/PrintVerilogCodeSpec.scala:1059:9\n",
+         |      "compiler/stages/src/test/scala/StagesSpec/PrintVerilogCodeSpec.scala:1087:9\n",
          |      "param3 = %d\n", param3,
          |      "param4 = %d\n", param4,
          |      "param5 = %h\n", param5,
