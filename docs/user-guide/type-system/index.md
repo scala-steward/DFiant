@@ -736,46 +736,6 @@ val bt4: Bit     <> CONST = bt4.bit
 // error: bt1 is not a constant
 val err: Bit     <> CONST = bt1
 ```
-
-#### Bit History Operations
-
-Currently these operations are only supported under ED domains. However, in upcoming DFHDL updates, support will be added across all domain abstractions.
-
-/// html | div.operations
-| Operation    | Description                     | LHS Constraints       | Returns               |
-| ------------ | --------------------------------|-----------------------|-----------------------|
-| `lhs.rising` | True when a value changes from `0` to `1` | `Bit` DFHDL value     | `Boolean` DFHDL value |
-| `lhs.falling` | True when a value changes from `1` to `0` | `Bit` DFHDL value     | `Boolean` DFHDL value |
-///
-
-```scala
-class Foo extends EDDesign:
-  val clk  = Bit <> IN
-
-  /* VHDL-style */
-  process(clk):
-    if (clk.rising) 
-      //some sequential logic
-
-  /* Verilog-style */
-  process(clk.rising):
-    //some sequential logic
-```
-
-/// details | Transitioning from Verilog
-    type: verilog
-Under the ED domain, the `x.rising` and `x.falling` operations are equivalent to the Verilog `posedge x` and `negedge x`, respectively. 
-In future releases these operations will have an expanded functionality under the other design domains.
-///
-
-/// details | Transitioning from VHDL
-    type: vhdl
-Under the ED domain, the `x.rising` and `x.falling` operations are equivalent to the VHDL `rising_edge(x)` and `falling_edge(x)`, respectively.
-In future releases these operations will have an expanded functionality under the other design domains.
-///
-
-For more information see either the [design domains][design-domains] or [processes][processes] sections.
-
 #### Logical Operations
 
 Logical operations' return type always match the LHS argument's type.
@@ -850,6 +810,71 @@ Under the ED domain, the following operations are equivalent:
 | `lhs ^ rhs`     | `lhs xor rhs`     |
 | `!lhs`          | `not lhs`         |
 ///
+
+#### Bit History Operations
+
+These operations are supported under both RT and ED domains. Under RT domain, these operations are synthesizable expression.
+
+/// html | div.operations
+| Operation    | Description                     | LHS Constraints       | Returns               |
+| ------------ | --------------------------------|-----------------------|-----------------------|
+| `lhs.rising` | True when a value changes from `0` to `1` | `Bit` DFHDL value     | `Boolean` DFHDL value |
+| `lhs.falling` | True when a value changes from `1` to `0` | `Bit` DFHDL value     | `Boolean` DFHDL value |
+///
+
+/// tab | `ED`
+
+```scala
+class Foo extends EDDesign:
+  val clk  = Bit <> IN
+
+  /* VHDL-style */
+  process(clk):
+    if (clk.rising) 
+      //some sequential logic
+
+  /* Verilog-style */
+  process(clk.rising):
+    //some sequential logic
+```
+/// details | Transitioning from Verilog
+    type: verilog
+Under the ED domain, the `x.rising` and `x.falling` operations are equivalent to the Verilog `posedge x` and `negedge x`, respectively.
+///
+
+/// details | Transitioning from VHDL
+    type: vhdl
+Under the ED domain, the `x.rising` and `x.falling` operations are equivalent to the VHDL `rising_edge(x)` and `falling_edge(x)`, respectively.
+///
+///
+
+/// tab | `RT`
+The following `RT` domain edge detection design:
+```scala
+class Detector extends RTDesign:
+  val i = Bit <> IN
+  val o = Bit <> OUT
+  o := i.rising
+```
+is compiled down to the following `ED` design (depending on the clock and reset configurations):
+```scala
+class Detector extends EDDesign:
+  val clk   = Bit <> IN
+  val i     = Bit <> IN
+  val o     = Bit <> OUT
+  val i_reg = Bit <> VAR init 1
+  process(clk.rising):
+    i_reg :== i
+  o <> !i_reg && i
+```
+The initial (reset) register value is `1`/`0` for `rising`/`falling` operations, respectively. 
+This inherently prevents triggering immediately after reset, without sampling at least two input clock cycles.
+
+Both Verilog and VHDL have no equivalent synthesizable shorthand syntax.
+///
+
+For more information see either the [design domains][design-domains] or [processes][processes] sections.
+
 
 #### Constant Meta Operations
 
