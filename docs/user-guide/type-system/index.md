@@ -1082,6 +1082,7 @@ val b6  = Bits(6) <> VAR init h"6'00"   // zero via hex literal
 // error: An integer value cannot be a candidate for a Bits type.
 // Try explicitly using a decimal constant via the `d"<width>'<number>"` string interpolation.
 val b16 = Bits(16) <> VAR init 0        // compile error
+```
 ///
 
 ```scala
