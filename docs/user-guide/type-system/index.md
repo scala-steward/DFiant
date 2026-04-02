@@ -1070,21 +1070,6 @@ This interpolation covers the VHDL hexadecimal literal use-cases, but also adds 
   * Scala `Tuple` combination of any DFHDL values and `1`/`0` literal values. This candidate performs bit concatenation of all values, according their order in the tuple, encoded from the most-significant value position down to the least-significant value position.
   * Application-only candidate - Same-Element Vector (`all(elem)`).
 
-/// details | `Bits` does not accept plain integer candidates
-    type: note
-Unlike `UInt`/`SInt`, `Bits` values **cannot** be initialized or assigned with plain integers. Use `all(0)` for zero initialization, or a sized literal:
-```scala
-// CORRECT
-val b8  = Bits(8) <> VAR init all(0)    // zero via all(0)
-val b4  = Bits(4) <> VAR init b"4'0"    // zero via binary literal
-val b6  = Bits(6) <> VAR init h"6'00"   // zero via hex literal
-
-// error: An integer value cannot be a candidate for a Bits type.
-// Try explicitly using a decimal constant via the `d"<width>'<number>"` string interpolation.
-val b16 = Bits(16) <> VAR init 0        // compile error
-```
-///
-
 ```scala
 val b8   = Bits(8) <> VAR
 val b1   = Bits(1) <> VAR
@@ -1105,6 +1090,21 @@ val s4   = SInt(4) <> VAR
 //to a Bits[8] DFHDL value.
 b8 := (1, s4, b1, b"10")
 ```
+
+/// admonition | `Bits` does not accept plain integer candidates
+    type: note
+Unlike `UInt`/`SInt`, `Bits` values **cannot** be initialized or assigned with plain integers. Use `all(0)` for zero initialization, or a sized literal:
+```scala
+// CORRECT
+val b8  = Bits(8) <> VAR init all(0)    // zero via all(0)
+val b4  = Bits(4) <> VAR init b"4'0"    // zero via binary literal
+val b6  = Bits(6) <> VAR init h"6'00"   // zero via hex literal
+
+// error: An integer value cannot be a candidate for a Bits type.
+// Try explicitly using a decimal constant via the `d"<width>'<number>"` string interpolation.
+val b16 = Bits(16) <> VAR init 0        // compile error
+```
+///
 
 ### Concatenated Assignment
 DFHDL supports a special-case assignment of concatenated DFHDL Bits variables, using a Scala `Tuple` syntax on LHS of the assignment operator. Both LHS and RHS bits width must be the same. This assignment is just syntactic sugar for multiple separate assignments and carried out during the design [elaboration][elaboration]. The assignment ordering is from the first value at most-significant position down to the last value at least-significant position.
