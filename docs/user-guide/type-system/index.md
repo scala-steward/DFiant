@@ -687,6 +687,30 @@ val TrueVal: Boolean = 1
 bool := TrueVal 
 ```
 
+/// admonition | `Bit` variables accept `Boolean` comparison values as condidates
+    type: note
+All comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) return `Boolean`, and can be directly assigned to `Bit` variables:
+```scala
+class Foo extends RTDesign:
+  val limit   = UInt(8) <> IN
+  val counter = UInt(8) <> VAR.REG init 0
+  val tick    = Bit     <> OUT
+  tick := counter == limit  // Implicit Boolean -> Bit conversion
+```
+///
+
+/// admonition | `if` and `while` conditionals accept both `Boolean` and `Bit` values
+    type: note
+`if` and `while` conditional expression and statements accept both `Boolean` and `Bit` values (no conversion is taking place). In stricter backends like `vhdl.v93`, an automatic conversion is applied `Boolean` where needed.
+```scala
+class Foo extends RTDesign:
+  val tick = Bit <> IN
+  if (tick) // if condition accepts both Bit and Boolean values
+    //do something
+  end if
+```
+///
+
 ### Operations
 
 #### Explicit Casting Operations
@@ -698,28 +722,6 @@ These operations propagate constant modifiers, meaning that if the casted argume
 | ----------- | --------------------------------|-----------------------|-----------------------|
 | `lhs.bool`  | Cast to a DFHDL `Boolean` value | `Bit` DFHDL value     | `Boolean` DFHDL value |
 | `lhs.bit`   | Cast to a DFHDL `Bit` value     | `Boolean` DFHDL value | `Bit` DFHDL value     |
-///
-
-/// admonition | Comparison results are `Boolean`, not `Bit`
-    type: note
-All comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`) return `Boolean`. To assign a comparison result to a `Bit` port or variable, apply `.bit`:
-```scala
-val tick = Bit <> OUT
-val counter = UInt(8) <> VAR
-val limit   = UInt(8) <> IN
-tick := (counter == limit).bit  // Boolean -> Bit conversion
-```
-Conversely, `Bit` values can be used directly in `if` conditions (they are accepted as boolean expressions), and you can compare a `Bit` with integer literals `0` and `1`.
-///
-
-/// admonition | `Bit` does not have `.uint` -- use `.bits.uint`
-    type: note
-The `.uint` method is available on `Bits` values but not directly on `Bit`. To convert a `Bit` to `UInt(1)`, go through `Bits(1)` first:
-```scala
-val b = Bit <> IN
-val u = UInt(1) <> VAR
-u := b.bits.uint  // Bit -> Bits(1) -> UInt(1)
-```
 ///
 
 ```scala
@@ -1155,9 +1157,10 @@ given options.AppOptions.AppMode = options.AppOptions.AppMode.elaborate
 ## `UInt`/`SInt`/`Int` DFHDL Values {#DFDecimal}
 
 DFHDL provides three decimal numeric types:
-- `UInt` - Unsigned integer values
-- `SInt` - Signed integer values  
-- `Int` - Constant integer values (used mainly for parameters)
+
+- `UInt` - Unsigned bit-accurate integer values
+- `SInt` - Signed bit-accurate integer values  
+- `Int` - 32-bit integer values (used mainly for parameters)
 
 ### DFType Constructors
 
@@ -1169,6 +1172,7 @@ DFHDL provides three decimal numeric types:
 | `UInt.to(max)`| Construct an unsigned integer DFType with the given `max` maximum number the value is expected to reach. The number of bits is set as `clog2(max+1)`. | `max` is a positive Scala `Int` or constant DFHDL `Int` value. `UInt.to(1)` is valid (produces 1-bit width). | `UInt[CLog2[width.type+1]]` DFType  |
 | `SInt(width)`| Construct a signed integer DFType with the given `width` as number of bits. | `width` is a positive Scala `Int` or constant DFHDL `Int` value. | `SInt[width.type]` DFType  |
 | `Int`| Construct a constant integer DFType. Used mainly for parameters. | None | `Int` DFType |
+///
 
 ### Candidates
   * DFHDL decimal values of the same type
@@ -1189,9 +1193,9 @@ These operations propagate constant modifiers and maintain proper bit widths:
 | `lhs * rhs` | Multiplication | Both decimal types | Result with width = lhs.width + rhs.width |
 | `lhs / rhs` | Division | Both decimal types | Result with lhs width |
 | `lhs % rhs` | Modulo | Both decimal types | Result with rhs width |
+///
 
 #### Comparison Operations
-Return `Boolean` values (not `Bit`). To assign a comparison result to a `Bit` port or variable, use `.bit`:
 
 /// html | div.operations
 | Operation    | Description | LHS/RHS Constraints | Returns |
@@ -1202,15 +1206,7 @@ Return `Boolean` values (not `Bit`). To assign a comparison result to a `Bit` po
 | `lhs >= rhs` | Greater than or equal | Both decimal types | Boolean |
 | `lhs == rhs` | Equal | Both decimal types | Boolean |
 | `lhs != rhs` | Not equal | Both decimal types | Boolean |
-
-```scala
-val counter = UInt(8) <> VAR
-val limit   = UInt(8) <> IN
-val tick    = Bit <> OUT
-
-// Comparison returns Boolean; convert to Bit for assignment to a Bit port
-tick := (counter == limit).bit
-```
+///
 
 #### Shift Operations
 
@@ -1219,6 +1215,7 @@ tick := (counter == limit).bit
 | ------------ | ----------- | ------------------- | ------- |
 | `lhs << rhs` | Left shift | LHS: `UInt`/`SInt`, RHS: unsigned or `Int` | Same type as LHS |
 | `lhs >> rhs` | Right shift (logical for `UInt`, arithmetic for `SInt`) | LHS: `UInt`/`SInt`, RHS: unsigned or `Int` | Same type as LHS |
+///
 
 The `>>` operator is **type-aware**: on `UInt` it performs a logical (zero-filling) right shift, and on `SInt` it performs an arithmetic (sign-extending) right shift. There is no separate `>>>` operator in DFHDL -- the operand type determines the behavior.
 
@@ -1229,46 +1226,6 @@ val s = SInt(8) <> VAR
 val u_shifted = u >> 2  // logical right shift (zero-fills MSBs)
 val s_shifted = s >> 2  // arithmetic right shift (sign-extends MSBs)
 ```
-
-#### Type Conversion Between UInt, SInt, and Bits {#type-conversion}
-
-DFHDL does not provide direct `.toSInt` or `.toUInt` methods. Instead, conversions go through `Bits` as an intermediate:
-
-| From | To | Method |
-|------|-----|--------|
-| `UInt` | `Bits` | `.bits` |
-| `SInt` | `Bits` | `.bits` |
-| `Bits` | `UInt` | `.uint` |
-| `Bits` | `SInt` | `.sint` |
-| `UInt` | `SInt` | `.bits.sint` |
-| `SInt` | `UInt` | `.bits.uint` |
-
-When converting `UInt` to `SInt`, the bit pattern is reinterpreted (not sign-extended). If you need the unsigned value represented as a wider signed value, `.resize` after conversion:
-
-```scala
-val u3 = UInt(3) <> VAR  // range 0..7
-val s8 = SInt(8) <> VAR
-
-// UInt(3) -> Bits(3) -> SInt(3) -> SInt(8)
-s8 := u3.bits.sint.resize(8)
-
-// SInt(8) -> Bits(8) -> UInt(8)
-val u8 = UInt(8) <> VAR
-u8 := s8.bits.uint
-```
-
-/// admonition | Unsigned/signed mixing in arithmetic
-    type: warning
-DFHDL does not allow mixing `UInt` and `SInt` in arithmetic expressions. Convert explicitly before operating:
-```scala
-val counter = UInt(3) <> VAR
-val offset  = SInt(8) <> VAR
-// ERROR: Cannot mix unsigned and signed
-// val result = offset - counter
-// CORRECT: convert counter to SInt first
-val result = offset - counter.bits.sint.resize(8)
-```
-///
 
 ### Constant Generation
 
@@ -1401,6 +1358,87 @@ val u4 = UInt(4) <> VAR init d"4'10"
 val s4 = SInt(4) <> VAR init sd"4'-2"
 ```
 
+## Common Conversions and Casts Between Types {#type-conversion}
+The diagram below shows the conversion/cast paths between DFHDL types. Solid arrows are simple casts that preserve width; dashed arrows involve width changes.
+
+![type-conversion](type-conversion-light.svg#only-light){ width="70%" }
+![type-conversion](type-conversion-dark.svg#only-dark){ width="70%" }
+
+/// html | div.conversion
+| From | To | Method | From | To | Method |
+|------|-----|--------|------|-----|--------|
+| `T` | `Bits` | `.bits` | `Bit` | `Boolean` | `.bool` |
+| `Bits` | `T` | `.as(T)` | `Boolean` | `Bit` | `.bit` |
+| `Bits(w)` | `UInt(w)` | `.uint` | `Bit`/`Boolean` | `Bits(1)` | `.bits` |
+| `Bits(w)` | `SInt(w)` | `.sint` | `Bit`/`Boolean` | `Bits(w)` | `.toBits(w)` |
+| `UInt(w)` | `SInt(w+1)` | `.signed` | `Bit`/`Boolean` | `UInt(w)` | `.toUInt(w)` |
+| `UInt`/`SInt` | `Int` | `.ToInt` | `Bit`/`Boolean` | `SInt(w)` | `.toSInt(w)` |
+///
+
+### Any Type to/from `Bits`: `.bits` and `.as(T)` {#bits-cast}
+
+Every DFHDL type can be converted to its raw bit representation with `.bits`. The inverse operation, `.as(T)`, reinterprets a `Bits` value as a target type `T`, provided the bit widths match exactly:
+
+```scala
+val u8 = UInt(8) <> VAR
+val b8 = u8.bits          // UInt(8) -> Bits(8)
+val back = b8.as(UInt(8)) // Bits(8) -> UInt(8)
+```
+
+This also works with composite types such as enums, structs, and opaques:
+
+```scala
+val e = MyEnum <> VAR
+val eBits = e.bits           // Enum -> Bits
+val eBack = eBits.as(MyEnum) // Bits -> Enum
+```
+
+### `Bits` to `UInt`/`SInt`: `.uint` and `.sint` {#uint-sint-cast}
+
+These are shorthand conversions from `Bits` that preserve width. The same bits are simply reinterpreted as unsigned or signed:
+
+```scala
+val b8 = Bits(8) <> VAR
+val u8 = b8.uint  // Bits(8) -> UInt(8), same bit pattern
+val s8 = b8.sint  // Bits(8) -> SInt(8), same bit pattern
+```
+
+### `UInt` to `SInt`: `.signed` {#signed-cast}
+
+Converting an unsigned value to signed requires an extra bit for the sign, so `.signed` widens the result by one bit:
+
+```scala
+val u8 = UInt(8) <> VAR
+val s9 = u8.signed  // UInt(8) -> SInt(9)
+```
+
+To get an `SInt` with the **same** width (reinterpreting the bit pattern without expanding), go through `Bits`:
+
+```scala
+val s8 = u8.bits.sint  // UInt(8) -> Bits(8) -> SInt(8)
+```
+
+### `Bit` and `Boolean` Conversions {#bit-bool-cast}
+
+`Bit` is the hardware single-bit type and `Boolean` is the logical type. They are convertible to each other with `.bit` and `.bool`:
+
+```scala
+val myBit  = Bit <> VAR
+val myBool = myBit.bool  // Bit -> Boolean
+val back   = myBool.bit  // Boolean -> Bit
+```
+
+Both `Bit` and `Boolean` can be widened (zero-extended) into `Bits`, `UInt`, or `SInt` with an explicit target width:
+
+```scala
+val flag = Bit <> VAR
+val b4 = flag.toBits(4)  // Bit -> Bits(4)
+val u4 = flag.toUInt(4)  // Bit -> UInt(4)
+val s4 = flag.toSInt(4)  // Bit -> SInt(4)
+```
+
+When the value is `1`, these produce the value `1` at the given width (not sign-extended). The single-bit `.bits` conversion is also available, returning `Bits(1)`.
+
 ## Enumeration DFHDL Values {#DFEnum}
 
 DFHDL supports enumerated types through Scala's enum feature with special encoding traits. Enums provide a type-safe way to represent a fixed set of values.
@@ -1459,6 +1497,7 @@ enum MyEnum(val value: UInt[8] <> CONST) extends Encoded.Manual(8):
 | `lhs != rhs` | Inequality comparison | Same enum type | Boolean |
 | `lhs.bits` | Get raw bits representation | Enum value | Bits |
 | `lhs.uint` | Get unsigned int representation | Enum value | UInt |
+///
 
 ### Pattern Matching
 
@@ -1546,6 +1585,7 @@ vec(idx) := newValue    // Write element at index
 | `vec.elements` | Get all elements as Scala sequence | Seq[BaseType] |
 | `vec.size` | Get vector dimension | Int |
 | `vec.bits` | Get bits representation | Bits |
+///
 
 ### Multi-dimensional Vectors
 
@@ -1637,6 +1677,7 @@ rect.bottomRight.y := 100
 | `lhs == rhs` | Equality comparison | Same struct type | Boolean |
 | `lhs != rhs` | Inequality comparison | Same struct type | Boolean |
 | `lhs.bits` | Get raw bits representation | Struct value | Bits |
+///
 
 ### Pattern Matching
 
@@ -1715,6 +1756,7 @@ val (x, y) = pair
 | `tuple.bits` | Get bits representation | Bits |
 | `tuple == other` | Equality comparison | Boolean |
 | `tuple != other` | Inequality comparison | Boolean |
+///
 
 ## Opaque DFHDL Values {#DFOpaque}
 

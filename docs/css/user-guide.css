@@ -1,3 +1,10 @@
+/* column separator between the two halves of the conversion table */
+div.conversion td:nth-child(4),
+div.conversion th:nth-child(4) {
+  border-left: 2px solid var(--md-typeset-table-color, #0000001f);
+  padding-left: 1em;
+}
+
 /* different styles for tabs inside tabs */
 html.js-focus-visible.js body div.md-container main.md-main div.md-main__inner.md-grid div.md-content article.md-content__inner.md-typeset div.admonition div.tabbed-set.tabbed-alternate div.tabbed-content div.tabbed-block div.tabbed-set.tabbed-alternate div.tabbed-labels.tabbed-labels--linked label a {
   font-size: smaller;
