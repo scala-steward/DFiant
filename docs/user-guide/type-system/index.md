@@ -785,9 +785,9 @@ These operations propagate constant modifiers, meaning that if all arguments are
 | Operation    | Description | LHS/RHS Constraints | Returns |
 | ------------ | ----------- | ------------------- | ------- |
 | `lhs && rhs` | Logical AND | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
-| `lhs \|\| rhs` | Logical OR  | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
+| `lhs || rhs` | Logical OR  | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
 | `lhs & rhs`  | Logical AND | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
-| `lhs \| rhs` | Logical OR  | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
+| `lhs | rhs` | Logical OR  | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
 | `lhs ^ rhs`  | Logical XOR | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
 | `!lhs`       | Logical NOT | The argument must be a `Bit`/`Boolean` DFHDL value. | LHS-Type DFHDL value |
 ///
@@ -831,11 +831,11 @@ Under the ED domain, the following operations are equivalent:
 
 | DFHDL Operation | Verilog Operation (Bit LHS) | Verilog Operation (Boolean LHS) |
 |-----------------|-----------------------------|---------------------------------|
-| `lhs && rhs`    | `lhs & rhs`                | `lhs && rhs`                    |
-| `lhs \|\| rhs`  | `lhs \| rhs`               | `lhs \|\| rhs`                  |
-| `lhs & rhs`     | `lhs & rhs`                | `lhs && rhs`                    |
-| `lhs \| rhs`    | `lhs \| rhs`               | `lhs \|\| rhs`                  |
-| `lhs ^ rhs`     | `lhs ^ rhs`                | `lhs ^ rhs`                     |
+| `lhs && rhs`    | `lhs & rhs`                 | `lhs && rhs`                    |
+| `lhs || rhs`    | `lhs | rhs`                 | `lhs || rhs`                    |
+| `lhs & rhs`     | `lhs & rhs`                 | `lhs && rhs`                    |
+| `lhs | rhs`     | `lhs | rhs`                 | `lhs || rhs`                    |
+| `lhs ^ rhs`     | `lhs ^ rhs`                 | `lhs ^ rhs`                     |
 | `!lhs`          | `!lhs`                      | `!lhs`                          |
 ///
 
