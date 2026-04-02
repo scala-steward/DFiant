@@ -411,7 +411,7 @@ o3 <> a.bool || b || c
 </div>
 ///
 
-/// admonition | Scalar Reserved Keywords as Port Names
+/// admonition | Scala Reserved Keywords as DFHDL Port or Variable Names
     type: verilog
 Some Verilog port names (`val`, `type`, `class`, `match`, `case`, `object`, etc.) are reserved in Scala. Use backtick escaping:
 
@@ -431,6 +431,31 @@ class foo extends EDDesign:
 ```
 
 </div>
+
+Alternatively, use a non-keyword name with the Scala `@targetName` annotation to set the actual HDL name:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+module foo(
+  output logic signed [15:0] class
+);
+  `include "dfhdl_defs.svh"
+  assign class = 16'sd42;
+endmodule
+```
+
+```scala linenums="0" title="DFHDL"
+import scala.annotation.targetName
+class foo extends EDDesign:
+  @targetName("class") 
+  val class_ = SInt(16) <> OUT
+  class_ <> 42
+```
+
+</div>
+
+
 ///
 
 /// admonition | `Bits` Initialization or Assignment
