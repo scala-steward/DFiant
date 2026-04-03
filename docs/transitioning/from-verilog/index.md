@@ -476,7 +476,7 @@ Note: `UInt` and `SInt` can be initialized or assigned with plain integers.
 
 /// admonition | Inline Conditional Expressions
     type: verilog
-Verilog's ternary operator `cond ? a : b` maps to Scala's `if`/`else`, but in process blocks the inline form requires parentheses:
+Verilog's ternary operator `cond ? a : b` has three DFHDL equivalents:
 
 <div class="grid" markdown>
 
@@ -488,22 +488,20 @@ always @(*)
 ```
 
 ```scala linenums="0" title="DFHDL"
-// Continuous: use <> with inline if
+// 1. Using .sel (closest to ternary)
+out <> sel.sel(a, b)
+
+// 2. Inline if/else (wrap in parentheses)
 out <> (if (sel) a else b)
 
-// In process blocks: wrap in parentheses
-process(all):
-  out := (if (sel) a else b)
-
-// Or use statement form:
-process(all):
-  if (sel) out := a
-  else out := b
+// 3. Statement form
+if (sel) out := a
+else out := b
 ```
 
 </div>
 
-Without parentheses, `out := if (sel) a else b` causes a parse error. Either wrap the `if` in parentheses or use the statement form.
+The `.sel` method compiles directly to Verilog's ternary operator. For complex nested conditions, prefer `if`/`else` or `match` over chaining `.sel` calls. See [Selection (.sel)][sel-ops] for details.
 ///
 
 /// admonition | Unsigned Literal Minus Signed Expression

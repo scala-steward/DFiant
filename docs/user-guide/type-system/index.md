@@ -1754,6 +1754,62 @@ Under the ED domain, the following operations are equivalent:
 | `!lhs`          | `not lhs`         |
 ///
 
+### Selection (`.sel`) {#sel-ops}
+
+Condition: `Bit`, `Boolean`. Arguments: any DFHDL type.
+
+The `.sel` operation is a conditional selection — equivalent to Verilog's ternary operator `cond ? onTrue : onFalse`. It selects between two values based on a `Bit` or `Boolean` condition:
+
+/// html | div.operations
+| Operation | Description | Returns |
+| --------- | ----------- | ------- |
+| `cond.sel(onTrue, onFalse)` | Select `onTrue` when `cond` is true/1, `onFalse` otherwise | Same type as the arguments |
+///
+
+The `onTrue` and `onFalse` arguments can be any DFHDL type — `UInt`, `SInt`, `Bits`, `Enum`, `Struct`, etc. They can also be Scala literals constant parameters. The result type is determined by whichever argument is a DFHDL value (the other is auto-converted via type conversion):
+
+```scala
+val flag = Boolean <> VAR
+val u8   = UInt(8) <> VAR
+
+// Select between two literals
+val r1 = flag.sel(11, d"4'12")   // UInt[4]: 11 if true, 12 if false
+
+// Select between DFHDL values
+val r2 = flag.sel(u8, d"8'0")    // UInt[8]: u8 if true, 0 if false
+
+// Select with Int parameters
+val c1: Int <> CONST = 1
+val c2: Int <> CONST = 2
+val r3 = flag.sel(c1, c2)        // Int: c1 if true, c2 if false
+
+// Select with other types
+val e = flag.sel(MyEnum.A, MyEnum.B)  // MyEnum
+```
+
+/// admonition | Prefer `if`/`match` for complex conditions
+    type: tip
+For simple one-level selections, `.sel` is concise and maps directly to Verilog's ternary. However, nesting or chaining `.sel` operations (e.g., `a.sel(b.sel(x, y), z)`) quickly becomes unreadable. For complex conditional logic, use `if`/`else` or `match` expressions instead — they are clearer and produce equivalent hardware.
+///
+
+/// details | Transitioning from Verilog
+    type: verilog
+The `.sel` operation compiles to Verilog's ternary operator:
+
+| DFHDL | Verilog |
+|-------|---------|
+| `cond.sel(a, b)` | `cond ? a : b` |
+///
+
+/// details | Transitioning from VHDL
+    type: vhdl
+VHDL has no equivalent to Verilog's ternary expression. The DFHDL-generated VHDL package includes `bool_sel` functions that implement this behavior, with dedicated overloads generated for each type as required.
+
+| DFHDL | Generated VHDL |
+|-------|----------------|
+| `cond.sel(a, b)` | `bool_sel(cond, a, b)` |
+///
+
 ### Arithmetic Operations (`+`, `-`, `*`, `/`, `%`) {#arithmetic-ops}
 
 Applies to: `UInt`, `SInt`, `Bits` (via implicit conversion to `UInt`), `Int`, `Double` (`%` not available for `Double`)
