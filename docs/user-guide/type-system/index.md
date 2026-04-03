@@ -1955,6 +1955,23 @@ val t2 = 2 ** param     // Int <> CONST = 4
 val w  = clog2(256)     // Int = 8 (bits needed to represent 0..255)
 ```
 
+/// admonition | Avoid using `clog2` directly for widths
+    type: warning
+A common anti-pattern is using `clog2` to declare the width of bit-accurate values:
+```scala
+// DON'T do this:
+val addr = UInt(clog2(DEPTH)) <> VAR
+val mask = Bits(clog2(SIZE)) <> VAR
+```
+Instead, use the `.until` or `.to` constructors which handle this automatically and are more readable:
+```scala
+// DO this instead:
+val addr = UInt.until(DEPTH) <> VAR   // width = clog2(DEPTH)
+val mask = Bits.until(SIZE) <> VAR    // width = clog2(SIZE)
+```
+See the [DFType Constructors][DFDecimal] and [Bits constructors][DFBits] sections for details on `.until` and `.to`.
+///
+
 /// admonition | Non-constant DFHDL `Int` values
     type: note
 Non-constant DFHDL `Int` values (e.g., `Int <> VAR`) are possible and support the same arithmetic operations (`+`, `-`, `*`, `/`, `%`). However, they are discouraged for synthesizable designs because they map to a fixed 32-bit signed representation -- use `SInt[32]` instead for explicit control over the hardware. For simulation purposes, non-constant `Int` values are acceptable as long as the 32-bit width limitation is understood.
