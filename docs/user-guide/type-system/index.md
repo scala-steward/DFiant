@@ -517,6 +517,108 @@ val x = b8 ++ h"FF"  //ok
 val y = b8 ++ all(0) //error
 ```
 
+## Type Signatures and Parameterization {#type-sigs}
+
+Every DFHDL value has a type of the form `T <> M`, where `T` is the DFHDL type (shape) and `M` is the modifier that determines how the value can be used.
+
+### Modifier Categories
+
+Modifiers fall into two groups:
+
+**Declaration modifiers** — used in `val` declarations with the `<>` operator:
+
+- `VAR`, `VAR.REG`, `VAR.SHARED` — variables
+- `IN`, `OUT`, `OUT.REG`, `INOUT` — ports
+
+**Type signature modifiers** — used in type annotations for parameters, struct fields, and method signatures:
+
+- `CONST` — compile-time or elaboration-time constant parameter
+- `VAL` — read-only value (struct fields, method parameters)
+- `DFRET` / `RTRET` / `EDRET` — method return types (DF, RT, or ED domain)
+
+### Design Parameters
+
+Design classes accept parameters as constructor arguments using `<> CONST`:
+
+```scala
+class Counter(val width: Int <> CONST = 8) extends RTDesign:
+  val cnt = UInt(width) <> OUT.REG init 0
+```
+
+- `Int <> CONST` for integer parameters (used for widths, lengths, counts)
+- Typed constants like `Bits[8] <> CONST` and `UInt[8] <> CONST` are also possible
+- Default values are optional
+
+### `VAL` Modifier
+
+`VAL` marks a read-only value. It is used for:
+
+- **Struct field declarations:**
+  ```scala
+  case class Point(x: UInt[8] <> VAL, y: UInt[8] <> VAL) extends Struct
+  ```
+- **Method/design-def parameters:**
+  ```scala
+  def increment(x: UInt[8] <> VAL): UInt[8] <> DFRET = x + 1
+  ```
+
+`VAL` values cannot be assigned or connected — they are inputs to the computation.
+
+### Design Defs and `DFRET`
+
+Design defs are functional helpers. Arguments use `<> VAL`, return types use `<> DFRET` (or `RTRET`/`EDRET` for domain-specific defs):
+
+```scala
+// DF domain design def
+def double(value: Bits[Int] <> VAL): Bits[Int] <> DFRET = (value, value)
+
+// Opaque type extension method
+extension (c: Counter <> VAL)
+  def increment: Counter <> DFRET = (c.actual + 1).as(Counter)
+```
+
+### Bounded and Unbounded Types {#bounded-unbounded}
+
+DFHDL types carry their size (width or length) as a Scala type parameter. There are three levels of size specificity:
+
+**Bounded** — the size is a literal singleton known at compile time. All type checks happen statically:
+
+```scala
+val a: UInt[8] <> CONST = d"255"
+val b: Bits[4] <> CONST = h"A"
+val v: Bits[8] X 4 <> CONST = all(all(0))
+```
+
+**Parameterized bounded** — the size is the singleton type of a named parameter. The compiler can track the relationship, even though the concrete value isn't known until instantiation:
+
+```scala
+class Foo(val w: Int <> CONST) extends RTDesign:
+  val x: Bits[w.type] <> CONST = all(0)     // width tied to parameter w
+  val y = UInt[w.type] <> VAR init 0         // same
+  val v: UInt[4] X w.type <> CONST = all(0)  // vector length tied to w
+```
+
+**Unbounded** — the size is bare `Int`, with no compile-time size information. Used when the type is too complex to express at the Scala type level (e.g., results of operations on parameterized types). The DFHDL compiler still has the required size information available during elaboration, where it is checked:
+
+```scala
+val cu: UInt[Int] <> VAL = 1
+val cs: SInt[Int] <> VAL = -1
+val bv: Bits[8] X Int <> CONST = Vector(h"12", h"34")
+def twice(value: Bits[Int] <> VAL): Bits[Int] <> DFRET = (value, value)
+```
+
+/// admonition | Struct fields must be bounded
+    type: warning
+Struct field types cannot be unbounded. Each field must have a concrete or parameterized-bounded type:
+```scala
+// CORRECT: bounded fields
+case class Pkt(header: Bits[8] <> VAL, data: UInt[32] <> VAL) extends Struct
+
+// ERROR: unbounded fields are not allowed
+// case class Bad(data: Bits[Int] <> VAL) extends Struct
+```
+///
+
 ## DFHDL Value Types
 
 ### `Bit`/`Boolean` {#DFBitOrBool}
@@ -543,6 +645,9 @@ val bool  = Boolean <> VAR
 val c_bit:  Bit     <> CONST = 1
 val c_bool: Boolean <> CONST = false
 ```
+
+#### Type Signatures
+`Bit` and `Boolean` have no size parameter. Type signatures: `Bit <> CONST`, `Bit <> VAL`, `Boolean <> VAL`, etc.
 
 #### Candidates
 
@@ -655,6 +760,11 @@ val b6: Bits[6] <> CONST = all(0)
 * __Specifying a width instead of an index range:__ In VHDL bit vectors are declared with an index range that enables outliers like non-zero index start, negative indexing or changing bit order. These use-cases are rare and they are better covered using different language constructs. Therefore, DFHDL simplifies things by only requiring a single width/length argument which yields a `(width-1 downto 0)` sized vector (for [generic vectors][DFVector] the element order the opposite).
 * __Additional constructors:__ DFHDL provides additional constructs to simplify some common VHDL bit vector declaration. For example, instead of declaring `signal addr: std_logic_vector(clog2(DEPTH)-1 downto 0)` in VHDL, in DFHDL simply declare `val addr = Bits.until(DEPTH) <> VAR`.
 ///
+
+#### Type Signatures
+- Bounded: `Bits[8]`, `Bits[4]`
+- Parameterized bounded: `Bits[w.type]` (where `w: Int <> CONST`)
+- Unbounded: `Bits[Int]`
 
 #### Literal (Constant) Value Generation
 
@@ -859,6 +969,12 @@ DFHDL provides three decimal numeric types:
 | `Int`| Construct a constant integer DFType. Used mainly for parameters. | None | `Int` DFType |
 ///
 
+#### Type Signatures
+- Bounded: `UInt[8]`, `SInt[16]`
+- Parameterized bounded: `UInt[w.type]`, `SInt[w.type]` (where `w: Int <> CONST`)
+- Unbounded: `UInt[Int]`, `SInt[Int]`
+- `Int` has no size parameter: `Int <> CONST`, `Int <> VAL`
+
 #### Candidates
   * DFHDL decimal values of the same type
   * DFHDL `Bits` values (via `.uint` or `.sint` casting)
@@ -949,6 +1065,9 @@ DFHDL supports enumerated types through Scala's enum feature with special encodi
 enum MyEnum extends Encoded:
   case A, B, C, D
 ```
+
+#### Type Signatures
+`MyEnum <> VAL`, `MyEnum <> CONST`. The enum name itself is the type — no size parameter.
 
 #### Encoding Types
 
@@ -1041,6 +1160,12 @@ val vec2 = Bit X 8 X 8 <> VAR        // 2D 8x8 vector of bits
 val vec3 = MyEnum X 16 <> VAR        // Vector of 16 enum values
 ```
 
+#### Type Signatures
+- Bounded: `UInt[8] X 4`, `Bits[8] X 4 X 4`
+- Parameterized bounded: `UInt[4] X len.type` (where `len: Int <> CONST`)
+- Unbounded: `Bits[8] X Int`
+- Both element type and dimensions can be parameterized independently
+
 #### Initialization
 
 Vectors can be initialized in several ways:
@@ -1114,6 +1239,9 @@ case class MyStruct(
 ) extends Struct
 ```
 
+#### Type Signatures
+`MyStruct <> VAL`, `MyStruct <> CONST`. The struct name is the type. Struct fields must use bounded types (no `UInt[Int]` in fields).
+
 #### Field Access and Assignment
 
 Fields are accessed using dot notation and can be assigned individually:
@@ -1181,6 +1309,9 @@ DFHDL tuples provide a way to group multiple DFHDL values together without defin
 val tuple = (Type1, Type2, ..., TypeN) <> Modifier
 ```
 
+#### Type Signatures
+`(UInt[8], Bit) <> VAL`, `(Bits[Int], Bit) <> CONST`. Elements can be individually bounded or unbounded.
+
 #### Examples
 
 ```scala
@@ -1224,6 +1355,9 @@ case class Counter() extends Opaque(UInt(32)):
       (c.actual + 1).as(Counter)
 ```
 
+#### Type Signatures
+`MyOpaque <> VAL`, `MyOpaque <> CONST`. The opaque name is the type.
+
 #### Usage
 
 ```scala
@@ -1258,6 +1392,9 @@ DFHDL Double values represent IEEE-754 double-precision floating-point numbers.
 ```scala
 val d = Double <> Modifier
 ```
+
+#### Type Signatures
+`Double <> VAL`, `Double <> CONST`. No size parameter (always 64 bits).
 
 ### Time/Freq {#DFPhysical}
 
