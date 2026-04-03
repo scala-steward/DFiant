@@ -1,10 +1,8 @@
 # Transitioning from Verilog to DFHDL
 
-## Using ChatGPT
+This guide helps Verilog/SystemVerilog users translate common patterns into DFHDL. For full type system details, see the [Type System reference][type-system].
 
-Help me ChatGPT, you're my only hope
-
-## Summary
+## Design Structure
 
 /// admonition | Module Definition
     type: verilog
@@ -111,6 +109,8 @@ val v = Bits(8) <> VAR init b"8’1011"
 </div>
 ///
 
+## Types and Literals
+
 /// admonition | Numeric Literals
     type: verilog
 DFHDL uses string interpolators for sized literals. Each type has its own interpolator -- do not mix Verilog base prefixes (`’b`, `’d`, `’h`) inside them.
@@ -136,12 +136,16 @@ d"5’27"         // 5-bit unsigned decimal
 `b"..."` accepts only binary digits (`0`, `1`, `?`). Writing `b"5’d27"` is an error -- use `d"5’27"` for decimal values.
 ///
 
-/// admonition | Elaboration-Time Computation (System Functions)
+/// admonition | `$clog2` and Width Computation
     type: verilog
-Instead of computing widths manually with `$clog2`, use `UInt.until` / `UInt.to` (or `Bits.until` / `Bits.to`) which set the width automatically based on the value range:
+Instead of computing widths manually with `$clog2`, use `.until` or `.to` constructors which set the width automatically:
 
-- `.until(sup)` — width = `clog2(sup)` (value can be 0 to sup-1)
-- `.to(max)` — width = `clog2(max+1)` (value can be 0 to max)
+| Verilog | DFHDL | Width |
+|---------|-------|-------|
+| `$clog2(N)` | `UInt.until(N)` / `Bits.until(N)` | `clog2(N)` bits, valid for N >= 2 |
+| `$clog2(N+1)` | `UInt.to(N)` / `Bits.to(N)` | `clog2(N+1)` bits, valid for N >= 1 |
+
+`UInt.until(1)` is **invalid** (would produce 0-bit width). For counters that count 0 to N inclusive (common with `$clog2(N+1)`), use `UInt.to(N)`.
 
 <div class="grid" markdown>
 
@@ -149,17 +153,26 @@ Instead of computing widths manually with `$clog2`, use `UInt.until` / `UInt.to`
 parameter RATE = 5208;
 localparam WIDTH = $clog2(RATE);
 reg [WIDTH-1:0] counter;
+
+// Counter 0..SCALE inclusive
+reg [$clog2(SCALE+1)-1:0] cnt = 0;
 ```
 
 ```scala linenums="0" title="DFHDL"
 val RATE: Int <> CONST = 5208
 val counter = UInt.until(RATE) <> VAR
+
+
+// Counter 0..SCALE inclusive
+val cnt = UInt.to(SCALE) <> VAR init 0
 ```
 
 </div>
 
-See [UInt constructors](../../user-guide/type-system/index.md#unsigned-integer-uint) and [Bits constructors](../../user-guide/type-system/index.md#bit-vector-bits) for details.
+See [UInt/SInt constructors][DFDecimal] and [Bits constructors][DFBits] for details. See also the [`clog2` anti-pattern warning][int-param-ops].
 ///
+
+## Processes and Sequential Logic
 
 /// admonition | Process Blocks (always)
     type: verilog
@@ -303,25 +316,10 @@ process(clk):
 
 </div>
 
-If the Verilog state values are non-sequential, use `Encoded.Manual` (see [Manual Encoding](../../user-guide/type-system/index.md#DFEnum)). Avoid modelling FSM states as `Bits` constants -- `match` does not support matching on `Bits <> CONST` names. Use `enum extends Encoded` instead, or fall back to `if`/`else if` chains.
+If the Verilog state values are non-sequential, use `Encoded.Manual` (see [Enumeration][DFEnum]). Avoid modelling FSM states as `Bits` constants -- `match` does not support matching on `Bits <> CONST` names. Use `enum extends Encoded` instead, or fall back to `if`/`else if` chains.
 ///
 
-/// admonition | Multi-File Projects
-    type: verilog
-In a scala-cli project with multiple `.scala` files, shared `given` declarations (such as compiler options) must appear in exactly one file. Place them in your `project.scala` file to avoid duplicate definition errors.
-
-```scala title="project.scala"
-//> using scala 3.8.1
-//> using dep io.github.dfianthdl::dfhdl::0.17.0
-//> using plugin io.github.dfianthdl:::dfhdl-plugin:0.17.0
-
-import dfhdl.*
-given options.CompilerOptions.Backend = backends.verilog
-given options.CompilerOptions.PrintBackendCode = true
-```
-
-Individual design files should `import dfhdl.*` but not redeclare the shared `given` options.
-///
+## Operations
 
 /// admonition | Shift Operators
     type: verilog
@@ -347,7 +345,7 @@ out := data_signed >> 2
 
 </div>
 
-There is no `>>>` operator in DFHDL. The type of the LHS determines the shift semantics: `>>` on `UInt`/`Bits` zero-fills, `>>` on `SInt` sign-extends.
+There is no `>>>` operator in DFHDL. The type of the LHS determines the shift semantics: `>>` on `UInt`/`Bits` zero-fills, `>>` on `SInt` sign-extends. See [Shift Operations][shift-ops] for details.
 ///
 
 /// admonition | UInt/SInt Conversion
@@ -376,19 +374,23 @@ offset := sd"8'180" - cnt_s * 5
 
 </div>
 
-Conversion summary: `uint_val.bits.sint` for UInt-to-SInt, `sint_val.bits.uint` for SInt-to-UInt. See [Type Conversion](../../user-guide/type-system/index.md#type-conversion) for details.
+Conversion options:
+
+- **UInt → SInt (width+1):** `uint_val.signed` — adds a sign bit, widening by 1. Preferred when you can accept the extra bit.
+- **UInt → SInt (same width):** `uint_val.bits.sint` — reinterprets the bit pattern without widening.
+- **SInt → UInt (same width):** `sint_val.bits.uint` — reinterprets the bit pattern.
+
+See [Conversions and Casts][type-conversion] for the full conversion reference.
 ///
 
 /// admonition | Bit/Boolean Operators: `|`/`&` and `||`/`&&`
     type: verilog
-In DFHDL, `||` and `&&` are equivalent to `|` and `&`, respectively, when applied on `Bit` or `Boolean` types. In the generated Verilog, the operator depends on the LHS type: `Bit` produces `|`/`&`, `Boolean` produces `||`/`&&`.
-
+In DFHDL, `||`/`&&` and `|`/`&` are interchangeable on `Bit` and `Boolean` types. The generated Verilog operator depends on the LHS type: `Bit` produces bitwise `|`/`&`, `Boolean` produces logical `||`/`&&`.
 <div class="grid" markdown>
 
 ```sv linenums="0" title="Verilog"
 input  a, b, c;
 output o1, o2, o3;
-// same result for 1-bit
 assign o1 = a | b | c;
 assign o2 = a | b | c;
 assign o3 = a || b || c;
@@ -397,19 +399,17 @@ assign o3 = a || b || c;
 ```scala linenums="0" title="DFHDL"
 val a, b, c = Bit <> IN
 val o1, o2, o3 = Bit <> OUT
-
-// Both are equivalent for Bit LHS:
 o1 <> a | b | c
 o2 <> a || b || c
-// a.bool makes the LHS Boolean, so RHS
-// auto-converts to Boolean and the result
-// auto-converts back to Bit.
-// Produces || in Verilog.
 o3 <> a.bool || b || c
 ```
 
 </div>
+
+See [Logical Operations][logical-ops] for the full reference and Verilog/VHDL mapping tables.
 ///
+
+## Common Pitfalls
 
 /// admonition | Scala Reserved Keywords as DFHDL Port or Variable Names
     type: verilog
@@ -440,7 +440,6 @@ Alternatively, use a non-keyword name with the Scala `@targetName` annotation to
 module foo(
   output logic signed [15:0] class
 );
-  `include "dfhdl_defs.svh"
   assign class = 16'sd42;
 endmodule
 ```
@@ -514,7 +513,9 @@ Without parentheses, `out := if (sel) a else b` causes a parse error. Either wra
 
 /// admonition | Unsigned Literal Minus Signed Expression
     type: verilog
-In Verilog, `2 - signed_expr` works because integer literals are implicitly 32-bit. In DFHDL, a plain `2` is unsigned and cannot be subtracted from by a wider signed value. Restructure as negation plus addition:
+In Verilog, `2 - signed_expr` works because integer literals are implicitly 32-bit signed. In DFHDL, a plain `2` is unsigned, so `2 - signed_val` is a compile error (unsigned LHS cannot accept signed RHS).
+
+The simplest fix is to use a signed literal with `sd"..."`:
 
 <div class="grid" markdown>
 
@@ -524,15 +525,17 @@ err <= 2 - (2 * r0);
 ```
 
 ```scala linenums="0" title="DFHDL"
-// Restructure: negate then add
-err :== (-(r0_wide + r0_wide) + sd"2").truncate
-
-// Or make the signed literal wide enough:
+// Use a signed literal wide enough for the result:
 val two = sd"${CORDW+2}'2"
 err :== (two - (r0_wide + r0_wide)).truncate
+
+// Or restructure as negation + addition:
+err :== (-(r0_wide + r0_wide) + sd"2").truncate
 ```
 
 </div>
+
+See [Arithmetic type constraints][arithmetic-ops] for the sign and width rules.
 ///
 
 /// admonition | Parametric Bit-Vector Constants
@@ -561,22 +564,7 @@ taps_b <> TAPS.bits(LEN-1, 0)
 Note: `.bits(hi, lo)` is an extension method on `Int <> CONST` DFHDL values. It does **not** work on plain Scala `Int`. If you have a compile-time constant, pass it as an `Int <> CONST` parameter, or use a hex/binary literal directly: `h"21'140000"`.
 ///
 
-/// admonition | `$clog2` Mapping: `.until` vs `.to`
-    type: verilog
-When translating Verilog `$clog2` expressions, choose the right constructor:
-
-| Verilog | DFHDL | Bits |
-|---------|-------|------|
-| `$clog2(N)` | `UInt.until(N)` | `clog2(N)` bits, valid for N >= 2 |
-| `$clog2(N+1)` | `UInt.to(N)` | `clog2(N+1)` bits, valid for N >= 1 |
-
-`UInt.until(1)` is **invalid** (would produce 0-bit width). For counters that count 0 to N inclusive (common with `$clog2(N+1)`), use `UInt.to(N)`:
-
-```scala linenums="0" title="DFHDL"
-// Verilog: reg [$clog2(SCALE+1)-1:0] cnt = 0;
-val cnt = UInt.to(SCALE) <> VAR init 0
-```
-///
+## FSM and Enum Patterns
 
 /// admonition | Enum FSM and `unique case`
     type: verilog
