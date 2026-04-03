@@ -332,19 +332,25 @@ Verilog has separate `>>` (logical) and `>>>` (arithmetic) right shift operators
 <div class="grid" markdown>
 
 ```sv linenums="0" title="Verilog"
-// Logical right shift (unsigned)
-out = data >> 2;
-
-// Arithmetic right shift (signed)
-out = $signed(data) >>> 2;
+module RightShifter(
+  input  wire logic [7:0] data,
+  output      logic [7:0] logical,
+  output      logic [7:0] arith
+);
+  assign logical = data >> 1;
+  assign arith   = data >>> 1;
+endmodule
 ```
 
 ```scala linenums="0" title="DFHDL"
-// Logical right shift (UInt or Bits)
-out := data >> 2
+class RightShifter extends EDDesign:
+  val data    = Bits(8) <> IN
+  val logical = Bits(8) <> OUT
+  val arith   = Bits(8) <> OUT
 
-// Arithmetic right shift (SInt)
-out := data_signed >> 2
+  logical <> data >> 1
+  arith   <> (data.sint >> 1).bits
+end RightShifter
 ```
 
 </div>
