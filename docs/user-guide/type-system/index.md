@@ -445,112 +445,6 @@ class Foo extends DFDesign:
 ///
 
 
-## Bit-Accurate Operations and Type Inference
-
-DFHDL provides bit-accurate operations and strong type inference for bit-level manipulations. Here are the key features:
-
-### Bit Selection and Slicing
-```scala
-val b8 = Bits(8) <> VAR
-// Most significant bits selection
-val ms7 = b8(7, 1)    // 7 MSBs
-val ms1 = b8(7, 7)    // MSB only
-
-// Least significant bits selection
-val ls7 = b8(6, 0)    // 7 LSBs
-val ls1 = b8(0, 0)    // LSB only
-
-// Single bit access (static index)
-val msbit = b8(7)      // MSB
-val lsbit = b8(0)      // LSB
-
-// Dynamic bit access (index is a UInt variable)
-val idx = UInt(3) <> VAR
-val dynbit = b8(idx)   // Single bit at position idx (returns Bit)
-```
-
-/// admonition | Dynamic bit indexing (reads and writes)
-    type: tip
-You can index into a `Bits` value using a `UInt` variable, not just integer literals. This is equivalent to Verilog's `data[idx]` where `idx` is a register or wire.
-
-The index must be a `UInt` whose width equals `clog2(bits_width)`. For example, indexing into `Bits(8)` requires a `UInt(3)` index. If the width does not match, the compiler will report an error and suggest a fix:
-
-- **Index too wide**: use `.truncate` to automatically narrow it to the expected width.
-- **Index too narrow**: use `.extend` to automatically widen it to the expected width.
-- You can also use `.resize(N)` for an explicit target width, or a range slice `(hi, lo)` to extract specific bits.
-
-Dynamic indexing works for both reads and writes:
-```scala
-val data = Bits(8) <> VAR init all(0)
-val pos  = UInt(3) <> VAR init 0
-val din  = Bit     <> IN
-
-// Dynamic read
-val bit_out = data(pos)  // read single bit at position
-
-// Dynamic write inside a clocked process
-process(clk):
-  if (clk.rising)
-    data(pos) :== din  // write single bit at position
-```
-
-When the index register is wider than needed, narrow it with `.truncate` or a range slice:
-```scala
-val wide_pos = UInt(5) <> VAR
-// .truncate automatically narrows to clog2(8) = 3 bits
-data(wide_pos.truncate) :== din
-// Alternatively, use a range slice to pick specific bits
-data(wide_pos(2, 0)) :== din
-```
-///
-
-### Bit Operations
-```scala
-val b8 = Bits(8) <> VAR
-
-// Shift operations
-val shifted_left = b8 << 2    // Logical left shift
-val shifted_right = b8 >> 2   // Logical right shift
-
-// Bit reduction operations
-val or_reduced = b8.|         // OR reduction
-val and_reduced = b8.&        // AND reduction
-val xor_reduced = b8.^        // XOR reduction
-
-// Bit concatenation
-val concat = (b"100", b"1", b"0", b"11").toBits  // Creates 8-bit value
-```
-
-### Multiple Variable Assignment
-```scala
-val b4M, b4L = Bits(4) <> VAR  // Declare multiple variables
-val b3M = Bits(3) <> VAR
-val u5L = UInt(5) <> VAR
-
-// Assign to multiple variables using tuple pattern
-(b4M, b4L) := (h"1", 1, 0, b"11")  // Values are concatenated and split
-
-// Mix different types in assignment
-(b3M, u5L) := (h"1", 1, 0, b"11")  // Values automatically cast to appropriate types
-
-// Assign bit slices to multiple variables
-(b4M, b4L) := (u8.bits(3, 0), u8.bits(7, 4))  // Split byte into nibbles
-
-// Complex multiple assignment
-(b4M, b3M, u5L, b4L) := (u8, b8)  // Automatically extracts appropriate bits for each variable
-```
-
-### Width Inference and Resizing
-```scala
-// Automatic width inference
-val b3 = Bits(3) <> VAR
-val b8 = Bits(8) <> VAR
-
-// Explicit resizing required when widths don't match
-b8 := b3.resize(8)     // Zero-extend to 8 bits
-b3 := b8.resize(3)     // Truncate to 3 bits
-```
-
 ## Bubble Values {#bubble}
 
 * RT and ED - Don't Care / Unknown
@@ -1179,6 +1073,11 @@ given options.AppOptions.AppMode = options.AppOptions.AppMode.elaborate
 ```
 ///
 
+/// admonition | Additional operations
+    type: info
+See [Common Bit-Vector Operations][common-bit-vector-ops] for bit selection, slicing, resizing, and concatenation that apply to `Bits` as well as `UInt` and `SInt`. See [Common Conversions and Casts][type-conversion] for `.bits`, `.uint`, `.sint`, and other type conversion methods.
+///
+
 ## `UInt`/`SInt`/`Int` DFHDL Values {#DFDecimal}
 
 DFHDL provides three decimal numeric types:
@@ -1368,6 +1267,17 @@ val e2 = u8 == u4
 val e3 = u8 > 1000
 ```
 
+/// details | Scala `Int` constants auto-lift in comparisons
+    type: note
+Plain Scala `Int` values can be used directly in comparisons and arithmetic with DFHDL typed variables. No explicit coercion is needed:
+```scala
+val LIMIT: Int <> CONST = 5208
+val counter = UInt.until(LIMIT) <> VAR
+if (counter == LIMIT - 1)  // Int <> CONST compared with UInt -- works directly
+  counter := 0
+```
+///
+
 #### Shift Operations (`<<`, `>>`)
 
 /// html | div.operations
@@ -1472,61 +1382,9 @@ sd"8'42"  // SInt[8], value = 42
 sd"8'255" // Error: width too small to represent value with sign bit
 ```
 
-#### Bit Selection and Slicing
-
-`UInt` and `SInt` values support the same bit-selection syntax as `Bits`:
-
-- **Range slice**: `value(hi, lo)` extracts bits `hi` down to `lo`, returning a narrower `UInt` or `SInt`.
-- **Single-bit access**: `value(idx)` returns the bit at position `idx` (as `Bit`).
-
-```scala
-val u6 = UInt(6) <> VAR
-val u4 = u6(3, 0)   // lower 4 bits, returns UInt[4]
-val b  = u6(5)       // MSB, returns Bit
-
-val s6 = SInt(6) <> VAR
-val s4 = s6(3, 0)   // lower 4 bits, returns SInt[4]
-```
-
-/// admonition | Range slices preserve the original type
-    type: note
-A range slice on `UInt` returns `UInt`, and on `SInt` returns `SInt` -- it does **not** return `Bits`. This means a `UInt` range slice can be used directly as a dynamic index into `Bits` without `.uint`:
-```scala
-val scratch = Bits(8) <> VAR
-val bitpos  = UInt(4) <> VAR  // 4-bit counter
-
-// CORRECT: range slice of UInt returns UInt, usable directly as index
-scratch(bitpos(2, 0)) :== din
-
-// WRONG: .uint is not needed and will cause a compile error
-// scratch(bitpos(2, 0).uint) :== din
-```
-///
-
-#### Width Adjustment: `.resize`, `.truncate`, `.extend`
-
-- `.resize(N)` sets the width to exactly `N` bits. For `UInt` and `Bits`, widening zero-extends; for `SInt`, widening sign-extends. Narrowing truncates the most-significant bits.
-- `.truncate` automatically narrows to the width expected by the assignment or operation context.
-- `.extend` automatically widens to the width expected by the context.
-
-```scala
-val u8 = UInt(8) <> VAR
-val u6 = UInt(6) <> VAR
-u6 := u8.resize(6)    // explicit truncate to 6 bits
-u6 := u8.truncate     // auto-narrow to match u6's width
-u8 := u6.resize(8)    // explicit zero-extend to 8 bits
-u8 := u6.extend       // auto-widen to match u8's width
-```
-
-/// details | Scala `Int` constants auto-lift in comparisons
-    type: note
-Plain Scala `Int` values can be used directly in comparisons and arithmetic with DFHDL typed variables. No explicit coercion is needed:
-```scala
-val LIMIT: Int <> CONST = 5208
-val counter = UInt.until(LIMIT) <> VAR
-if (counter == LIMIT - 1)  // Int <> CONST compared with UInt -- works directly
-  counter := 0
-```
+/// admonition | Additional operations
+    type: info
+See [Common Bit-Vector Operations][common-bit-vector-ops] for bit selection, slicing, resizing, and concatenation that apply to `UInt` and `SInt` as well as `Bits`. See [Common Conversions and Casts][type-conversion] for `.bits`, `.signed`, and other type conversion methods.
 ///
 
 ### Examples
@@ -1551,7 +1409,78 @@ val u4 = UInt(4) <> VAR init d"4'10"
 val s4 = SInt(4) <> VAR init sd"4'-2"
 ```
 
-## Common Conversions and Casts Between Types {#type-conversion}
+## Common Operations Across Types
+### Common Bit-Vector Operations {#common-bit-vector-ops}
+
+The following operations are shared by `Bits`, `UInt`, and `SInt` values.
+
+#### Bit Selection and Slicing
+
+- **Range slice**: `value(hi, lo)` extracts bits `hi` down to `lo`, returning a narrower value of the **same type** (`Bits` → `Bits`, `UInt` → `UInt`, `SInt` → `SInt`).
+- **Single-bit access**: `value(idx)` returns the bit at position `idx` (as `Bit`). The index can be a static integer or a dynamic `UInt` variable.
+
+```scala
+val b8 = Bits(8) <> VAR
+val u8 = UInt(8) <> VAR
+val s8 = SInt(8) <> VAR
+
+// Range slicing — preserves the original type
+val b4 = b8(7, 4)    // Bits[4]: upper nibble
+val u4 = u8(3, 0)    // UInt[4]: lower nibble
+val s4 = s8(3, 0)    // SInt[4]: lower nibble
+
+// Single-bit access
+val msb = b8(7)       // Bit
+val lsb = u8(0)       // Bit
+
+// Dynamic bit access (index is a UInt variable)
+val idx = UInt(3) <> VAR
+val dynbit = b8(idx)  // Bit at position idx
+```
+
+/// admonition | Dynamic bit indexing
+    type: tip
+You can index into a bit-vector value using a `UInt` variable, not just integer literals. The index must be a `UInt` whose width equals `clog2(bits_width)`. For example, indexing into `Bits(8)` requires a `UInt(3)` index. If the width does not match, the compiler will report an error and suggest using `.truncate` (to narrow) or `.extend` (to widen).
+
+Dynamic indexing works for both reads and writes:
+```scala
+val data = Bits(8) <> VAR init all(0)
+val pos  = UInt(3) <> VAR init 0
+val din  = Bit     <> IN
+
+val bit_out = data(pos)      // dynamic read
+process(clk):
+  if (clk.rising)
+    data(pos) :== din        // dynamic write
+```
+///
+
+#### Width Adjustment: `.resize`, `.truncate`, `.extend`
+
+- `.resize(N)` sets the width to exactly `N` bits. For `UInt` and `Bits`, widening zero-extends; for `SInt`, widening sign-extends. Narrowing truncates the most-significant bits.
+- `.truncate` automatically narrows to the width expected by the assignment or operation context.
+- `.extend` automatically widens to the width expected by the context.
+
+```scala
+val u8 = UInt(8) <> VAR
+val u6 = UInt(6) <> VAR
+u6 := u8.resize(6)    // explicit truncate to 6 bits
+u6 := u8.truncate     // auto-narrow to match u6's width
+u8 := u6.resize(8)    // explicit zero-extend to 8 bits
+u8 := u6.extend       // auto-widen to match u8's width
+```
+
+#### Bit Concatenation
+
+Multiple bit-vector values can be concatenated using Scala tuple syntax with `.toBits`:
+
+```scala
+val concat = (b"100", b"1", b"0", b"11").toBits  // Bits[8]
+```
+
+Values are concatenated from the first (most-significant) to the last (least-significant) position.
+
+### Common Conversions and Casts {#type-conversion}
 The diagram below shows the conversion/cast paths between DFHDL types. Solid arrows are simple casts that preserve width; dashed arrows involve width changes.
 
 ![type-conversion](type-conversion-light.svg#only-light){ width="70%" }
@@ -1568,7 +1497,7 @@ The diagram below shows the conversion/cast paths between DFHDL types. Solid arr
 | `UInt`/`SInt` | `Int` | `.ToInt` | `Bit`/`Boolean` | `SInt(w)` | `.toSInt(w)` |
 ///
 
-### Any Type to/from `Bits`: `.bits` and `.as(T)` {#bits-cast}
+#### Any Type to/from `Bits`: `.bits` and `.as(T)` {#bits-cast}
 
 Every DFHDL type can be converted to its raw bit representation with `.bits`. The inverse operation, `.as(T)`, reinterprets a `Bits` value as a target type `T`, provided the bit widths match exactly:
 
@@ -1586,7 +1515,7 @@ val eBits = e.bits           // Enum -> Bits
 val eBack = eBits.as(MyEnum) // Bits -> Enum
 ```
 
-### `Bits` to `UInt`/`SInt`: `.uint` and `.sint` {#uint-sint-cast}
+#### `Bits` to `UInt`/`SInt`: `.uint` and `.sint` {#uint-sint-cast}
 
 These are shorthand conversions from `Bits` that preserve width. The same bits are simply reinterpreted as unsigned or signed:
 
@@ -1596,7 +1525,7 @@ val u8 = b8.uint  // Bits(8) -> UInt(8), same bit pattern
 val s8 = b8.sint  // Bits(8) -> SInt(8), same bit pattern
 ```
 
-### `UInt` to `SInt`: `.signed` {#signed-cast}
+#### `UInt` to `SInt`: `.signed` {#signed-cast}
 
 Converting an unsigned value to signed requires an extra bit for the sign, so `.signed` widens the result by one bit:
 
@@ -1611,7 +1540,7 @@ To get an `SInt` with the **same** width (reinterpreting the bit pattern without
 val s8 = u8.bits.sint  // UInt(8) -> Bits(8) -> SInt(8)
 ```
 
-### `Bit` and `Boolean` Conversions {#bit-bool-cast}
+#### `Bit` and `Boolean` Conversions {#bit-bool-cast}
 
 `Bit` is the hardware single-bit type and `Boolean` is the logical type. They are convertible to each other with `.bit` and `.bool`:
 
