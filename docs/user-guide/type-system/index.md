@@ -1203,37 +1203,156 @@ DFHDL provides three decimal numeric types:
   * DFHDL decimal values of the same type
   * DFHDL `Bits` values (via `.uint` or `.sint` casting)
   * Scala numeric values (Int, Long, etc.) for constant values
-  * Decimal string interpolation values
+  * Decimal literals (string interpolation values) 
 
 ### Operations
 
-#### Arithmetic Operations
-These operations propagate constant modifiers and maintain proper bit widths:
+#### Arithmetic Operations (`+`, `-`, `*`, `/`, `%`)
 
-/// html | div.operations
-| Operation    | Description | LHS/RHS Constraints | Returns |
-| ------------ | ----------- | ------------------- | ------- |
-| `lhs + rhs` | Addition | Both decimal types | Result with appropriate width |
-| `lhs - rhs` | Subtraction (LHS must be at least as wide as RHS) | Both decimal types | Result with appropriate width |
-| `lhs * rhs` | Multiplication | Both decimal types | Result with width = lhs.width + rhs.width |
-| `lhs / rhs` | Division | Both decimal types | Result with lhs width |
-| `lhs % rhs` | Modulo | Both decimal types | Result with rhs width |
+The result of a standard arithmetic operation always has the **same type as the LHS** operand. The RHS is resized to match the LHS before the operation is applied.
+
+/// html | div.decimal_arithmetic
+| Operation    | Description    | Returns          |
+| ------------ | -------------- | ---------------- |
+| `lhs + rhs`  | Addition       | Same type as LHS |
+| `lhs - rhs`  | Subtraction    | Same type as LHS |
+| `lhs * rhs`  | Multiplication | Same type as LHS |
+| `lhs / rhs`  | Division       | Same type as LHS |
+| `lhs % rhs`  | Modulo         | Same type as LHS |
 ///
 
-#### Comparison Operations
+##### Type Constraints
+
+**Sign rule** -- The LHS sign must be greater than or equal to the RHS sign (`signed >= unsigned`):
 
 /// html | div.operations
-| Operation    | Description | LHS/RHS Constraints | Returns |
-| ------------ | ----------- | ------------------- | ------- |
-| `lhs < rhs` | Less than | Both decimal types | Boolean |
-| `lhs <= rhs` | Less than or equal | Both decimal types | Boolean |
-| `lhs > rhs` | Greater than | Both decimal types | Boolean |
-| `lhs >= rhs` | Greater than or equal | Both decimal types | Boolean |
-| `lhs == rhs` | Equal | Both decimal types | Boolean |
-| `lhs != rhs` | Not equal | Both decimal types | Boolean |
+| LHS | RHS | Allowed | Note |
+| --- | --- | ------- | ---- |
+| `UInt[W1]` | `UInt[W2]` | Yes | W1 >= W2 |
+| `SInt[W1]` | `SInt[W2]` | Yes | W1 >= W2 |
+| `SInt[W1]` | `UInt[W2]` | Yes | W1 >= W2 + 1 (RHS is implicitly widened by 1 bit for the sign bit) |
+| `UInt[W1]` | `SInt[W2]` | **No** | Compile error: an explicit conversion is required |
 ///
 
-#### Shift Operations
+**Width rule** -- The LHS width must be greater than or equal to the (effective) RHS width. When applying `SInt op UInt`, the effective RHS width is `RHS width + 1` because the unsigned value gains an implicit sign bit.
+
+**Scala `Int` literals** are auto-promoted to a matching DFHDL type with the minimum required bit width. A negative `Int` literal on the RHS of a `UInt` operation is a compile error (unsigned LHS cannot accept a signed RHS).
+
+```scala
+val u8 = UInt(8) <> VAR
+val u4 = UInt(4) <> VAR
+val s8 = SInt(8) <> VAR
+
+// UInt + UInt (same width)
+val r1 = u8 + u8          // UInt[8]
+// SInt + SInt
+val r2 = s8 + s8          // SInt[8]
+// SInt + UInt: RHS widened to 5 bits (4+1); 8 >= 5, OK
+val r3 = s8 + u4          // SInt[8]
+// UInt + Scala Int literal (200 fits in 8 bits)
+val r4 = u8 + 200         // UInt[8]
+// Scala Int literal on LHS (200 is promoted to UInt[8])
+val r5 = 200 - u8         // UInt[8]
+
+// error: Cannot apply this operation between an unsigned
+// value (LHS) and a signed value (RHS).
+// An explicit conversion must be applied.
+val e1 = u8 + s8
+// error: The applied RHS value width (8) is larger than
+// the LHS variable width (4).
+val e2 = u4 + u8
+// error: Cannot apply this operation between an unsigned
+// value (LHS) and a signed value (RHS).
+// An explicit conversion must be applied.
+val e3 = u8 + (-22)
+```
+
+/// admonition | Overflow behavior
+    type: warning
+Standard arithmetic operations wrap on overflow. For example, `d"8'255" + d"8'1"` produces `d"8'0"`. Use the carry variants (`+^`, `-^`, `*^`) described below to get a wider result that preserves the full value.
+///
+
+#### Carry Operations (`+^`, `-^`, `*^`)
+
+Carry operations widen the result to prevent overflow. Unlike standard arithmetic, carry operations require both operands to have the **same sign**.
+
+/// html | div.operations
+| Operation     | Description          | Result Width       | Result Sign          |
+| ------------- | -------------------- | ------------------ | -------------------- |
+| `lhs +^ rhs`  | Carry Addition       | max(LW, RW) + 1   | Same sign as operands |
+| `lhs -^ rhs`  | Carry Subtraction    | max(LW, RW) + 1   | Same sign as operands |
+| `lhs *^ rhs`  | Carry Multiplication | LW + RW            | Same sign as operands |
+///
+
+```scala
+val u8 = UInt(8) <> VAR
+
+// Carry addition: width = max(8, 8) + 1 = 9
+val r1 = u8 +^ u8           // UInt[9]
+// d"8'255" +^ d"8'1" == d"9'256" (no overflow)
+
+// Carry subtraction: width = max(8, 8) + 1 = 9
+val r2 = u8 -^ u8           // UInt[9]
+
+// Carry multiplication: width = 8 + 8 = 16
+val r3 = u8 *^ u8           // UInt[16]
+
+// Scala Int literal: 100 needs 7 bits
+// width = 7 + 8 = 15
+val r4 = 100 *^ u8          // UInt[15]
+```
+
+/// admonition | Carry vs standard sign rules
+    type: tip
+Unlike standard arithmetic where `SInt op UInt` is allowed (the unsigned RHS is implicitly widened), carry operations require both operands to have the **same sign**. This is because carry operations produce a wider result, and mixed-sign widening semantics would be ambiguous. Scala `Int` literals are still accepted when the literal's sign matches the DFHDL value's sign.
+///
+
+#### Comparison Operations (`==`, `!=`, `<`, `>`, `<=`, `>=`)
+
+Comparison operations return a `Boolean` DFHDL value and have **stricter constraints** than arithmetic:
+
+/// html | div.operations
+| Operation     | Description            | Returns  |
+| ------------- | ---------------------- | -------- |
+| `lhs == rhs`  | Equal                  | Boolean  |
+| `lhs != rhs`  | Not equal              | Boolean  |
+| `lhs < rhs`   | Less than              | Boolean  |
+| `lhs > rhs`   | Greater than           | Boolean  |
+| `lhs <= rhs`  | Less than or equal     | Boolean  |
+| `lhs >= rhs`  | Greater than or equal  | Boolean  |
+///
+
+Unlike arithmetic operations which use relaxed rules (LHS sign >= RHS sign, LHS width >= RHS width), comparisons require **exact matching**:
+
+- **Sign:** Must match exactly (`UInt` with `UInt`, `SInt` with `SInt`).
+- **Width:** Must match exactly (both operands must have the same bit width).
+- **Scala `Int` literals:** The literal's bit width (adjusted +1 if the DFHDL value is signed and the literal is positive) must fit within the DFHDL value's width.
+
+```scala
+val u8 = UInt(8) <> VAR
+val u4 = UInt(4) <> VAR
+val s8 = SInt(8) <> VAR
+
+val c1 = u8 == u8           // Boolean: same sign, same width
+val c2 = u8 < 200           // Boolean: 200 fits in UInt[8]
+val c3 = 0 < u8             // Boolean: Scala Int on LHS
+val c4 = s8 >= 1            // Boolean: 1 is promoted to SInt (width 2 fits in 8)
+
+// error: Cannot apply this operation between an unsigned
+// value (LHS) and a signed value (RHS).
+// An explicit conversion must be applied.
+val e1 = u8 == s8
+// error: Cannot apply this operation between a value of
+// 8 bits width (LHS) to a value of 4 bits width (RHS).
+// An explicit conversion must be applied.
+val e2 = u8 == u4
+// error: Cannot compare a DFHDL value (width = 8) with a
+// Scala `Int` argument that is wider (width = 10).
+// An explicit conversion must be applied.
+val e3 = u8 > 1000
+```
+
+#### Shift Operations (`<<`, `>>`)
 
 /// html | div.operations
 | Operation    | Description | LHS/RHS Constraints | Returns |
@@ -1251,6 +1370,39 @@ val s = SInt(8) <> VAR
 val u_shifted = u >> 2  // logical right shift (zero-fills MSBs)
 val s_shifted = s >> 2  // arithmetic right shift (sign-extends MSBs)
 ```
+
+#### `Int` Parameter Arithmetic
+
+When both operands are Scala `Int` or DFHDL `Int <> CONST` values, the following operations are available. The result is always an `Int <> CONST` value.
+
+/// html | div.operations
+| Operation       | Description    |
+| --------------- | -------------- |
+| `lhs + rhs`     | Addition       |
+| `lhs - rhs`     | Subtraction    |
+| `lhs * rhs`     | Multiplication |
+| `lhs / rhs`     | Division       |
+| `lhs % rhs`     | Modulo         |
+| `lhs ** rhs`    | Power          |
+| `lhs max rhs`   | Maximum        |
+| `lhs min rhs`   | Minimum        |
+///
+
+```scala
+val param: Int <> CONST = 2
+val t1 = 1 + param      // Int <> CONST = 3
+val t2 = 4 * param      // Int <> CONST = 8
+val t3 = 10 / param     // Int <> CONST = 5
+val t4 = 10 % param     // Int <> CONST = 0
+val t5 = 3 ** param     // Int <> CONST = 9
+val t6 = 1 max param    // Int <> CONST = 2
+val t7 = 1 min param    // Int <> CONST = 1
+```
+
+/// admonition | Non-constant DFHDL `Int` values
+    type: note
+Non-constant DFHDL `Int` values (e.g., `Int <> VAR`) are possible and support the same arithmetic operations. However, they are discouraged for synthesizable designs because they map to a fixed 32-bit signed representation -- use `SInt[32]` instead for explicit control over the hardware. For simulation purposes, non-constant `Int` values are acceptable as long as the 32-bit width limitation is understood.
+///
 
 ### Constant Generation
 
