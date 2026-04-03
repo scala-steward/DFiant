@@ -1509,12 +1509,20 @@ Applies to: `Bits`, `UInt`, `SInt`
 - `.extend` automatically widens to the width expected by the context.
 
 ```scala
+val b8 = Bits(8) <> VAR
+val b4 = Bits(4) <> VAR
+b4 := b8.resize(4)    // truncate to 4 bits
+b8 := b4.extend       // auto-widen to match b8's width
+
 val u8 = UInt(8) <> VAR
 val u6 = UInt(6) <> VAR
-u6 := u8.resize(6)    // explicit truncate to 6 bits
 u6 := u8.truncate     // auto-narrow to match u6's width
 u8 := u6.resize(8)    // explicit zero-extend to 8 bits
-u8 := u6.extend       // auto-widen to match u8's width
+
+val s8 = SInt(8) <> VAR
+val s4 = SInt(4) <> VAR
+s8 := s4.extend       // sign-extend to match s8's width
+s4 := s8.resize(4)    // truncate to 4 bits
 ```
 
 ### Bit Concatenation {#bit-concat}
@@ -1525,6 +1533,9 @@ Multiple bit-vector values can be concatenated using Scala tuple syntax with `.t
 
 ```scala
 val concat = (b"100", b"1", b"0", b"11").toBits  // Bits[8]
+val u8 = UInt(8) <> VAR
+val u4 = UInt(4) <> VAR
+val wide = (u8, u4).toBits                        // Bits[12]
 ```
 
 Values are concatenated from the first (most-significant) to the last (least-significant) position.
@@ -1680,6 +1691,17 @@ val e2 = u4 + u8
 // value (LHS) and a signed value (RHS).
 // An explicit conversion must be applied.
 val e3 = u8 + (-22)
+
+// Int arithmetic
+val param: Int <> CONST = 10
+val r6 = param * 2        // Int <> CONST = 20
+val r7 = param % 3        // Int <> CONST = 1
+
+// Double arithmetic
+val d1 = Double <> VAR
+val d2 = Double <> VAR
+val r8 = d1 + d2          // Double
+val r9 = d1 / d2          // Double
 ```
 
 /// admonition | Overflow and automatic carry promotion
@@ -1733,6 +1755,10 @@ val r3 = u8 *^ u8           // UInt[16]
 // Scala Int literal: 100 needs 7 bits
 // width = 7 + 8 = 15
 val r4 = 100 *^ u8          // UInt[15]
+
+val s8 = SInt(8) <> VAR
+val r5 = s8 +^ s8           // SInt[9]
+val r6 = s8 *^ s8           // SInt[16]
 ```
 
 /// admonition | Carry vs standard sign rules
@@ -1812,6 +1838,10 @@ val eq = e1 == e2   // Boolean
 val s1 = MyStruct <> VAR
 val s2 = MyStruct <> VAR
 val eq2 = s1 == s2  // Boolean
+
+val t1 = (UInt(8), Bit) <> VAR
+val t2 = (UInt(8), Bit) <> VAR
+val eq3 = t1 == t2  // Boolean
 ```
 
 ### Shift Operations (`<<`, `>>`) {#shift-ops}
@@ -1828,9 +1858,11 @@ Applies to: `Bits`, `UInt`, `SInt`
 The `>>` operator is **type-aware**: on `UInt` and `Bits` it performs a logical (zero-filling) right shift, and on `SInt` it performs an arithmetic (sign-extending) right shift. There is no separate `>>>` operator in DFHDL -- the operand type determines the behavior.
 
 ```scala
+val b = Bits(8) <> VAR
 val u = UInt(8) <> VAR
 val s = SInt(8) <> VAR
 
+val b_shifted = b << 2  // logical left shift
 val u_shifted = u >> 2  // logical right shift (zero-fills MSBs)
 val s_shifted = s >> 2  // arithmetic right shift (sign-extends MSBs)
 ```
@@ -1850,6 +1882,11 @@ Applies to: `Int`, `Double`
 val param: Int <> CONST = 2
 val t1 = 1 max param    // Int <> CONST = 2
 val t2 = 1 min param    // Int <> CONST = 1
+
+val d1 = Double <> VAR
+val d2 = Double <> VAR
+val t3 = d1 max d2      // Double
+val t4 = d1 min d2      // Double
 ```
 
 ### Physical Arithmetic (`Time`, `Freq`) {#physical-ops}
