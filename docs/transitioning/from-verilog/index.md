@@ -358,40 +358,6 @@ end RightShifter
 There is no `>>>` operator in DFHDL. The type of the LHS determines the shift semantics: `>>` on `UInt`/`Bits` zero-fills, `>>` on `SInt` sign-extends. See [Shift Operations][shift-ops] for details.
 ///
 
-/// admonition | UInt/SInt Conversion
-    type: verilog
-Verilog implicitly converts between signed and unsigned in mixed expressions. DFHDL requires explicit conversion through `Bits`:
-
-<div class="grid" markdown>
-
-```sv linenums="0" title="Verilog"
-reg [2:0] counter;  // unsigned
-reg signed [7:0] offset;
-
-// Verilog auto-converts
-offset = 180 - 5 * counter;
-```
-
-```scala linenums="0" title="DFHDL"
-val counter = UInt(3) <> VAR
-val offset  = SInt(8) <> VAR
-
-// Must convert UInt -> SInt explicitly
-// UInt -> .bits -> .sint -> .resize
-val cnt_s = counter.bits.sint.resize(8)
-offset := sd"8'180" - cnt_s * 5
-```
-
-</div>
-
-Conversion options:
-
-- **UInt → SInt (width+1):** `uint_val.signed` — adds a sign bit, widening by 1. Preferred when you can accept the extra bit.
-- **UInt → SInt (same width):** `uint_val.bits.sint` — reinterprets the bit pattern without widening.
-- **SInt → UInt (same width):** `sint_val.bits.uint` — reinterprets the bit pattern.
-
-See [Conversions and Casts][type-conversion] for the full conversion reference.
-///
 
 /// admonition | Bit/Boolean Operators: `|`/`&` and `||`/`&&`
     type: verilog
@@ -519,29 +485,3 @@ else out := b
 The `.sel` method compiles directly to Verilog's ternary operator. For complex nested conditions, prefer `if`/`else` or `match` over chaining `.sel` calls. See [Selection (.sel)][sel-ops] for details.
 ///
 
-/// admonition | Unsigned Literal Minus Signed Expression
-    type: verilog
-In Verilog, `2 - signed_expr` works because integer literals are implicitly 32-bit signed. In DFHDL, a plain `2` is unsigned, so `2 - signed_val` is a compile error (unsigned LHS cannot accept signed RHS).
-
-The simplest fix is to use a signed literal with `sd"..."`:
-
-<div class="grid" markdown>
-
-```sv linenums="0" title="Verilog"
-// Works: 2 is 32-bit integer
-err <= 2 - (2 * r0);
-```
-
-```scala linenums="0" title="DFHDL"
-// Use a signed literal wide enough for the result:
-val two = sd"${CORDW+2}'2"
-err :== (two - (r0_wide + r0_wide)).truncate
-
-// Or restructure as negation + addition:
-err :== (-(r0_wide + r0_wide) + sd"2").truncate
-```
-
-</div>
-
-See [Arithmetic type constraints][arithmetic-ops] for the sign and width rules.
-///
