@@ -1608,9 +1608,7 @@ Under the ED domain, the following operations are equivalent:
 
 ### Arithmetic Operations (`+`, `-`, `*`, `/`, `%`) {#arithmetic-ops}
 
-Applies to: `UInt`, `SInt`
-
-The result of a standard arithmetic operation always has the **same type as the LHS** operand. The RHS is resized to match the LHS before the operation is applied.
+Applies to: `UInt`, `SInt`, `Bits` (via implicit conversion to `UInt`), `Int`, `Double` (`%` not available for `Double`)
 
 /// html | div.decimal_arithmetic
 | Operation    | Description    | Returns          |
@@ -1622,7 +1620,9 @@ The result of a standard arithmetic operation always has the **same type as the 
 | `lhs % rhs`  | Modulo         | Same type as LHS |
 ///
 
-#### Type Constraints
+#### Bit-Accurate Type Constraints (`UInt`, `SInt`)
+
+The result of a standard arithmetic operation on bit-accurate types always has the **same type as the LHS** operand. The RHS is resized to match the LHS before the operation is applied.
 
 **Sign rule** -- The LHS sign must be greater than or equal to the RHS sign (`signed >= unsigned`):
 
@@ -1638,6 +1638,20 @@ The result of a standard arithmetic operation always has the **same type as the 
 **Width rule** -- The LHS width must be greater than or equal to the (effective) RHS width. When applying `SInt op UInt`, the effective RHS width is `RHS width + 1` because the unsigned value gains an implicit sign bit.
 
 **Scala `Int` literals** are auto-promoted to a matching DFHDL type with the minimum required bit width. A negative `Int` literal on the RHS of a `UInt` operation is a compile error (unsigned LHS cannot accept a signed RHS).
+
+/// admonition | `Bits` values in arithmetic
+    type: tip
+`Bits` values are implicit `UInt` candidates, so they can participate in arithmetic directly. The compiler automatically inserts `.uint` conversions on the operands and `.bits` on the result:
+```scala
+val i = Bits(8) <> IN
+val o = Bits(8) <> OUT
+o := i + i
+```
+Elaborates to:
+```scala
+o := (i.uint + i.uint).bits
+```
+///
 
 ```scala
 val u8 = UInt(8) <> VAR
@@ -1728,7 +1742,7 @@ Unlike standard arithmetic where `SInt op UInt` is allowed (the unsigned RHS is 
 
 ### Comparison Operations (`==`, `!=`, `<`, `>`, `<=`, `>=`) {#comparison-ops}
 
-Applies to: `UInt`, `SInt` (all comparisons); `Enum`, `Struct`, `Tuple` (`==`/`!=` only)
+Applies to: `UInt`, `SInt`, `Int`, `Double` (all comparisons); `Enum`, `Struct`, `Tuple` (`==`/`!=` only)
 
 #### Decimal Comparisons
 
@@ -1821,39 +1835,46 @@ val u_shifted = u >> 2  // logical right shift (zero-fills MSBs)
 val s_shifted = s >> 2  // arithmetic right shift (sign-extends MSBs)
 ```
 
-### `Int` Parameter Arithmetic {#int-param-arith}
+### Max/Min Operations (`max`, `min`) {#max-min-ops}
 
-Applies to: `Int`
-
-When both operands are Scala `Int` or DFHDL `Int <> CONST` values, the following operations are available. The result is always an `Int <> CONST` value.
+Applies to: `Int`, `Double`
 
 /// html | div.operations
-| Operation       | Description    |
-| --------------- | -------------- |
-| `lhs + rhs`     | Addition       |
-| `lhs - rhs`     | Subtraction    |
-| `lhs * rhs`     | Multiplication |
-| `lhs / rhs`     | Division       |
-| `lhs % rhs`     | Modulo         |
-| `lhs ** rhs`    | Power          |
-| `lhs max rhs`   | Maximum        |
-| `lhs min rhs`   | Minimum        |
+| Operation       | Description | Returns |
+| --------------- | ----------- | ------- |
+| `lhs max rhs`   | Maximum of two values | Same type |
+| `lhs min rhs`   | Minimum of two values | Same type |
 ///
 
 ```scala
 val param: Int <> CONST = 2
-val t1 = 1 + param      // Int <> CONST = 3
-val t2 = 4 * param      // Int <> CONST = 8
-val t3 = 10 / param     // Int <> CONST = 5
-val t4 = 10 % param     // Int <> CONST = 0
-val t5 = 3 ** param     // Int <> CONST = 9
-val t6 = 1 max param    // Int <> CONST = 2
-val t7 = 1 min param    // Int <> CONST = 1
+val t1 = 1 max param    // Int <> CONST = 2
+val t2 = 1 min param    // Int <> CONST = 1
+```
+
+### `Int` Parameter Operations (`**`, `clog2`) {#int-param-ops}
+
+Applies to: `Int` (constant parameters)
+
+These operations are available for Scala `Int` or DFHDL `Int <> CONST` values and are primarily used for compile-time calculations such as computing bit widths.
+
+/// html | div.operations
+| Operation       | Description | Returns |
+| --------------- | ----------- | ------- |
+| `lhs ** rhs`    | Power (exponentiation) | `Int` |
+| `clog2(value)`  | Ceiling of log base 2 | `Int` |
+///
+
+```scala
+val param: Int <> CONST = 2
+val t1 = 3 ** param     // Int <> CONST = 9
+val t2 = 2 ** param     // Int <> CONST = 4
+val w  = clog2(256)     // Int = 8 (bits needed to represent 0..255)
 ```
 
 /// admonition | Non-constant DFHDL `Int` values
     type: note
-Non-constant DFHDL `Int` values (e.g., `Int <> VAR`) are possible and support the same arithmetic operations. However, they are discouraged for synthesizable designs because they map to a fixed 32-bit signed representation -- use `SInt[32]` instead for explicit control over the hardware. For simulation purposes, non-constant `Int` values are acceptable as long as the 32-bit width limitation is understood.
+Non-constant DFHDL `Int` values (e.g., `Int <> VAR`) are possible and support the same arithmetic operations (`+`, `-`, `*`, `/`, `%`). However, they are discouraged for synthesizable designs because they map to a fixed 32-bit signed representation -- use `SInt[32]` instead for explicit control over the hardware. For simulation purposes, non-constant `Int` values are acceptable as long as the 32-bit width limitation is understood.
 ///
 
 ### History Operations {#history-ops}
@@ -2012,19 +2033,4 @@ vec(idx) := newValue    // Write element at index
 | `vec.size` | Get vector dimension | Int |
 ///
 
-### Double Arithmetic {#double-ops}
-
-Applies to: `Double`
-
-Supports standard arithmetic and comparison operations:
-
-```scala
-val d1 = Double <> VAR
-val d2 = Double <> VAR
-
-val sum = d1 + d2
-val prod = d1 * d2
-val quot = d1 / d2
-val comp = d1 < d2
-```
 
