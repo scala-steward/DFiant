@@ -280,43 +280,38 @@ Verilog FSMs typically use `parameter` constants and `case`/`if` chains. In DFHD
 <div class="grid" markdown>
 
 ```sv linenums="0" title="Verilog"
-parameter IDLE  = 2'b00,
-          START = 2'b01,
-          DATA  = 2'b10,
-          STOP  = 2'b11;
-reg [1:0] state = IDLE;
+parameter READY = 2'b00,
+          AIM   = 2'b01,
+          FIRE  = 2'b10;
+reg [1:0] state = READY;
 
 always @(posedge clk)
   case (state)
-    IDLE:  if (go) state <= START;
-    START: state <= DATA;
-    DATA:  state <= STOP;
-    STOP:  state <= IDLE;
+    READY:   if (go) state <= AIM;
+    AIM:     state <= FIRE;
+    FIRE:    state <= READY;
+    default: state <= READY;
   endcase
 ```
 
 ```scala linenums="0" title="DFHDL"
 enum State extends Encoded:
-  case Idle, Start, Data, Stop
-
-val state = State <> VAR init State.Idle
+  case Ready, Aim, Fire
+import State.*
+val state = State <> VAR init Ready
 
 process(clk):
   if (clk.rising)
     state match
-      case State.Idle =>
-        if (go) state :== State.Start
-      case State.Start =>
-        state :== State.Data
-      case State.Data =>
-        state :== State.Stop
-      case State.Stop =>
-        state :== State.Idle
+      case Ready => if (go) state :== Aim
+      case Aim   => state :== Fire
+      case Fire  => state :== Ready
+      case _     => state :== Ready
 ```
 
 </div>
 
-If the Verilog state values are non-sequential, use `Encoded.Manual` (see [Enumeration][DFEnum]). Avoid modelling FSM states as `Bits` constants -- `match` does not support matching on `Bits <> CONST` names. Use `enum extends Encoded` instead, or fall back to `if`/`else if` chains.
+If the encoded Verilog state values have no standard pattern (incremental, gray, one-hot), use `Encoded.Manual` (see [Enumeration][DFEnum]). Avoid modeling FSM states as `Bits` or `UInt` constants, it's an anti-pattern. When compiling to SystemVerilog (SV), the SV enums are being utilized as well.
 ///
 
 ## Operations
@@ -562,45 +557,5 @@ taps_b <> TAPS.bits(LEN-1, 0)
 </div>
 
 Note: `.bits(hi, lo)` is an extension method on `Int <> CONST` DFHDL values. It does **not** work on plain Scala `Int`. If you have a compile-time constant, pass it as an `Int <> CONST` parameter, or use a hex/binary literal directly: `h"21'140000"`.
-///
-
-## FSM and Enum Patterns
-
-/// admonition | Enum FSM and `unique case`
-    type: verilog
-When you use `enum extends Encoded` with `match` in DFHDL, the generated SystemVerilog uses `unique case`. This has implications for formal verification:
-
-- **Exhaustive enums** (all bit patterns used, e.g., 4 states in 2 bits): `unique case` is safe because every possible value has a branch.
-- **Sparse enums** (not all bit patterns used, e.g., 3 states in 2 bits): `unique case` has no `default` for the unused bit patterns. Formal tools may find counterexamples for unreachable states.
-
-If the original Verilog FSM has a `default` branch that handles invalid/unreachable states, use `if`/`else if` chains with a final `else` instead of `match` on an enum:
-
-<div class="grid" markdown>
-
-```sv linenums="0" title="Verilog (3 states, has default)"
-case (state)
-  IDLE:  ...
-  DATA:  ...
-  STOP:  ...
-  default: state <= IDLE;
-endcase
-```
-
-```scala linenums="0" title="DFHDL (if/else for default coverage)"
-// Use Bits constants + if/else if/else
-val IDLE = b"2'00"
-val DATA = b"2'01"
-val STOP = b"2'10"
-val state = Bits(2) <> VAR init IDLE
-
-if (state == IDLE) ...
-else if (state == DATA) ...
-else if (state == STOP) ...
-else state :== IDLE  // covers 2'b11
-```
-
-</div>
-
-Use `enum` + `match` when the enum is exhaustive or when `default` coverage is not needed.
 ///
 
