@@ -517,7 +517,9 @@ val x = b8 ++ h"FF"  //ok
 val y = b8 ++ all(0) //error
 ```
 
-## `Bit`/`Boolean` DFHDL Values {#DFBitOrBool}
+## DFHDL Value Types
+
+### `Bit`/`Boolean` {#DFBitOrBool}
 
 `Bit` DFHDL values represent binary `1` or `0` values, whereas `Boolean` DFHDL values represent `true` or `false` values, respectively. The `Bit` and `Boolean` DFHDL values are generally interchangeable, and automatically converted between one and the other. 
 
@@ -531,7 +533,7 @@ Although they are interchangeable, it's generally recommended to use `Boolean` D
 The main reason to differentiate between `Bit` and `Boolean` is that VHDL has both `std_logic` and `boolean` types, respectively. Verilog has only a single `logic` or `wire` to represent both. Indeed VHDL'2008 has relaxed some of the type constraints, but not enough. And nevertheless, DFHDL aims to support various HDL dialects, and thus enables simple implicit or explicit conversion between these two DFType values.
 ///
 
-### DFType Constructors
+#### DFType Constructors
 
 Use the `Bit` or `Boolean` objects/types to construct `Bit` or `Boolean` DFHDL values, respectively.
 
@@ -542,7 +544,7 @@ val c_bit:  Bit     <> CONST = 1
 val c_bool: Boolean <> CONST = false
 ```
 
-### Candidates
+#### Candidates
 
   * DFHDL `Bit` values.
   * DFHDL `Boolean` values. 
@@ -605,243 +607,7 @@ class Foo extends RTDesign:
 ```
 ///
 
-### Operations
-
-#### Explicit Casting Operations
-
-These operations propagate constant modifiers, meaning that if the casted argument is a constant, the returned value is also a constant.
-
-/// html | div.operations
-| Operation   | Description                     | LHS Constraints       | Returns               |
-| ----------- | --------------------------------|-----------------------|-----------------------|
-| `lhs.bool`  | Cast to a DFHDL `Boolean` value | `Bit` DFHDL value     | `Boolean` DFHDL value |
-| `lhs.bit`   | Cast to a DFHDL `Bit` value     | `Boolean` DFHDL value | `Bit` DFHDL value     |
-///
-
-```scala
-val bt1 = Bit <> VAR
-val bl1 = bt1.bool
-val bl2 = Boolean <> VAR
-val bt2 = bl2.bit
-val bt3: Bit     <> CONST = 0
-val bl3: Boolean <> CONST = bt3.bool
-val bl4: Boolean <> CONST = true
-val bt4: Bit     <> CONST = bt4.bit
-// error: bt1 is not a constant
-val err: Bit     <> CONST = bt1
-```
-#### Logical Operations
-
-Logical operations' return type always match the LHS argument's type.
-These operations propagate constant modifiers, meaning that if all arguments are constant, the returned value is also a constant.
-
-/// html | div.operations
-| Operation    | Description | LHS/RHS Constraints | Returns |
-| ------------ | ----------- | ------------------- | ------- |
-| `lhs && rhs` | Logical AND | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
-| `lhs || rhs` | Logical OR  | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
-| `lhs & rhs`  | Logical AND | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
-| `lhs | rhs` | Logical OR  | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
-| `lhs ^ rhs`  | Logical XOR | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
-| `!lhs`       | Logical NOT | The argument must be a `Bit`/`Boolean` DFHDL value. | LHS-Type DFHDL value |
-///
-
-```scala
-val bt = Bit     <> VAR
-val bl = Boolean <> VAR
-val t1 = bt && bl    //result type: Bit
-val t2 = bt ^ 1      //result type: Bit
-val t3 = bl || false //result type: Boolean
-val t4 = bt && true  //result type: Bit
-val t5 = bl || bt    //result type: Boolean
-val t6 = bl ^ 0 || !bt
-//`t7` after the candidate implicit
-//conversions, looks like so:
-//(bl && bt.bool) ^ (!(bt || bl.bit)).bool
-val t7 = (bl && bt) ^ !(bt || bl)
-//error: swap argument positions to have
-//the DFHDL value on the LHS.
-val e1 = 0 ^ bt      
-//error: swap argument positions to have
-//the DFHDL value on the LHS.
-val e2 = false ^ bt
-//not supported since both arguments
-//are just candidates
-val e3 = 0 ^ true
-//This just yields a Scala Boolean, 
-//as a basic operation between Scala
-//Boolean values.
-val sc: Boolean = true && true
-```
-
-/// admonition | Logical `||`/`&&` and bitwise `|`/`&` on Bit and Boolean values
-    type: tip
-In DFHDL, the operators `||` and `&&` are equivalent to `|` and `&`, respectively, when applied on either DFHDL `Bit` or `Boolean` types. In Verilog, the actual operator printed depends on the LHS argument of the operation: if it's `Bit`, the operator will be `|`/`&`; if it's `Boolean`, the operator will be `||`/`&&`.
-///
-
-/// details | Transitioning from Verilog
-    type: verilog
-Under the ED domain, the following operations are equivalent:
-
-| DFHDL Operation | Verilog Operation (Bit LHS) | Verilog Operation (Boolean LHS) |
-|-----------------|-----------------------------|---------------------------------|
-| `lhs && rhs`    | `lhs & rhs`                 | `lhs && rhs`                    |
-| `lhs || rhs`    | `lhs | rhs`                 | `lhs || rhs`                    |
-| `lhs & rhs`     | `lhs & rhs`                 | `lhs && rhs`                    |
-| `lhs | rhs`     | `lhs | rhs`                 | `lhs || rhs`                    |
-| `lhs ^ rhs`     | `lhs ^ rhs`                 | `lhs ^ rhs`                     |
-| `!lhs`          | `!lhs`                      | `!lhs`                          |
-///
-
-/// details | Transitioning from VHDL
-    type: vhdl
-Under the ED domain, the following operations are equivalent:
-
-| DFHDL Operation | VHDL Operation    |
-|-----------------|-------------------|
-| `lhs && rhs`    | `lhs and rhs`     |
-| `lhs || rhs`    | `lhs or rhs`      |
-| `lhs ^ rhs`     | `lhs xor rhs`     |
-| `!lhs`          | `not lhs`         |
-///
-
-#### Bit History Operations
-
-These operations are supported under both RT and ED domains. Under RT domain, these operations are synthesizable expression.
-
-/// html | div.operations
-| Operation    | Description                     | LHS Constraints       | Returns               |
-| ------------ | --------------------------------|-----------------------|-----------------------|
-| `lhs.rising` | True when a value changes from `0` to `1` | `Bit` DFHDL value     | `Boolean` DFHDL value |
-| `lhs.falling` | True when a value changes from `1` to `0` | `Bit` DFHDL value     | `Boolean` DFHDL value |
-///
-
-/// tab | `ED`
-
-```scala
-class Foo extends EDDesign:
-  val clk  = Bit <> IN
-
-  /* VHDL-style */
-  process(clk):
-    if (clk.rising) 
-      //some sequential logic
-
-  /* Verilog-style */
-  process(clk.rising):
-    //some sequential logic
-```
-/// details | Transitioning from Verilog
-    type: verilog
-Under the ED domain, the `x.rising` and `x.falling` operations are equivalent to the Verilog `posedge x` and `negedge x`, respectively.
-///
-
-/// details | Transitioning from VHDL
-    type: vhdl
-Under the ED domain, the `x.rising` and `x.falling` operations are equivalent to the VHDL `rising_edge(x)` and `falling_edge(x)`, respectively.
-///
-///
-
-/// tab | `RT`
-The following `RT` domain edge detection design:
-```scala
-class Detector extends RTDesign:
-  val i = Bit <> IN
-  val o = Bit <> OUT
-  o := i.rising
-```
-is compiled down to the following `ED` design (depending on the clock and reset configurations):
-```scala
-class Detector extends EDDesign:
-  val clk   = Bit <> IN
-  val i     = Bit <> IN
-  val o     = Bit <> OUT
-  val i_reg = Bit <> VAR init 1
-  process(clk.rising):
-    i_reg :== i
-  o <> !i_reg && i
-```
-The initial (reset) register value is `1`/`0` for `rising`/`falling` operations, respectively. 
-This inherently prevents triggering immediately after reset, without sampling at least two input clock cycles.
-
-Both Verilog and VHDL have no equivalent synthesizable shorthand syntax.
-///
-
-For more information see either the [design domains][design-domains] or [processes][processes] sections.
-
-
-#### Constant Meta Operations
-
-These operations are activated during the [elaboration stage][elaboration] of the DFHDL compilation, and are only available for constant `Bit`/`Boolean` DFHDL values. 
-Their use case is for meta-programming purposes, to control the generated code without the knowledge of the DFHDL compiler (could be considered as pre-processing steps).
-
-/// html | div.operations
-| Operation    | Description | LHS Constraints | Returns |
-| ------------ | ----------- | ------------------- | ------- |
-| `lhs.toScalaBitNum` | Extracts the known elaboration Scala `BitNum`(`1 | 0`) value from a constant DFHDL `Bit`/`Boolean` value | Constant `Bit`/`Boolean` DFHDL value | Scala `BitNum` value |
-| `lhs.toScalaBoolean` | Extracts the known elaboration Scala `Boolean` value from a constant DFHDL `Bit`/`Boolean` value | Constant `Bit`/`Boolean` DFHDL value | Scala `Boolean` value |
-///
-
-The following runnable example demonstrates how such meta operation affect the elaborated design. 
-The `Boolean` argument `arg` of a design `Foo` is used twice within the design: 
-first, in an `if` condition directly; and second, in an `if` condition after a Scala value extraction. 
-When referenced directly, the `if` is elaborated as-is, but when the `if` is applied on the extracted Scala value, 
-the `if` is completely removed and either the block inside the `if` is elaborated when the argument is true or completely removed if false.
-
-/// tab | `Foo`
-```scala
-class Foo(
-    val arg: Boolean <> CONST
-) extends DFDesign:
-    val o = Bit <> OUT
-    if (!arg) o := 1 
-    if (arg.toScalaBoolean) o := 0
-```
-///
-
-
-/// tab | `Foo(true)`
-```scala
-class Foo(
-    val arg: Boolean <> CONST
-) extends DFDesign:
-    val o = Bit <> OUT
-    if (!arg) o := 1 
-    o := 0
-```
-///
-
-/// tab | `Foo(false)`
-```scala
-class Foo(
-    val arg: Boolean <> CONST
-) extends DFDesign:
-    val o = Bit <> OUT
-    if (!arg) o := 1 
-```
-///
-
-/// details | Runnable example
-    type: dfhdl
-```scastie
-import dfhdl.*
-
-@top(false) class Foo(
-    val arg: Boolean <> CONST
-) extends DFDesign:
-  val o = Bit <> OUT
-  if (!arg) o := 1 
-  if (arg.toScalaBoolean) o := 0
-
-@main def main = 
-  println("Foo(true) Elaboration:")
-  Foo(true).printCodeString
-  println("Foo(false) Elaboration:")
-  Foo(false).printCodeString
-```
-///
-
-## `Bits` DFHDL Values {#DFBits}
+### `Bits` {#DFBits}
 
 `Bits` DFHDL values represent vectors of DFHDL `Bit` values as elements. 
 The vector bits width (length) is a positive constant number (nilable [zero-width] vectors will be supported in the future).
@@ -855,7 +621,7 @@ in their implementations and externally in their API. Where applicable, both `Bi
 vector of `Bits` have overlapping equivalent APIs. 
 ///
 
-### DFType Constructors
+#### DFType Constructors
 
 /// html | div.operations
 | Constructor  | Description | Arg Constraints     | Returns |
@@ -890,11 +656,11 @@ val b6: Bits[6] <> CONST = all(0)
 * __Additional constructors:__ DFHDL provides additional constructs to simplify some common VHDL bit vector declaration. For example, instead of declaring `signal addr: std_logic_vector(clog2(DEPTH)-1 downto 0)` in VHDL, in DFHDL simply declare `val addr = Bits.until(DEPTH) <> VAR`.
 ///
 
-### Literal (Constant) Value Generation
+#### Literal (Constant) Value Generation
 
 Literal (constant) DFHDL `Bits` value generation is carried out through [binary][b-interp] and [hexadecimal][h-interp] string interpolation, a core [Scala feature](https://docs.scala-lang.org/scala3/book/string-interpolation.html){target="_blank"} that was customized for DFHDL's exact use-case. There are also bit-accurate [decimal][d-interp] and [signed decimal][sd-interp] interpolations available that produce `UInt` and `SInt` DFHDL values. If needed, those values can be cast to `Bits`. No octal interpolation is currently available or planned.
 
-#### Binary Bits String-Interpolator {#b-interp}
+##### Binary Bits String-Interpolator {#b-interp}
 
 ```scala linenums="0" title="Binary Bits string-interpolation syntax"
 b"width'bin"
@@ -938,7 +704,7 @@ This interpolation covers the Verilog binary literal use-cases, but also adds th
 This interpolation covers the VHDL binary literal use-cases, but also adds the ability for parametric `width` to be set. The high impedance (high-Z) use-cases will be supported in the future, likely using a different language construct.
 ///
 
-#### Hexadecimal Bits String-Interpolator {#h-interp}
+##### Hexadecimal Bits String-Interpolator {#h-interp}
 
 ```scala linenums="0" title="Hexadecimal Bits string-interpolation syntax"
 h"width'hex"
@@ -984,7 +750,7 @@ This interpolation covers the Verilog hexadecimal literal use-cases, but also ad
 This interpolation covers the VHDL hexadecimal literal use-cases, but also adds the ability for parametric `width` to be set. The high impedance (high-Z) use-cases will be supported in the future, likely using a different language construct.
 ///
 
-### Candidates
+#### Candidates
   * DFHDL `Bits` values
   * DFHDL `Bit` or `Boolean` values. This candidate produces a single bit `Bits[1]` vector. 
   * DFHDL `UInt` values
@@ -1027,7 +793,7 @@ val b16 = Bits(16) <> VAR init 0        // compile error
 ```
 ///
 
-### Concatenated Assignment
+#### Concatenated Assignment
 DFHDL supports a special-case assignment of concatenated DFHDL Bits variables, using a Scala `Tuple` syntax on LHS of the assignment operator. Both LHS and RHS bits width must be the same. This assignment is just syntactic sugar for multiple separate assignments and carried out during the design [elaboration][elaboration]. The assignment ordering is from the first value at most-significant position down to the last value at least-significant position.
 
 /// tab | `Foo Declaration`
@@ -1073,12 +839,7 @@ given options.AppOptions.AppMode = options.AppOptions.AppMode.elaborate
 ```
 ///
 
-/// admonition | Additional operations
-    type: info
-See [Common Bit-Vector Operations][common-bit-vector-ops] for bit selection, slicing, resizing, and concatenation that apply to `Bits` as well as `UInt` and `SInt`. See [Common Conversions and Casts][type-conversion] for `.bits`, `.uint`, `.sint`, and other type conversion methods.
-///
-
-## `UInt`/`SInt`/`Int` DFHDL Values {#DFDecimal}
+### `UInt`/`SInt`/`Int` {#DFDecimal}
 
 DFHDL provides three decimal numeric types:
 
@@ -1086,7 +847,7 @@ DFHDL provides three decimal numeric types:
 - `SInt` - Signed bit-accurate integer values  
 - `Int` - 32-bit integer values (used mainly for parameters)
 
-### DFType Constructors
+#### DFType Constructors
 
 /// html | div.operations
 | Constructor  | Description | Arg Constraints     | Returns |
@@ -1098,241 +859,15 @@ DFHDL provides three decimal numeric types:
 | `Int`| Construct a constant integer DFType. Used mainly for parameters. | None | `Int` DFType |
 ///
 
-### Candidates
+#### Candidates
   * DFHDL decimal values of the same type
   * DFHDL `Bits` values (via `.uint` or `.sint` casting)
   * Scala numeric values (Int, Long, etc.) for constant values
   * Decimal literals (string interpolation values) 
 
-### Operations
+#### Constant Generation
 
-#### Arithmetic Operations (`+`, `-`, `*`, `/`, `%`)
-
-The result of a standard arithmetic operation always has the **same type as the LHS** operand. The RHS is resized to match the LHS before the operation is applied.
-
-/// html | div.decimal_arithmetic
-| Operation    | Description    | Returns          |
-| ------------ | -------------- | ---------------- |
-| `lhs + rhs`  | Addition       | Same type as LHS |
-| `lhs - rhs`  | Subtraction    | Same type as LHS |
-| `lhs * rhs`  | Multiplication | Same type as LHS |
-| `lhs / rhs`  | Division       | Same type as LHS |
-| `lhs % rhs`  | Modulo         | Same type as LHS |
-///
-
-##### Type Constraints
-
-**Sign rule** -- The LHS sign must be greater than or equal to the RHS sign (`signed >= unsigned`):
-
-/// html | div.operations
-| LHS | RHS | Allowed | Note |
-| --- | --- | ------- | ---- |
-| `UInt[W1]` | `UInt[W2]` | Yes | W1 >= W2 |
-| `SInt[W1]` | `SInt[W2]` | Yes | W1 >= W2 |
-| `SInt[W1]` | `UInt[W2]` | Yes | W1 >= W2 + 1 (RHS is implicitly widened by 1 bit for the sign bit) |
-| `UInt[W1]` | `SInt[W2]` | **No** | Compile error: an explicit conversion is required |
-///
-
-**Width rule** -- The LHS width must be greater than or equal to the (effective) RHS width. When applying `SInt op UInt`, the effective RHS width is `RHS width + 1` because the unsigned value gains an implicit sign bit.
-
-**Scala `Int` literals** are auto-promoted to a matching DFHDL type with the minimum required bit width. A negative `Int` literal on the RHS of a `UInt` operation is a compile error (unsigned LHS cannot accept a signed RHS).
-
-```scala
-val u8 = UInt(8) <> VAR
-val u4 = UInt(4) <> VAR
-val s8 = SInt(8) <> VAR
-
-// UInt + UInt (same width)
-val r1 = u8 + u8          // UInt[8]
-// SInt + SInt
-val r2 = s8 + s8          // SInt[8]
-// SInt + UInt: RHS widened to 5 bits (4+1); 8 >= 5, OK
-val r3 = s8 + u4          // SInt[8]
-// UInt + Scala Int literal (200 fits in 8 bits)
-val r4 = u8 + 200         // UInt[8]
-// Scala Int literal on LHS (200 is promoted to UInt[8])
-val r5 = 200 - u8         // UInt[8]
-
-// error: Cannot apply this operation between an unsigned
-// value (LHS) and a signed value (RHS).
-// An explicit conversion must be applied.
-val e1 = u8 + s8
-// error: The applied RHS value width (8) is larger than
-// the LHS variable width (4).
-val e2 = u4 + u8
-// error: Cannot apply this operation between an unsigned
-// value (LHS) and a signed value (RHS).
-// An explicit conversion must be applied.
-val e3 = u8 + (-22)
-```
-
-/// admonition | Overflow and automatic carry promotion
-    type: warning
-Standard arithmetic operations wrap on overflow. For example, `d"8'255" + d"8'1"` produces `d"8'0"`. Use the carry variants (`+^`, `-^`, `*^`) described below to get a wider result that preserves the full value.
-
-However, when an **anonymous** arithmetic expression (`+`, `-`, `*`) is assigned or connected to a variable that is **wider** than the operation's result, the operation is **automatically promoted** to a carry operation. This matches Verilog's behavior where the assignment target width determines the operation width. The carry result is then resized to fit the target if needed.
-
-```scala
-val u8  = UInt(8) <> VAR
-val u9  = UInt(9) <> VAR
-val u12 = UInt(12) <> VAR
-val u16 = UInt(16) <> VAR
-u9  := u8 + u8   // promoted to carry addition (width 9), exact fit
-u16 := u8 * u8   // promoted to carry multiplication (width 16), exact fit
-u12 := u8 * u8   // promoted to carry multiplication (width 16), resized to 12
-
-// Named expressions are NOT promoted:
-val sum = u8 + u8  // UInt[8], named value
-u9 := sum          // resized from 8 to 9, no carry promotion
-```
-///
-
-#### Carry Operations (`+^`, `-^`, `*^`)
-
-Carry operations widen the result to prevent overflow. Unlike standard arithmetic, carry operations require both operands to have the **same sign**.
-
-/// html | div.operations
-| Operation     | Description          | Result Width       | Result Sign          |
-| ------------- | -------------------- | ------------------ | -------------------- |
-| `lhs +^ rhs`  | Carry Addition       | max(LW, RW) + 1   | Same sign as operands |
-| `lhs -^ rhs`  | Carry Subtraction    | max(LW, RW) + 1   | Same sign as operands |
-| `lhs *^ rhs`  | Carry Multiplication | LW + RW            | Same sign as operands |
-///
-
-```scala
-val u8 = UInt(8) <> VAR
-
-// Carry addition: width = max(8, 8) + 1 = 9
-val r1 = u8 +^ u8           // UInt[9]
-// d"8'255" +^ d"8'1" == d"9'256" (no overflow)
-
-// Carry subtraction: width = max(8, 8) + 1 = 9
-val r2 = u8 -^ u8           // UInt[9]
-
-// Carry multiplication: width = 8 + 8 = 16
-val r3 = u8 *^ u8           // UInt[16]
-
-// Scala Int literal: 100 needs 7 bits
-// width = 7 + 8 = 15
-val r4 = 100 *^ u8          // UInt[15]
-```
-
-/// admonition | Carry vs standard sign rules
-    type: tip
-Unlike standard arithmetic where `SInt op UInt` is allowed (the unsigned RHS is implicitly widened), carry operations require both operands to have the **same sign**. This is because carry operations produce a wider result, and mixed-sign widening semantics would be ambiguous. Scala `Int` literals are still accepted when the literal's sign matches the DFHDL value's sign.
-///
-
-#### Comparison Operations (`==`, `!=`, `<`, `>`, `<=`, `>=`)
-
-Comparison operations return a `Boolean` DFHDL value and have **stricter constraints** than arithmetic:
-
-/// html | div.operations
-| Operation     | Description            | Returns  |
-| ------------- | ---------------------- | -------- |
-| `lhs == rhs`  | Equal                  | Boolean  |
-| `lhs != rhs`  | Not equal              | Boolean  |
-| `lhs < rhs`   | Less than              | Boolean  |
-| `lhs > rhs`   | Greater than           | Boolean  |
-| `lhs <= rhs`  | Less than or equal     | Boolean  |
-| `lhs >= rhs`  | Greater than or equal  | Boolean  |
-///
-
-Unlike arithmetic operations which use relaxed rules (LHS sign >= RHS sign, LHS width >= RHS width), comparisons require **exact matching**:
-
-- **Sign:** Must match exactly (`UInt` with `UInt`, `SInt` with `SInt`).
-- **Width:** Must match exactly (both operands must have the same bit width).
-- **Scala `Int` literals:** The literal's bit width (adjusted +1 if the DFHDL value is signed and the literal is positive) must fit within the DFHDL value's width.
-
-```scala
-val u8 = UInt(8) <> VAR
-val u4 = UInt(4) <> VAR
-val s8 = SInt(8) <> VAR
-
-val c1 = u8 == u8           // Boolean: same sign, same width
-val c2 = u8 < 200           // Boolean: 200 fits in UInt[8]
-val c3 = 0 < u8             // Boolean: Scala Int on LHS
-val c4 = s8 >= 1            // Boolean: 1 is promoted to SInt (width 2 fits in 8)
-
-// error: Cannot apply this operation between an unsigned
-// value (LHS) and a signed value (RHS).
-// An explicit conversion must be applied.
-val e1 = u8 == s8
-// error: Cannot apply this operation between a value of
-// 8 bits width (LHS) to a value of 4 bits width (RHS).
-// An explicit conversion must be applied.
-val e2 = u8 == u4
-// error: Cannot compare a DFHDL value (width = 8) with a
-// Scala `Int` argument that is wider (width = 10).
-// An explicit conversion must be applied.
-val e3 = u8 > 1000
-```
-
-/// details | Scala `Int` constants auto-lift in comparisons
-    type: note
-Plain Scala `Int` values can be used directly in comparisons and arithmetic with DFHDL typed variables. No explicit coercion is needed:
-```scala
-val LIMIT: Int <> CONST = 5208
-val counter = UInt.until(LIMIT) <> VAR
-if (counter == LIMIT - 1)  // Int <> CONST compared with UInt -- works directly
-  counter := 0
-```
-///
-
-#### Shift Operations (`<<`, `>>`)
-
-/// html | div.operations
-| Operation    | Description | LHS/RHS Constraints | Returns |
-| ------------ | ----------- | ------------------- | ------- |
-| `lhs << rhs` | Left shift | LHS: `UInt`/`SInt`, RHS: unsigned or `Int` | Same type as LHS |
-| `lhs >> rhs` | Right shift (logical for `UInt`, arithmetic for `SInt`) | LHS: `UInt`/`SInt`, RHS: unsigned or `Int` | Same type as LHS |
-///
-
-The `>>` operator is **type-aware**: on `UInt` it performs a logical (zero-filling) right shift, and on `SInt` it performs an arithmetic (sign-extending) right shift. There is no separate `>>>` operator in DFHDL -- the operand type determines the behavior.
-
-```scala
-val u = UInt(8) <> VAR
-val s = SInt(8) <> VAR
-
-val u_shifted = u >> 2  // logical right shift (zero-fills MSBs)
-val s_shifted = s >> 2  // arithmetic right shift (sign-extends MSBs)
-```
-
-#### `Int` Parameter Arithmetic
-
-When both operands are Scala `Int` or DFHDL `Int <> CONST` values, the following operations are available. The result is always an `Int <> CONST` value.
-
-/// html | div.operations
-| Operation       | Description    |
-| --------------- | -------------- |
-| `lhs + rhs`     | Addition       |
-| `lhs - rhs`     | Subtraction    |
-| `lhs * rhs`     | Multiplication |
-| `lhs / rhs`     | Division       |
-| `lhs % rhs`     | Modulo         |
-| `lhs ** rhs`    | Power          |
-| `lhs max rhs`   | Maximum        |
-| `lhs min rhs`   | Minimum        |
-///
-
-```scala
-val param: Int <> CONST = 2
-val t1 = 1 + param      // Int <> CONST = 3
-val t2 = 4 * param      // Int <> CONST = 8
-val t3 = 10 / param     // Int <> CONST = 5
-val t4 = 10 % param     // Int <> CONST = 0
-val t5 = 3 ** param     // Int <> CONST = 9
-val t6 = 1 max param    // Int <> CONST = 2
-val t7 = 1 min param    // Int <> CONST = 1
-```
-
-/// admonition | Non-constant DFHDL `Int` values
-    type: note
-Non-constant DFHDL `Int` values (e.g., `Int <> VAR`) are possible and support the same arithmetic operations. However, they are discouraged for synthesizable designs because they map to a fixed 32-bit signed representation -- use `SInt[32]` instead for explicit control over the hardware. For simulation purposes, non-constant `Int` values are acceptable as long as the 32-bit width limitation is understood.
-///
-
-### Constant Generation
-
-#### Decimal String-Interpolator {#d-interp}
+##### Decimal String-Interpolator {#d-interp}
 
 The decimal string interpolator `d` creates unsigned/signed integer constants (`UInt`) from decimal values.
 
@@ -1358,7 +893,7 @@ d"1,023"  // UInt[10], value = 1023
 d"1_000"  // UInt[10], value = 1000
 ```
 
-#### Signed Decimal String-Interpolator {#sd-interp}
+##### Signed Decimal String-Interpolator {#sd-interp}
 
 The signed decimal string interpolator `sd` creates signed integer constants (`SInt`) from decimal values.
 
@@ -1382,12 +917,7 @@ sd"8'42"  // SInt[8], value = 42
 sd"8'255" // Error: width too small to represent value with sign bit
 ```
 
-/// admonition | Additional operations
-    type: info
-See [Common Bit-Vector Operations][common-bit-vector-ops] for bit selection, slicing, resizing, and concatenation that apply to `UInt` and `SInt` as well as `Bits`. See [Common Conversions and Casts][type-conversion] for `.bits`, `.signed`, and other type conversion methods.
-///
-
-### Examples
+#### Examples
 
 ```scala
 // Basic declarations
@@ -1409,78 +939,435 @@ val u4 = UInt(4) <> VAR init d"4'10"
 val s4 = SInt(4) <> VAR init sd"4'-2"
 ```
 
-## Common Operations Across Types
-### Common Bit-Vector Operations {#common-bit-vector-ops}
+### Enumeration {#DFEnum}
 
-The following operations are shared by `Bits`, `UInt`, and `SInt` values.
+DFHDL supports enumerated types through Scala's enum feature with special encoding traits. Enums provide a type-safe way to represent a fixed set of values.
 
-#### Bit Selection and Slicing
-
-- **Range slice**: `value(hi, lo)` extracts bits `hi` down to `lo`, returning a narrower value of the **same type** (`Bits` → `Bits`, `UInt` → `UInt`, `SInt` → `SInt`).
-- **Single-bit access**: `value(idx)` returns the bit at position `idx` (as `Bit`). The index can be a static integer or a dynamic `UInt` variable.
+#### Enum Type Definition
 
 ```scala
-val b8 = Bits(8) <> VAR
-val u8 = UInt(8) <> VAR
-val s8 = SInt(8) <> VAR
-
-// Range slicing — preserves the original type
-val b4 = b8(7, 4)    // Bits[4]: upper nibble
-val u4 = u8(3, 0)    // UInt[4]: lower nibble
-val s4 = s8(3, 0)    // SInt[4]: lower nibble
-
-// Single-bit access
-val msb = b8(7)       // Bit
-val lsb = u8(0)       // Bit
-
-// Dynamic bit access (index is a UInt variable)
-val idx = UInt(3) <> VAR
-val dynbit = b8(idx)  // Bit at position idx
+enum MyEnum extends Encoded:
+  case A, B, C, D
 ```
 
-/// admonition | Dynamic bit indexing
-    type: tip
-You can index into a bit-vector value using a `UInt` variable, not just integer literals. The index must be a `UInt` whose width equals `clog2(bits_width)`. For example, indexing into `Bits(8)` requires a `UInt(3)` index. If the width does not match, the compiler will report an error and suggest using `.truncate` (to narrow) or `.extend` (to widen).
+#### Encoding Types
 
-Dynamic indexing works for both reads and writes:
+DFHDL supports several encoding schemes for enums:
+
+1. **Binary Encoded** (default)
 ```scala
-val data = Bits(8) <> VAR init all(0)
-val pos  = UInt(3) <> VAR init 0
-val din  = Bit     <> IN
-
-val bit_out = data(pos)      // dynamic read
-process(clk):
-  if (clk.rising)
-    data(pos) :== din        // dynamic write
+enum MyEnum extends Encoded:
+  case A, B, C, D  // Encoded as 00,01,10,11
 ```
-///
 
-#### Width Adjustment: `.resize`, `.truncate`, `.extend`
-
-- `.resize(N)` sets the width to exactly `N` bits. For `UInt` and `Bits`, widening zero-extends; for `SInt`, widening sign-extends. Narrowing truncates the most-significant bits.
-- `.truncate` automatically narrows to the width expected by the assignment or operation context.
-- `.extend` automatically widens to the width expected by the context.
-
+2. **One-Hot Encoded**
 ```scala
-val u8 = UInt(8) <> VAR
-val u6 = UInt(6) <> VAR
-u6 := u8.resize(6)    // explicit truncate to 6 bits
-u6 := u8.truncate     // auto-narrow to match u6's width
-u8 := u6.resize(8)    // explicit zero-extend to 8 bits
-u8 := u6.extend       // auto-widen to match u8's width
+enum MyEnum extends Encoded.OneHot:
+  case A, B, C  // Encoded as 001,010,100
 ```
 
-#### Bit Concatenation
+3. **Gray Encoded**
+```scala
+enum MyEnum extends Encoded.Gray:
+  case A, B, C  // Encoded as 00,01,11
+```
 
-Multiple bit-vector values can be concatenated using Scala tuple syntax with `.toBits`:
+4. **Custom Start Value**
+```scala
+enum MyEnum extends Encoded.StartAt(4):
+  case A, B, C  // Encoded as 100,101,110
+```
+
+5. **Manual Encoding**
+```scala
+enum MyEnum(val value: UInt[8] <> CONST) extends Encoded.Manual(8):
+  case A extends MyEnum(200)
+  case B extends MyEnum(100)
+  case C extends MyEnum(50)
+```
+
+    Note: the Manual encoding enum class **must** declare a constructor parameter `(val value: UInt[N] <> CONST)` and the bit width `N` must match the argument to `Encoded.Manual(N)`. Each `case` must explicitly extend the enum class and pass a constant value. Omitting the constructor parameter will cause a compile error.
+
+#### Pattern Matching
+
+Enums can be used in pattern matching expressions:
 
 ```scala
-val concat = (b"100", b"1", b"0", b"11").toBits  // Bits[8]
+val state = MyEnum <> VAR
+
+state match
+  case MyEnum.A => // handle A
+  case MyEnum.B => // handle B
+  case MyEnum.C => // handle C
 ```
 
-Values are concatenated from the first (most-significant) to the last (least-significant) position.
+#### Examples
 
-### Common Conversions and Casts {#type-conversion}
+```scala
+// State machine enum
+enum State extends Encoded.OneHot:
+  case Idle, Fetch, Execute, Store
+
+class CPU extends RTDesign:
+  val state = State <> VAR.REG init State.Idle
+  
+  state match
+    case State.Idle => 
+      // Idle state logic
+    case State.Fetch =>
+      // Fetch state logic
+    case State.Execute =>
+      // Execute state logic
+    case State.Store =>
+      // Store state logic
+```
+
+### Vector {#DFVector}
+
+DFHDL vectors allow creating arrays of any DFHDL type. Unlike `Bits` which is specialized for bit vectors, generic vectors can hold any DFHDL type and support multi-dimensional arrays.
+
+#### Vector Type Construction
+
+The vector type is constructed using the `X` operator between a base type and dimension:
+
+```scala
+val vec = BaseType X Dimension <> Modifier
+```
+
+Examples:
+```scala
+val vec1 = UInt(8) X 4 <> VAR        // 1D vector of 4 8-bit unsigned ints
+val vec2 = Bit X 8 X 8 <> VAR        // 2D 8x8 vector of bits
+val vec3 = MyEnum X 16 <> VAR        // Vector of 16 enum values
+```
+
+#### Initialization
+
+Vectors can be initialized in several ways:
+
+```scala
+// Initialize all elements to same value
+val vec1 = UInt(8) X 4 <> VAR init all(0)
+
+// Initialize with specific values
+val vec2 = UInt(8) X 4 <> VAR init Vector(1, 2, 3, 4)
+
+// Initialize from file
+val mem = UInt(32) X 1024 <> VAR initFile "mem.hex"
+```
+
+#### Multi-dimensional Vectors
+
+Multi-dimensional vectors are created by chaining `X` operators:
+
+```scala
+// 2D 4x4 matrix of 8-bit values
+val matrix = UInt(8) X 4 X 4 <> VAR
+
+// Access elements
+val elem = matrix(row)(col)
+matrix(1)(2) := 42
+
+// Initialize 2D array
+matrix := all(all(0))  // All elements to 0
+```
+
+#### Memory/RAM Implementation
+
+Vectors are commonly used to implement memories and RAMs:
+
+```scala
+class RAM extends RTDesign:
+  val addr = UInt(10) <> IN           // 10-bit address
+  val data = UInt(32) <> INOUT        // 32-bit data
+  val we   = Bit <> IN               // Write enable
+  
+  val mem = UInt(32) X 1024 <> VAR.SHARED  // 1K x 32-bit memory
+  
+  if (we) mem(addr) := data          // Write
+  data := mem(addr)                  // Read
+```
+
+#### File Initialization
+
+Vectors support initialization from files in various formats:
+
+```scala
+// Initialize from hex file
+val rom = UInt(8) X 256 <> VAR initFile("rom.hex", InitFileFormat.VerilogHex)
+
+// Initialize from binary file
+val ram = UInt(32) X 1024 <> VAR initFile "ram.bin"
+```
+
+### Struct {#DFStruct}
+
+DFHDL structures allow creating composite types by combining multiple DFHDL values into a single type. Structs are defined using Scala case classes that extend the `Struct` trait.
+
+#### Struct Type Definition
+
+```scala
+case class MyStruct(
+  field1: UInt[8] <> VAL,
+  field2: Bits[4] <> VAL,
+  field3: Boolean <> VAL
+) extends Struct
+```
+
+#### Field Access and Assignment
+
+Fields are accessed using dot notation and can be assigned individually:
+
+```scala
+val s = MyStruct <> VAR
+s.field1 := 42          // Assign to individual field
+s.field2 := b"1010"     // Assign bits
+s := MyStruct(1, b"0101", true)  // Assign whole struct
+```
+
+#### Nested Structs
+
+Structs can be nested to create more complex data structures:
+
+```scala
+case class Point(x: UInt[8] <> VAL, y: UInt[8] <> VAL) extends Struct
+case class Rectangle(topLeft: Point <> VAL, bottomRight: Point <> VAL) extends Struct
+
+val rect = Rectangle <> VAR
+rect.topLeft.x := 0
+rect.bottomRight.y := 100
+```
+
+#### Pattern Matching
+
+Structs support pattern matching for field extraction:
+
+```scala
+val point = Point <> VAR
+point match
+  case Point(x, y) if x > 10 => // Use x and y
+  case Point(0, _) => // Match x=0, any y
+```
+
+#### Examples
+
+```scala
+// AXI-like interface struct
+case class AXILite(
+  addr: UInt[32] <> VAL,
+  data: Bits[64] <> VAL,
+  valid: Bit <> VAL,
+  ready: Bit <> VAL
+) extends Struct
+
+class MyDesign extends RTDesign:
+  val axi = AXILite <> OUT.REG
+  
+  // Initialize struct
+  axi := AXILite(0, all(0), 0, 1)
+  
+  // Access individual fields
+  axi.valid := 1
+  axi.data := h"DEADBEEF"
+```
+
+### Tuple {#DFTuple}
+
+DFHDL tuples provide a way to group multiple DFHDL values together without defining a named structure. They are similar to Scala tuples but operate on DFHDL values.
+
+#### Tuple Type Construction
+
+```scala
+val tuple = (Type1, Type2, ..., TypeN) <> Modifier
+```
+
+#### Examples
+
+```scala
+// Basic tuple declaration
+val pair = (UInt(8), Bit) <> VAR
+
+// Nested tuples
+val complex = ((UInt(8), Bit), Bits(4)) <> VAR
+
+// Assignment
+pair := (42, 1)
+complex := ((100, 0), b"1010")
+```
+
+#### Element Access
+
+Tuple elements can be accessed using ._N notation or pattern matching:
+
+```scala
+val first = pair._1    // Access first element
+val second = pair._2   // Access second element
+
+// Pattern matching
+val (x, y) = pair
+```
+
+### Opaque {#DFOpaque}
+
+Opaque types allow creating new DFHDL types that wrap existing types while hiding their internal representation. This is useful for creating abstraction layers and type-safe interfaces.
+
+#### Opaque Type Definition
+
+```scala
+// Define opaque type wrapping UInt(8)
+case class MyOpaque() extends Opaque(UInt(8))
+
+// Define opaque type with custom operations
+case class Counter() extends Opaque(UInt(32)):
+  extension (c: Counter <> VAL)
+    def increment: Counter <> DFRET = 
+      (c.actual + 1).as(Counter)
+```
+
+#### Usage
+
+```scala
+val op = MyOpaque <> VAR
+val wrapped: UInt[8] <> VAL = op.actual  // Access wrapped value
+op := 42.as(MyOpaque)  // Assign using .as conversion
+```
+
+#### Examples
+
+```scala
+// AES byte type with custom operations
+case class AESByte() extends Opaque(UInt(8)):
+  extension (lhs: AESByte <> VAL)
+    def +(rhs: AESByte <> VAL): AESByte <> DFRET =
+      (lhs.actual ^ rhs.actual).as(AESByte)
+
+class AESCircuit extends DFDesign:
+  val in1 = AESByte <> IN
+  val in2 = AESByte <> IN
+  val out = AESByte <> OUT
+  
+  out := in1 + in2  // Uses custom + operation
+```
+
+### Double {#DFDouble}
+
+DFHDL Double values represent IEEE-754 double-precision floating-point numbers.
+
+#### Type Construction
+
+```scala
+val d = Double <> Modifier
+```
+
+### Time/Freq {#DFPhysical}
+
+DFHDL provides special types for representing time and frequency values in hardware designs through physical units. These types help ensure correct timing specifications and frequency calculations.
+
+#### Time Values
+
+Time values can be created using various unit suffixes:
+
+```scala
+// Time unit constructors
+val t1 = 1.fs     // Femtoseconds
+val t2 = 1.ps     // Picoseconds
+val t3 = 1.ns     // Nanoseconds
+val t4 = 1.us     // Microseconds
+val t5 = 1.ms     // Milliseconds
+val t6 = 1.sec    // Seconds
+val t7 = 1.mn     // Minutes
+val t8 = 1.hr     // Hours
+```
+
+Both integer and floating-point values can be used with time units:
+```scala
+val t9 = 1.5.ns   // 1.5 nanoseconds
+val t10 = 10.ms   // 10 milliseconds
+```
+
+#### Frequency Values
+
+Frequency values can be specified using standard frequency units:
+
+```scala
+// Frequency unit constructors
+val f1 = 1.Hz     // Hertz
+val f2 = 1.KHz    // Kilohertz
+val f3 = 1.MHz    // Megahertz
+val f4 = 1.GHz    // Gigahertz
+```
+
+Like time values, both integer and floating-point values are supported:
+```scala
+val f5 = 100.MHz  // 100 megahertz
+val f6 = 2.5.GHz  // 2.5 gigahertz
+```
+
+#### Usage in RT Domains
+
+Physical values are particularly useful when configuring RT domains and specifying clock frequencies:
+
+```scala
+class TimingExample extends RTDesign:
+  // Clock configuration with 100MHz frequency
+  val clkCfg = ClkCfg(
+    edge = ClkCfg.Edge.Rising,
+    rate = 100.MHz,
+    portName = "clk"
+  )
+  
+  // Timing calculations
+  val period = 10.ns      // Clock period
+  val setupTime = 1.ns    // Setup time requirement
+  val clockFreq = 1.GHz   // Clock frequency
+```
+
+#### Cycles in RT Domain
+
+In RT domains, you can also specify cycle counts using the `.cy` unit:
+
+```scala
+class RTExample extends RTDesign:
+  val delay = 5.cy    // 5 clock cycles delay
+```
+
+Note: The `.cy` unit is only available within register-transfer (RT) domains.
+
+### Unit (Void) {#DFUnit}
+
+The Unit type in DFHDL represents a void or no-value type, similar to Scala's Unit type. It's typically used when an operation doesn't need to return a meaningful value.
+
+#### Usage
+
+```scala
+// Method returning Unit
+def doSomething: Unit <> DFRET =
+  // Perform operations without returning value
+  ()
+
+// Assignment that produces no value
+val x = Bit <> VAR
+val y: Unit <> VAL = x := 1
+```
+
+#### Common Use Cases
+
+1. Side-effect operations
+2. Void method returns
+3. Assignment results
+4. Process bodies in event-driven designs
+
+```scala
+class Example extends EDDesign:
+  val clk = Bit <> IN
+  
+  process(clk.rising):
+    // Process body returns Unit
+    doSomething
+```
+## Operations
+
+### Conversions and Casts {#type-conversion}
 The diagram below shows the conversion/cast paths between DFHDL types. Solid arrows are simple casts that preserve width; dashed arrows involve width changes.
 
 ![type-conversion](type-conversion-light.svg#only-light){ width="70%" }
@@ -1561,380 +1448,575 @@ val s4 = flag.toSInt(4)  // Bit -> SInt(4)
 
 When the value is `1`, these produce the value `1` at the given width (not sign-extended). The single-bit `.bits` conversion is also available, returning `Bits(1)`.
 
-## Enumeration DFHDL Values {#DFEnum}
+#### Enum to `UInt`: `.uint` {#enum-uint-cast}
 
-DFHDL supports enumerated types through Scala's enum feature with special encoding traits. Enums provide a type-safe way to represent a fixed set of values.
-
-### Enum Type Definition
+Enum values can be converted to their underlying unsigned integer representation:
 
 ```scala
-enum MyEnum extends Encoded:
-  case A, B, C, D
+val e = MyEnum <> VAR
+val u = e.uint  // Enum -> UInt (encoding-dependent width)
 ```
 
-### Encoding Types
+### Bit Selection and Slicing {#common-bit-vector-ops}
 
-DFHDL supports several encoding schemes for enums:
+Applies to: `Bits`, `UInt`, `SInt`
 
-1. **Binary Encoded** (default)
+- **Range slice**: `value(hi, lo)` extracts bits `hi` down to `lo`, returning a narrower value of the **same type** (`Bits` → `Bits`, `UInt` → `UInt`, `SInt` → `SInt`).
+- **Single-bit access**: `value(idx)` returns the bit at position `idx` (as `Bit`). The index can be a static integer or a dynamic `UInt` variable.
+
 ```scala
-enum MyEnum extends Encoded:
-  case A, B, C, D  // Encoded as 00,01,10,11
+val b8 = Bits(8) <> VAR
+val u8 = UInt(8) <> VAR
+val s8 = SInt(8) <> VAR
+
+// Range slicing — preserves the original type
+val b4 = b8(7, 4)    // Bits[4]: upper nibble
+val u4 = u8(3, 0)    // UInt[4]: lower nibble
+val s4 = s8(3, 0)    // SInt[4]: lower nibble
+
+// Single-bit access
+val msb = b8(7)       // Bit
+val lsb = u8(0)       // Bit
+
+// Dynamic bit access (index is a UInt variable)
+val idx = UInt(3) <> VAR
+val dynbit = b8(idx)  // Bit at position idx
 ```
 
-2. **One-Hot Encoded**
+/// admonition | Dynamic bit indexing
+    type: tip
+You can index into a bit-vector value using a `UInt` variable, not just integer literals. The index must be a `UInt` whose width equals `clog2(bits_width)`. For example, indexing into `Bits(8)` requires a `UInt(3)` index. If the width does not match, the compiler will report an error and suggest using `.truncate` (to narrow) or `.extend` (to widen).
+
+Dynamic indexing works for both reads and writes:
 ```scala
-enum MyEnum extends Encoded.OneHot:
-  case A, B, C  // Encoded as 001,010,100
-```
+val data = Bits(8) <> VAR init all(0)
+val pos  = UInt(3) <> VAR init 0
+val din  = Bit     <> IN
 
-3. **Gray Encoded**
+val bit_out = data(pos)      // dynamic read
+process(clk):
+  if (clk.rising)
+    data(pos) :== din        // dynamic write
+```
+///
+
+### Width Adjustment {#width-adjustment}
+
+Applies to: `Bits`, `UInt`, `SInt`
+
+- `.resize(N)` sets the width to exactly `N` bits. For `UInt` and `Bits`, widening zero-extends; for `SInt`, widening sign-extends. Narrowing truncates the most-significant bits.
+- `.truncate` automatically narrows to the width expected by the assignment or operation context.
+- `.extend` automatically widens to the width expected by the context.
+
 ```scala
-enum MyEnum extends Encoded.Gray:
-  case A, B, C  // Encoded as 00,01,11
+val u8 = UInt(8) <> VAR
+val u6 = UInt(6) <> VAR
+u6 := u8.resize(6)    // explicit truncate to 6 bits
+u6 := u8.truncate     // auto-narrow to match u6's width
+u8 := u6.resize(8)    // explicit zero-extend to 8 bits
+u8 := u6.extend       // auto-widen to match u8's width
 ```
 
-4. **Custom Start Value**
+### Bit Concatenation {#bit-concat}
+
+Applies to: `Bits`, `UInt`, `SInt`
+
+Multiple bit-vector values can be concatenated using Scala tuple syntax with `.toBits`:
+
 ```scala
-enum MyEnum extends Encoded.StartAt(4):
-  case A, B, C  // Encoded as 100,101,110
+val concat = (b"100", b"1", b"0", b"11").toBits  // Bits[8]
 ```
 
-5. **Manual Encoding**
-```scala
-enum MyEnum(val value: UInt[8] <> CONST) extends Encoded.Manual(8):
-  case A extends MyEnum(200)
-  case B extends MyEnum(100)
-  case C extends MyEnum(50)
-```
+Values are concatenated from the first (most-significant) to the last (least-significant) position.
 
-    Note: the Manual encoding enum class **must** declare a constructor parameter `(val value: UInt[N] <> CONST)` and the bit width `N` must match the argument to `Encoded.Manual(N)`. Each `case` must explicitly extend the enum class and pass a constant value. Omitting the constructor parameter will cause a compile error.
+### Logical Operations {#logical-ops}
 
-### Operations
+Applies to: `Bit`, `Boolean`
+
+Logical operations' return type always matches the LHS argument's type.
+These operations propagate constant modifiers, meaning that if all arguments are constant, the returned value is also a constant.
 
 /// html | div.operations
 | Operation    | Description | LHS/RHS Constraints | Returns |
 | ------------ | ----------- | ------------------- | ------- |
-| `lhs == rhs` | Equality comparison | Same enum type | Boolean |
-| `lhs != rhs` | Inequality comparison | Same enum type | Boolean |
-| `lhs.bits` | Get raw bits representation | Enum value | Bits |
-| `lhs.uint` | Get unsigned int representation | Enum value | UInt |
+| `lhs && rhs` | Logical AND | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
+| `lhs || rhs` | Logical OR  | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
+| `lhs & rhs`  | Logical AND | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
+| `lhs | rhs` | Logical OR  | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
+| `lhs ^ rhs`  | Logical XOR | The LHS argument must be a `Bit`/`Boolean` DFHDL value. The RHS must be a `Bit`/`Boolean` candidate. | LHS-Type DFHDL value |
+| `!lhs`       | Logical NOT | The argument must be a `Bit`/`Boolean` DFHDL value. | LHS-Type DFHDL value |
 ///
 
-### Pattern Matching
-
-Enums can be used in pattern matching expressions:
-
 ```scala
-val state = MyEnum <> VAR
-
-state match
-  case MyEnum.A => // handle A
-  case MyEnum.B => // handle B
-  case MyEnum.C => // handle C
+val bt = Bit     <> VAR
+val bl = Boolean <> VAR
+val t1 = bt && bl    //result type: Bit
+val t2 = bt ^ 1      //result type: Bit
+val t3 = bl || false //result type: Boolean
+val t4 = bt && true  //result type: Bit
+val t5 = bl || bt    //result type: Boolean
+val t6 = bl ^ 0 || !bt
+//`t7` after the candidate implicit
+//conversions, looks like so:
+//(bl && bt.bool) ^ (!(bt || bl.bit)).bool
+val t7 = (bl && bt) ^ !(bt || bl)
+//error: swap argument positions to have
+//the DFHDL value on the LHS.
+val e1 = 0 ^ bt      
+//error: swap argument positions to have
+//the DFHDL value on the LHS.
+val e2 = false ^ bt
+//not supported since both arguments
+//are just candidates
+val e3 = 0 ^ true
+//This just yields a Scala Boolean, 
+//as a basic operation between Scala
+//Boolean values.
+val sc: Boolean = true && true
 ```
 
-### Examples
+/// admonition | Logical `||`/`&&` and bitwise `|`/`&` on Bit and Boolean values
+    type: tip
+In DFHDL, the operators `||` and `&&` are equivalent to `|` and `&`, respectively, when applied on either DFHDL `Bit` or `Boolean` types. In Verilog, the actual operator printed depends on the LHS argument of the operation: if it's `Bit`, the operator will be `|`/`&`; if it's `Boolean`, the operator will be `||`/`&&`.
+///
+
+/// details | Transitioning from Verilog
+    type: verilog
+Under the ED domain, the following operations are equivalent:
+
+| DFHDL Operation | Verilog Operation (Bit LHS) | Verilog Operation (Boolean LHS) |
+|-----------------|-----------------------------|---------------------------------|
+| `lhs && rhs`    | `lhs & rhs`                 | `lhs && rhs`                    |
+| `lhs || rhs`    | `lhs | rhs`                 | `lhs || rhs`                    |
+| `lhs & rhs`     | `lhs & rhs`                 | `lhs && rhs`                    |
+| `lhs | rhs`     | `lhs | rhs`                 | `lhs || rhs`                    |
+| `lhs ^ rhs`     | `lhs ^ rhs`                 | `lhs ^ rhs`                     |
+| `!lhs`          | `!lhs`                      | `!lhs`                          |
+///
+
+/// details | Transitioning from VHDL
+    type: vhdl
+Under the ED domain, the following operations are equivalent:
+
+| DFHDL Operation | VHDL Operation    |
+|-----------------|-------------------|
+| `lhs && rhs`    | `lhs and rhs`     |
+| `lhs || rhs`    | `lhs or rhs`      |
+| `lhs ^ rhs`     | `lhs xor rhs`     |
+| `!lhs`          | `not lhs`         |
+///
+
+### Arithmetic Operations (`+`, `-`, `*`, `/`, `%`) {#arithmetic-ops}
+
+Applies to: `UInt`, `SInt`
+
+The result of a standard arithmetic operation always has the **same type as the LHS** operand. The RHS is resized to match the LHS before the operation is applied.
+
+/// html | div.decimal_arithmetic
+| Operation    | Description    | Returns          |
+| ------------ | -------------- | ---------------- |
+| `lhs + rhs`  | Addition       | Same type as LHS |
+| `lhs - rhs`  | Subtraction    | Same type as LHS |
+| `lhs * rhs`  | Multiplication | Same type as LHS |
+| `lhs / rhs`  | Division       | Same type as LHS |
+| `lhs % rhs`  | Modulo         | Same type as LHS |
+///
+
+#### Type Constraints
+
+**Sign rule** -- The LHS sign must be greater than or equal to the RHS sign (`signed >= unsigned`):
+
+/// html | div.operations
+| LHS | RHS | Allowed | Note |
+| --- | --- | ------- | ---- |
+| `UInt[W1]` | `UInt[W2]` | Yes | W1 >= W2 |
+| `SInt[W1]` | `SInt[W2]` | Yes | W1 >= W2 |
+| `SInt[W1]` | `UInt[W2]` | Yes | W1 >= W2 + 1 (RHS is implicitly widened by 1 bit for the sign bit) |
+| `UInt[W1]` | `SInt[W2]` | **No** | Compile error: an explicit conversion is required |
+///
+
+**Width rule** -- The LHS width must be greater than or equal to the (effective) RHS width. When applying `SInt op UInt`, the effective RHS width is `RHS width + 1` because the unsigned value gains an implicit sign bit.
+
+**Scala `Int` literals** are auto-promoted to a matching DFHDL type with the minimum required bit width. A negative `Int` literal on the RHS of a `UInt` operation is a compile error (unsigned LHS cannot accept a signed RHS).
 
 ```scala
-// State machine enum
-enum State extends Encoded.OneHot:
-  case Idle, Fetch, Execute, Store
+val u8 = UInt(8) <> VAR
+val u4 = UInt(4) <> VAR
+val s8 = SInt(8) <> VAR
 
-class CPU extends RTDesign:
-  val state = State <> VAR.REG init State.Idle
-  
-  state match
-    case State.Idle => 
-      // Idle state logic
-    case State.Fetch =>
-      // Fetch state logic
-    case State.Execute =>
-      // Execute state logic
-    case State.Store =>
-      // Store state logic
+// UInt + UInt (same width)
+val r1 = u8 + u8          // UInt[8]
+// SInt + SInt
+val r2 = s8 + s8          // SInt[8]
+// SInt + UInt: RHS widened to 5 bits (4+1); 8 >= 5, OK
+val r3 = s8 + u4          // SInt[8]
+// UInt + Scala Int literal (200 fits in 8 bits)
+val r4 = u8 + 200         // UInt[8]
+// Scala Int literal on LHS (200 is promoted to UInt[8])
+val r5 = 200 - u8         // UInt[8]
+
+// error: Cannot apply this operation between an unsigned
+// value (LHS) and a signed value (RHS).
+// An explicit conversion must be applied.
+val e1 = u8 + s8
+// error: The applied RHS value width (8) is larger than
+// the LHS variable width (4).
+val e2 = u4 + u8
+// error: Cannot apply this operation between an unsigned
+// value (LHS) and a signed value (RHS).
+// An explicit conversion must be applied.
+val e3 = u8 + (-22)
 ```
 
-## Vector DFHDL Values {#DFVector}
+/// admonition | Overflow and automatic carry promotion
+    type: warning
+Standard arithmetic operations wrap on overflow. For example, `d"8'255" + d"8'1"` produces `d"8'0"`. Use the carry variants (`+^`, `-^`, `*^`) described below to get a wider result that preserves the full value.
 
-DFHDL vectors allow creating arrays of any DFHDL type. Unlike `Bits` which is specialized for bit vectors, generic vectors can hold any DFHDL type and support multi-dimensional arrays.
-
-### Vector Type Construction
-
-The vector type is constructed using the `X` operator between a base type and dimension:
+However, when an **anonymous** arithmetic expression (`+`, `-`, `*`) is assigned or connected to a variable that is **wider** than the operation's result, the operation is **automatically promoted** to a carry operation. This matches Verilog's behavior where the assignment target width determines the operation width. The carry result is then resized to fit the target if needed.
 
 ```scala
-val vec = BaseType X Dimension <> Modifier
-```
+val u8  = UInt(8) <> VAR
+val u9  = UInt(9) <> VAR
+val u12 = UInt(12) <> VAR
+val u16 = UInt(16) <> VAR
+u9  := u8 + u8   // promoted to carry addition (width 9), exact fit
+u16 := u8 * u8   // promoted to carry multiplication (width 16), exact fit
+u12 := u8 * u8   // promoted to carry multiplication (width 16), resized to 12
 
-Examples:
+// Named expressions are NOT promoted:
+val sum = u8 + u8  // UInt[8], named value
+u9 := sum          // resized from 8 to 9, no carry promotion
+```
+///
+
+### Carry Arithmetic (`+^`, `-^`, `*^`) {#carry-ops}
+
+Applies to: `UInt`, `SInt`
+
+Carry operations widen the result to prevent overflow. Unlike standard arithmetic, carry operations require both operands to have the **same sign**.
+
+/// html | div.operations
+| Operation     | Description          | Result Width       | Result Sign          |
+| ------------- | -------------------- | ------------------ | -------------------- |
+| `lhs +^ rhs`  | Carry Addition       | max(LW, RW) + 1   | Same sign as operands |
+| `lhs -^ rhs`  | Carry Subtraction    | max(LW, RW) + 1   | Same sign as operands |
+| `lhs *^ rhs`  | Carry Multiplication | LW + RW            | Same sign as operands |
+///
+
 ```scala
-val vec1 = UInt(8) X 4 <> VAR        // 1D vector of 4 8-bit unsigned ints
-val vec2 = Bit X 8 X 8 <> VAR        // 2D 8x8 vector of bits
-val vec3 = MyEnum X 16 <> VAR        // Vector of 16 enum values
+val u8 = UInt(8) <> VAR
+
+// Carry addition: width = max(8, 8) + 1 = 9
+val r1 = u8 +^ u8           // UInt[9]
+// d"8'255" +^ d"8'1" == d"9'256" (no overflow)
+
+// Carry subtraction: width = max(8, 8) + 1 = 9
+val r2 = u8 -^ u8           // UInt[9]
+
+// Carry multiplication: width = 8 + 8 = 16
+val r3 = u8 *^ u8           // UInt[16]
+
+// Scala Int literal: 100 needs 7 bits
+// width = 7 + 8 = 15
+val r4 = 100 *^ u8          // UInt[15]
 ```
 
-### Initialization
+/// admonition | Carry vs standard sign rules
+    type: tip
+Unlike standard arithmetic where `SInt op UInt` is allowed (the unsigned RHS is implicitly widened), carry operations require both operands to have the **same sign**. This is because carry operations produce a wider result, and mixed-sign widening semantics would be ambiguous. Scala `Int` literals are still accepted when the literal's sign matches the DFHDL value's sign.
+///
 
-Vectors can be initialized in several ways:
+### Comparison Operations (`==`, `!=`, `<`, `>`, `<=`, `>=`) {#comparison-ops}
+
+Applies to: `UInt`, `SInt` (all comparisons); `Enum`, `Struct`, `Tuple` (`==`/`!=` only)
+
+#### Decimal Comparisons
+
+Comparison operations on `UInt`/`SInt` return a `Boolean` DFHDL value and have **stricter constraints** than arithmetic:
+
+/// html | div.operations
+| Operation     | Description            | Returns  |
+| ------------- | ---------------------- | -------- |
+| `lhs == rhs`  | Equal                  | Boolean  |
+| `lhs != rhs`  | Not equal              | Boolean  |
+| `lhs < rhs`   | Less than              | Boolean  |
+| `lhs > rhs`   | Greater than           | Boolean  |
+| `lhs <= rhs`  | Less than or equal     | Boolean  |
+| `lhs >= rhs`  | Greater than or equal  | Boolean  |
+///
+
+Unlike arithmetic operations which use relaxed rules (LHS sign >= RHS sign, LHS width >= RHS width), comparisons require **exact matching**:
+
+- **Sign:** Must match exactly (`UInt` with `UInt`, `SInt` with `SInt`).
+- **Width:** Must match exactly (both operands must have the same bit width).
+- **Scala `Int` literals:** The literal's bit width (adjusted +1 if the DFHDL value is signed and the literal is positive) must fit within the DFHDL value's width.
 
 ```scala
-// Initialize all elements to same value
-val vec1 = UInt(8) X 4 <> VAR init all(0)
+val u8 = UInt(8) <> VAR
+val u4 = UInt(4) <> VAR
+val s8 = SInt(8) <> VAR
 
-// Initialize with specific values
-val vec2 = UInt(8) X 4 <> VAR init Vector(1, 2, 3, 4)
+val c1 = u8 == u8           // Boolean: same sign, same width
+val c2 = u8 < 200           // Boolean: 200 fits in UInt[8]
+val c3 = 0 < u8             // Boolean: Scala Int on LHS
+val c4 = s8 >= 1            // Boolean: 1 is promoted to SInt (width 2 fits in 8)
 
-// Initialize from file
-val mem = UInt(32) X 1024 <> VAR initFile "mem.hex"
+// error: Cannot apply this operation between an unsigned
+// value (LHS) and a signed value (RHS).
+// An explicit conversion must be applied.
+val e1 = u8 == s8
+// error: Cannot apply this operation between a value of
+// 8 bits width (LHS) to a value of 4 bits width (RHS).
+// An explicit conversion must be applied.
+val e2 = u8 == u4
+// error: Cannot compare a DFHDL value (width = 8) with a
+// Scala `Int` argument that is wider (width = 10).
+// An explicit conversion must be applied.
+val e3 = u8 > 1000
 ```
 
-### Operations
+/// details | Scala `Int` constants auto-lift in comparisons
+    type: note
+Plain Scala `Int` values can be used directly in comparisons and arithmetic with DFHDL typed variables. No explicit coercion is needed:
+```scala
+val LIMIT: Int <> CONST = 5208
+val counter = UInt.until(LIMIT) <> VAR
+if (counter == LIMIT - 1)  // Int <> CONST compared with UInt -- works directly
+  counter := 0
+```
+///
 
-#### Element Access
-Access individual elements using array indexing:
+#### Enum, Struct, and Tuple Comparisons
+
+Enums, structs, and tuples support equality comparisons (`==` and `!=`) between values of the same type:
+
+```scala
+val e1 = MyEnum <> VAR
+val e2 = MyEnum <> VAR
+val eq = e1 == e2   // Boolean
+
+val s1 = MyStruct <> VAR
+val s2 = MyStruct <> VAR
+val eq2 = s1 == s2  // Boolean
+```
+
+### Shift Operations (`<<`, `>>`) {#shift-ops}
+
+Applies to: `Bits`, `UInt`, `SInt`
+
+/// html | div.operations
+| Operation    | Description | LHS/RHS Constraints | Returns |
+| ------------ | ----------- | ------------------- | ------- |
+| `lhs << rhs` | Left shift | LHS: `Bits`/`UInt`/`SInt`, RHS: unsigned or `Int` | Same type as LHS |
+| `lhs >> rhs` | Right shift (logical for `Bits`/`UInt`, arithmetic for `SInt`) | LHS: `Bits`/`UInt`/`SInt`, RHS: unsigned or `Int` | Same type as LHS |
+///
+
+The `>>` operator is **type-aware**: on `UInt` and `Bits` it performs a logical (zero-filling) right shift, and on `SInt` it performs an arithmetic (sign-extending) right shift. There is no separate `>>>` operator in DFHDL -- the operand type determines the behavior.
+
+```scala
+val u = UInt(8) <> VAR
+val s = SInt(8) <> VAR
+
+val u_shifted = u >> 2  // logical right shift (zero-fills MSBs)
+val s_shifted = s >> 2  // arithmetic right shift (sign-extends MSBs)
+```
+
+### `Int` Parameter Arithmetic {#int-param-arith}
+
+Applies to: `Int`
+
+When both operands are Scala `Int` or DFHDL `Int <> CONST` values, the following operations are available. The result is always an `Int <> CONST` value.
+
+/// html | div.operations
+| Operation       | Description    |
+| --------------- | -------------- |
+| `lhs + rhs`     | Addition       |
+| `lhs - rhs`     | Subtraction    |
+| `lhs * rhs`     | Multiplication |
+| `lhs / rhs`     | Division       |
+| `lhs % rhs`     | Modulo         |
+| `lhs ** rhs`    | Power          |
+| `lhs max rhs`   | Maximum        |
+| `lhs min rhs`   | Minimum        |
+///
+
+```scala
+val param: Int <> CONST = 2
+val t1 = 1 + param      // Int <> CONST = 3
+val t2 = 4 * param      // Int <> CONST = 8
+val t3 = 10 / param     // Int <> CONST = 5
+val t4 = 10 % param     // Int <> CONST = 0
+val t5 = 3 ** param     // Int <> CONST = 9
+val t6 = 1 max param    // Int <> CONST = 2
+val t7 = 1 min param    // Int <> CONST = 1
+```
+
+/// admonition | Non-constant DFHDL `Int` values
+    type: note
+Non-constant DFHDL `Int` values (e.g., `Int <> VAR`) are possible and support the same arithmetic operations. However, they are discouraged for synthesizable designs because they map to a fixed 32-bit signed representation -- use `SInt[32]` instead for explicit control over the hardware. For simulation purposes, non-constant `Int` values are acceptable as long as the 32-bit width limitation is understood.
+///
+
+### History Operations {#history-ops}
+
+Applies to: `Bit` (`.rising`, `.falling`)
+
+These operations are supported under both RT and ED domains. Under RT domain, these operations are synthesizable expressions.
+
+/// html | div.operations
+| Operation    | Description                     | LHS Constraints       | Returns               |
+| ------------ | --------------------------------|-----------------------|-----------------------|
+| `lhs.rising` | True when a value changes from `0` to `1` | `Bit` DFHDL value     | `Boolean` DFHDL value |
+| `lhs.falling` | True when a value changes from `1` to `0` | `Bit` DFHDL value     | `Boolean` DFHDL value |
+///
+
+/// tab | `ED`
+
+```scala
+class Foo extends EDDesign:
+  val clk  = Bit <> IN
+
+  /* VHDL-style */
+  process(clk):
+    if (clk.rising) 
+      //some sequential logic
+
+  /* Verilog-style */
+  process(clk.rising):
+    //some sequential logic
+```
+/// details | Transitioning from Verilog
+    type: verilog
+Under the ED domain, the `x.rising` and `x.falling` operations are equivalent to the Verilog `posedge x` and `negedge x`, respectively.
+///
+
+/// details | Transitioning from VHDL
+    type: vhdl
+Under the ED domain, the `x.rising` and `x.falling` operations are equivalent to the VHDL `rising_edge(x)` and `falling_edge(x)`, respectively.
+///
+///
+
+/// tab | `RT`
+The following `RT` domain edge detection design:
+```scala
+class Detector extends RTDesign:
+  val i = Bit <> IN
+  val o = Bit <> OUT
+  o := i.rising
+```
+is compiled down to the following `ED` design (depending on the clock and reset configurations):
+```scala
+class Detector extends EDDesign:
+  val clk   = Bit <> IN
+  val i     = Bit <> IN
+  val o     = Bit <> OUT
+  val i_reg = Bit <> VAR init 1
+  process(clk.rising):
+    i_reg :== i
+  o <> !i_reg && i
+```
+The initial (reset) register value is `1`/`0` for `rising`/`falling` operations, respectively. 
+This inherently prevents triggering immediately after reset, without sampling at least two input clock cycles.
+
+Both Verilog and VHDL have no equivalent synthesizable shorthand syntax.
+///
+
+For more information see either the [design domains][design-domains] or [processes][processes] sections.
+
+### Constant Meta Operations {#const-meta-ops}
+
+Applies to: constant `Bit`/`Boolean` values
+
+These operations are activated during the [elaboration stage][elaboration] of the DFHDL compilation, and are only available for constant `Bit`/`Boolean` DFHDL values. 
+Their use case is for meta-programming purposes, to control the generated code without the knowledge of the DFHDL compiler (could be considered as pre-processing steps).
+
+/// html | div.operations
+| Operation    | Description | LHS Constraints | Returns |
+| ------------ | ----------- | ------------------- | ------- |
+| `lhs.toScalaBitNum` | Extracts the known elaboration Scala `BitNum`(`1 | 0`) value from a constant DFHDL `Bit`/`Boolean` value | Constant `Bit`/`Boolean` DFHDL value | Scala `BitNum` value |
+| `lhs.toScalaBoolean` | Extracts the known elaboration Scala `Boolean` value from a constant DFHDL `Bit`/`Boolean` value | Constant `Bit`/`Boolean` DFHDL value | Scala `Boolean` value |
+///
+
+The following runnable example demonstrates how such meta operation affect the elaborated design. 
+The `Boolean` argument `arg` of a design `Foo` is used twice within the design: 
+first, in an `if` condition directly; and second, in an `if` condition after a Scala value extraction. 
+When referenced directly, the `if` is elaborated as-is, but when the `if` is applied on the extracted Scala value, 
+the `if` is completely removed and either the block inside the `if` is elaborated when the argument is true or completely removed if false.
+
+/// tab | `Foo`
+```scala
+class Foo(
+    val arg: Boolean <> CONST
+) extends DFDesign:
+    val o = Bit <> OUT
+    if (!arg) o := 1 
+    if (arg.toScalaBoolean) o := 0
+```
+///
+
+
+/// tab | `Foo(true)`
+```scala
+class Foo(
+    val arg: Boolean <> CONST
+) extends DFDesign:
+    val o = Bit <> OUT
+    if (!arg) o := 1 
+    o := 0
+```
+///
+
+/// tab | `Foo(false)`
+```scala
+class Foo(
+    val arg: Boolean <> CONST
+) extends DFDesign:
+    val o = Bit <> OUT
+    if (!arg) o := 1 
+```
+///
+
+/// details | Runnable example
+    type: dfhdl
+```scastie
+import dfhdl.*
+
+@top(false) class Foo(
+    val arg: Boolean <> CONST
+) extends DFDesign:
+  val o = Bit <> OUT
+  if (!arg) o := 1 
+  if (arg.toScalaBoolean) o := 0
+
+@main def main = 
+  println("Foo(true) Elaboration:")
+  Foo(true).printCodeString
+  println("Foo(false) Elaboration:")
+  Foo(false).printCodeString
+```
+///
+
+### Vector Element Access {#vector-ops}
+
+Applies to: `Vector`
 
 ```scala
 val elem = vec(idx)     // Read element at index
 vec(idx) := newValue    // Write element at index
 ```
 
-#### Vector-wide Operations
-
 /// html | div.operations
 | Operation    | Description | Returns |
 | ------------ | ----------- | ------- |
+| `vec(idx)` | Access element at index | Element type |
 | `vec.elements` | Get all elements as Scala sequence | Seq[BaseType] |
 | `vec.size` | Get vector dimension | Int |
-| `vec.bits` | Get bits representation | Bits |
 ///
 
-### Multi-dimensional Vectors
+### Double Arithmetic {#double-ops}
 
-Multi-dimensional vectors are created by chaining `X` operators:
+Applies to: `Double`
 
-```scala
-// 2D 4x4 matrix of 8-bit values
-val matrix = UInt(8) X 4 X 4 <> VAR
-
-// Access elements
-val elem = matrix(row)(col)
-matrix(1)(2) := 42
-
-// Initialize 2D array
-matrix := all(all(0))  // All elements to 0
-```
-
-### Memory/RAM Implementation
-
-Vectors are commonly used to implement memories and RAMs:
-
-```scala
-class RAM extends RTDesign:
-  val addr = UInt(10) <> IN           // 10-bit address
-  val data = UInt(32) <> INOUT        // 32-bit data
-  val we   = Bit <> IN               // Write enable
-  
-  val mem = UInt(32) X 1024 <> VAR.SHARED  // 1K x 32-bit memory
-  
-  if (we) mem(addr) := data          // Write
-  data := mem(addr)                  // Read
-```
-
-### File Initialization
-
-Vectors support initialization from files in various formats:
-
-```scala
-// Initialize from hex file
-val rom = UInt(8) X 256 <> VAR initFile("rom.hex", InitFileFormat.VerilogHex)
-
-// Initialize from binary file
-val ram = UInt(32) X 1024 <> VAR initFile "ram.bin"
-```
-
-## Struct DFHDL Values {#DFStruct}
-
-DFHDL structures allow creating composite types by combining multiple DFHDL values into a single type. Structs are defined using Scala case classes that extend the `Struct` trait.
-
-### Struct Type Definition
-
-```scala
-case class MyStruct(
-  field1: UInt[8] <> VAL,
-  field2: Bits[4] <> VAL,
-  field3: Boolean <> VAL
-) extends Struct
-```
-
-### Field Access and Assignment
-
-Fields are accessed using dot notation and can be assigned individually:
-
-```scala
-val s = MyStruct <> VAR
-s.field1 := 42          // Assign to individual field
-s.field2 := b"1010"     // Assign bits
-s := MyStruct(1, b"0101", true)  // Assign whole struct
-```
-
-### Nested Structs
-
-Structs can be nested to create more complex data structures:
-
-```scala
-case class Point(x: UInt[8] <> VAL, y: UInt[8] <> VAL) extends Struct
-case class Rectangle(topLeft: Point <> VAL, bottomRight: Point <> VAL) extends Struct
-
-val rect = Rectangle <> VAR
-rect.topLeft.x := 0
-rect.bottomRight.y := 100
-```
-
-### Operations
-
-/// html | div.operations
-| Operation    | Description | LHS/RHS Constraints | Returns |
-| ------------ | ----------- | ------------------- | ------- |
-| `lhs == rhs` | Equality comparison | Same struct type | Boolean |
-| `lhs != rhs` | Inequality comparison | Same struct type | Boolean |
-| `lhs.bits` | Get raw bits representation | Struct value | Bits |
-///
-
-### Pattern Matching
-
-Structs support pattern matching for field extraction:
-
-```scala
-val point = Point <> VAR
-point match
-  case Point(x, y) if x > 10 => // Use x and y
-  case Point(0, _) => // Match x=0, any y
-```
-
-### Examples
-
-```scala
-// AXI-like interface struct
-case class AXILite(
-  addr: UInt[32] <> VAL,
-  data: Bits[64] <> VAL,
-  valid: Bit <> VAL,
-  ready: Bit <> VAL
-) extends Struct
-
-class MyDesign extends RTDesign:
-  val axi = AXILite <> OUT.REG
-  
-  // Initialize struct
-  axi := AXILite(0, all(0), 0, 1)
-  
-  // Access individual fields
-  axi.valid := 1
-  axi.data := h"DEADBEEF"
-```
-
-## Tuple DFHDL Values {#DFTuple}
-
-DFHDL tuples provide a way to group multiple DFHDL values together without defining a named structure. They are similar to Scala tuples but operate on DFHDL values.
-
-### Tuple Type Construction
-
-```scala
-val tuple = (Type1, Type2, ..., TypeN) <> Modifier
-```
-
-### Examples
-
-```scala
-// Basic tuple declaration
-val pair = (UInt(8), Bit) <> VAR
-
-// Nested tuples
-val complex = ((UInt(8), Bit), Bits(4)) <> VAR
-
-// Assignment
-pair := (42, 1)
-complex := ((100, 0), b"1010")
-```
-
-### Element Access
-
-Tuple elements can be accessed using ._N notation or pattern matching:
-
-```scala
-val first = pair._1    // Access first element
-val second = pair._2   // Access second element
-
-// Pattern matching
-val (x, y) = pair
-```
-
-### Operations
-
-/// html | div.operations
-| Operation    | Description | Returns |
-| ------------ | ----------- | ------- |
-| `tuple.bits` | Get bits representation | Bits |
-| `tuple == other` | Equality comparison | Boolean |
-| `tuple != other` | Inequality comparison | Boolean |
-///
-
-## Opaque DFHDL Values {#DFOpaque}
-
-Opaque types allow creating new DFHDL types that wrap existing types while hiding their internal representation. This is useful for creating abstraction layers and type-safe interfaces.
-
-### Opaque Type Definition
-
-```scala
-// Define opaque type wrapping UInt(8)
-case class MyOpaque() extends Opaque(UInt(8))
-
-// Define opaque type with custom operations
-case class Counter() extends Opaque(UInt(32)):
-  extension (c: Counter <> VAL)
-    def increment: Counter <> DFRET = 
-      (c.actual + 1).as(Counter)
-```
-
-### Usage
-
-```scala
-val op = MyOpaque <> VAR
-val wrapped: UInt[8] <> VAL = op.actual  // Access wrapped value
-op := 42.as(MyOpaque)  // Assign using .as conversion
-```
-
-### Examples
-
-```scala
-// AES byte type with custom operations
-case class AESByte() extends Opaque(UInt(8)):
-  extension (lhs: AESByte <> VAL)
-    def +(rhs: AESByte <> VAL): AESByte <> DFRET =
-      (lhs.actual ^ rhs.actual).as(AESByte)
-
-class AESCircuit extends DFDesign:
-  val in1 = AESByte <> IN
-  val in2 = AESByte <> IN
-  val out = AESByte <> OUT
-  
-  out := in1 + in2  // Uses custom + operation
-```
-
-## Double DFHDL Values {#DFDouble}
-
-DFHDL Double values represent IEEE-754 double-precision floating-point numbers.
-
-### Type Construction
-
-```scala
-val d = Double <> Modifier
-```
-
-### Operations
-
-Supports standard arithmetic operations:
+Supports standard arithmetic and comparison operations:
 
 ```scala
 val d1 = Double <> VAR
@@ -1946,116 +2028,3 @@ val quot = d1 / d2
 val comp = d1 < d2
 ```
 
-### Conversion
-
-```scala
-val bits = d1.bits        // Get bits representation
-val d3 = bits.as(Double)  // Convert back to Double
-```
-
-## Time/Freq DFHDL Values {#DFPhysical}
-
-DFHDL provides special types for representing time and frequency values in hardware designs through physical units. These types help ensure correct timing specifications and frequency calculations.
-
-### Time Values
-
-Time values can be created using various unit suffixes:
-
-```scala
-// Time unit constructors
-val t1 = 1.fs     // Femtoseconds
-val t2 = 1.ps     // Picoseconds
-val t3 = 1.ns     // Nanoseconds
-val t4 = 1.us     // Microseconds
-val t5 = 1.ms     // Milliseconds
-val t6 = 1.sec    // Seconds
-val t7 = 1.mn     // Minutes
-val t8 = 1.hr     // Hours
-```
-
-Both integer and floating-point values can be used with time units:
-```scala
-val t9 = 1.5.ns   // 1.5 nanoseconds
-val t10 = 10.ms   // 10 milliseconds
-```
-
-### Frequency Values
-
-Frequency values can be specified using standard frequency units:
-
-```scala
-// Frequency unit constructors
-val f1 = 1.Hz     // Hertz
-val f2 = 1.KHz    // Kilohertz
-val f3 = 1.MHz    // Megahertz
-val f4 = 1.GHz    // Gigahertz
-```
-
-Like time values, both integer and floating-point values are supported:
-```scala
-val f5 = 100.MHz  // 100 megahertz
-val f6 = 2.5.GHz  // 2.5 gigahertz
-```
-
-### Usage in RT Domains
-
-Physical values are particularly useful when configuring RT domains and specifying clock frequencies:
-
-```scala
-class TimingExample extends RTDesign:
-  // Clock configuration with 100MHz frequency
-  val clkCfg = ClkCfg(
-    edge = ClkCfg.Edge.Rising,
-    rate = 100.MHz,
-    portName = "clk"
-  )
-  
-  // Timing calculations
-  val period = 10.ns      // Clock period
-  val setupTime = 1.ns    // Setup time requirement
-  val clockFreq = 1.GHz   // Clock frequency
-```
-
-### Cycles in RT Domain
-
-In RT domains, you can also specify cycle counts using the `.cy` unit:
-
-```scala
-class RTExample extends RTDesign:
-  val delay = 5.cy    // 5 clock cycles delay
-```
-
-Note: The `.cy` unit is only available within register-transfer (RT) domains.
-
-## Unit (Void) DFHDL Values {#DFUnit}
-
-The Unit type in DFHDL represents a void or no-value type, similar to Scala's Unit type. It's typically used when an operation doesn't need to return a meaningful value.
-
-### Usage
-
-```scala
-// Method returning Unit
-def doSomething: Unit <> DFRET =
-  // Perform operations without returning value
-  ()
-
-// Assignment that produces no value
-val x = Bit <> VAR
-val y: Unit <> VAL = x := 1
-```
-
-### Common Use Cases
-
-1. Side-effect operations
-2. Void method returns
-3. Assignment results
-4. Process bodies in event-driven designs
-
-```scala
-class Example extends EDDesign:
-  val clk = Bit <> IN
-  
-  process(clk.rising):
-    // Process body returns Unit
-    doSomething
-```
