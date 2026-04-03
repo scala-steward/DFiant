@@ -481,21 +481,21 @@ Verilog's ternary operator `cond ? a : b` has three DFHDL equivalents:
 <div class="grid" markdown>
 
 ```sv linenums="0" title="Verilog"
-assign out = sel ? a : b;
+assign out = cond ? a : b;
 
 always @(*)
-  out = sel ? a : b;
+  out = cond ? a : b;
 ```
 
 ```scala linenums="0" title="DFHDL"
 // 1. Using .sel (closest to ternary)
-out <> sel.sel(a, b)
+out <> cond.sel(a, b)
 
 // 2. Inline if/else (wrap in parentheses)
-out <> (if (sel) a else b)
+out <> (if (cond) a else b)
 
 // 3. Statement form
-if (sel) out := a
+if (cond) out := a
 else out := b
 ```
 
