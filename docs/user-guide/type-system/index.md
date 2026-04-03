@@ -1669,6 +1669,19 @@ s8 := s4.extend       // sign-extend to match s8's width
 s4 := s8.resize(4)    // truncate to 4 bits
 ```
 
+/// admonition | `.truncate` is not `.resize(N)` -- do not pass an argument to `.truncate`
+    type: warning
+`.truncate` (no argument) narrows the width to match the assignment context. There is no `.truncate(N)` method. Writing `expr.truncate(N)` is parsed by Scala as `expr.truncate` followed by `(N)`, which applies bit selection on the truncated result -- selecting a single bit at index `N`. This causes confusing errors like "argument must be smaller than the upper-bound". To keep the lowest `N` bits, use `.resize(N)`:
+
+```scala
+val b8 = Bits(8) <> VAR
+val b4 = Bits(4) <> VAR
+b4 := b8.truncate     // OK: auto-narrow from 8 to 4 bits
+b4 := b8.resize(4)    // OK: explicit narrow to 4 bits
+// b8.truncate(4)     // MISLEADING: this is b8.truncate followed by bit-select (4)
+```
+///
+
 ### Bit Concatenation {#bit-concat}
 
 Applies to: `Bits`, `UInt`, `SInt`
@@ -1759,6 +1772,41 @@ Under the ED domain, the following operations are equivalent:
 | `lhs || rhs`    | `lhs or rhs`      |
 | `lhs ^ rhs`     | `lhs xor rhs`     |
 | `!lhs`          | `not lhs`         |
+///
+
+### Bit Reduction Operations (`.&`, `.|`, `.^`) {#reduction-ops}
+
+Applies to: `Bits`, `UInt` (via implicit conversion to `Bits`)
+
+Reduction operators fold all bits of a `Bits` vector into a single `Bit` value. They are the DFHDL equivalents of Verilog's unary reduction operators (`&v`, `|v`, `^v`):
+
+/// html | div.operations
+| Operation | Description | Returns |
+| --------- | ----------- | ------- |
+| `bits.&` | AND reduction -- `1` if all bits are `1` | `Bit` |
+| `bits.|` | OR reduction -- `1` if any bit is `1` | `Bit` |
+| `bits.^` | XOR reduction -- `1` if an odd number of bits are `1` (parity) | `Bit` |
+///
+
+```scala
+val b8 = Bits(8) <> VAR
+val allSet   = b8.&    // Bit: 1 when all bits are 1
+val anySet   = b8.|    // Bit: 1 when at least one bit is 1
+val parity   = b8.^    // Bit: 1 when odd number of bits are 1
+```
+
+/// details | Transitioning from Verilog
+    type: verilog
+
+| Verilog | DFHDL | Notes |
+|---------|-------|-------|
+| `&v` (AND reduce) | `v.&` | All bits must be `1` |
+| `|v` (OR reduce) | `v.|` | At least one bit is `1` |
+| `^v` (XOR reduce) | `v.^` | Parity (odd number of `1`s) |
+| `~&v` (NAND reduce) | `!v.&` | Not all bits are `1` |
+| `~|v` (NOR reduce) | `!v.|` | No bits are `1` |
+| `~^v` (XNOR reduce) | `!v.^` | Even parity |
+
 ///
 
 ### Selection (`.sel`) {#sel-ops}
@@ -1968,7 +2016,7 @@ Unlike standard arithmetic where `SInt op UInt` is allowed (the unsigned RHS is 
 
 ### Comparison Operations (`==`, `!=`, `<`, `>`, `<=`, `>=`) {#comparison-ops}
 
-Applies to: `UInt`, `SInt`, `Int`, `Double` (all comparisons); `Enum`, `Struct`, `Tuple` (`==`/`!=` only)
+Applies to: `UInt`, `SInt`, `Int`, `Double` (all comparisons); `Bits`, `Enum`, `Struct`, `Tuple` (`==`/`!=` only)
 
 #### Decimal Comparisons
 
@@ -2025,6 +2073,23 @@ if (counter == LIMIT - 1)  // Int <> CONST compared with UInt -- works directly
   counter := 0
 ```
 ///
+
+#### Bits Comparisons
+
+`Bits` values support `==` and `!=` with other `Bits` values of the same width, with `all(0)`, `all(1)`, or with sized literals (`d"..."`, `h"..."`, `b"..."`). Plain Scala `Int` literals cannot be compared directly with `Bits` -- use a sized literal or convert to `.uint` first:
+
+```scala
+val b8 = Bits(8) <> VAR
+val isAllOnes  = b8 == all(1)      // Boolean: all bits are 1
+val isAllZeros = b8 == all(0)      // Boolean: all bits are 0
+val isMatch    = b8 == h"B0"       // Boolean: exact match with hex literal
+val isDec      = b8 == d"8'12"     // Boolean: match with sized decimal
+
+// ERROR: An integer value cannot be a candidate for a Bits type.
+// val bad = b8 == 0
+// FIX: use all(0), a sized literal, or convert to UInt first:
+// b8 == all(0)  OR  b8 == d"8'0"  OR  b8.uint == 0
+```
 
 #### Enum, Struct, and Tuple Comparisons
 

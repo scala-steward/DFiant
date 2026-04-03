@@ -178,6 +178,11 @@ val cnt = UInt.to(SCALE) <> VAR init 0
 
 </div>
 
+/// admonition | Choosing `.until(N)` vs `.to(N)` for counters
+    type: warning
+If the Verilog counter resets *when it reaches* `N` (i.e., `counter == N`), the variable must be able to hold the value `N`, so use `UInt.to(N)`. If the counter only ever holds values `0..N-1`, use `UInt.until(N)`. For many values of `N`, both produce the same bit width (`clog2(N) == clog2(N+1)`), so the bug is silent until formal verification catches an out-of-range comparison.
+///
+
 See [UInt/SInt constructors][DFDecimal] and [Bits constructors][DFBits] for details. See also the [`clog2` anti-pattern warning][int-param-ops].
 ///
 
@@ -320,7 +325,49 @@ process(clk):
 
 </div>
 
-If the encoded Verilog state values have no standard pattern (incremental, gray, one-hot), use `Encoded.Manual` (see [Enumeration][DFEnum]). Avoid modeling FSM states as `Bits` or `UInt` constants, it's an anti-pattern. When compiling to SystemVerilog (SV), the SV enums are being utilized as well.
+If the encoded Verilog state values follow a standard pattern (incremental, gray, one-hot), use the corresponding `Encoded` variant. For non-standard encodings, use `Encoded.Manual` with a constructor parameter:
+
+```scala
+// Verilog: parameter INIT=3'b000, RUN=3'b011, DONE=3'b101, ERR=3'b110;
+enum Phase(val value: UInt[3] <> CONST) extends Encoded.Manual(3):
+  case Init extends Phase(0)
+  case Run  extends Phase(3)
+  case Done extends Phase(5)
+  case Err  extends Phase(6)
+```
+
+The constructor parameter `(val value: UInt[N] <> CONST)` is required for `Encoded.Manual` and the bit width `N` must match the argument to `Encoded.Manual(N)`. Omitting it causes a compile error. See [Enumeration][DFEnum] for all encoding options.
+
+Avoid modeling FSM states as `Bits` or `UInt` constants -- it is an anti-pattern. When compiling to SystemVerilog (SV), the SV enums are being utilized as well.
+///
+
+/// admonition | Integer `case` Statements (non-enum)
+    type: verilog
+When the Verilog `case` selector is a plain integer counter (not an FSM), use `match` with integer literal cases directly:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+case (sel)
+  'd0: out <= 60;
+  'd1: out <= 110;
+  'd2 | 'd3: out <= 200;
+  default: out <= 0;
+endcase
+```
+
+```scala linenums="0" title="DFHDL"
+sel match
+  case 0     => out :== 60
+  case 1     => out :== 110
+  case 2 | 3 => out :== 200
+  case _     => out :== 0
+end match
+```
+
+</div>
+
+Integer literal pattern matching works with `UInt` and `SInt` selectors. Guard conditions (`case _ if sel == N`) also work but are less idiomatic. See [Match Expressions][match-expressions] for full details.
 ///
 
 ## Operations
@@ -383,6 +430,89 @@ o3 <> a.bool || b || c
 </div>
 
 See [Logical Operations][logical-ops] for the full reference and Verilog/VHDL mapping tables.
+///
+
+/// admonition | Reduction Operators (`&v`, `|v`, `^v`)
+    type: verilog
+Verilog's unary reduction operators have direct DFHDL equivalents using postfix `.&`, `.|`, `.^` on `Bits` values:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+logic [7:0] v;
+logic all_set  = &v;    // AND reduce
+logic any_set  = |v;    // OR reduce
+logic parity   = ^v;    // XOR reduce
+logic not_all  = ~&v;   // NAND reduce
+logic none_set = ~|v;   // NOR reduce
+```
+
+```scala linenums="0" title="DFHDL"
+val v = Bits(8) <> VAR
+val all_set  = v.&     // Bit: AND reduce
+val any_set  = v.|     // Bit: OR reduce
+val parity   = v.^     // Bit: XOR reduce
+val not_all  = !v.&    // Bit: NAND reduce
+val none_set = !v.|    // Bit: NOR reduce
+```
+
+</div>
+
+See [Bit Reduction Operations][reduction-ops] for full details.
+///
+
+/// admonition | Part-Select Notation (`-:` and `+:`)
+    type: verilog
+Verilog's descending and ascending part-select notation maps to DFHDL's `(hi, lo)` range slice, or use the convenience methods `.msbits(n)` and `.lsbits(n)`:
+
+| Verilog | DFHDL | Notes |
+|---------|-------|-------|
+| `sig[base -: W]` | `sig(base, base - W + 1)` | Descending slice from `base`, `W` bits |
+| `sig[base +: W]` | `sig(base + W - 1, base)` | Ascending slice from `base`, `W` bits |
+| `sig[N-1 -: W]` | `sig.msbits(W)` or `sig(N-1, N-W)` | Top `W` bits |
+| `sig[0 +: W]` | `sig.lsbits(W)` or `sig(W-1, 0)` | Bottom `W` bits |
+| `sig[idx]` | `sig(idx)` | Single bit access |
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+logic [15:0] data;
+logic [3:0] top4  = data[15 -: 4];
+logic [3:0] bot4  = data[0  +: 4];
+logic       bit5  = data[5];
+```
+
+```scala linenums="0" title="DFHDL"
+val data = Bits(16) <> VAR
+val top4 = data.msbits(4)  // top 4 bits
+val bot4 = data.lsbits(4)  // bottom 4 bits
+val bit5 = data(5)         // single bit
+```
+
+</div>
+///
+
+/// admonition | Arithmetic with Signed Values and Constants
+    type: verilog
+DFHDL arithmetic requires the LHS to be at least as wide as the RHS and to have compatible sign. A plain Scala `Int` literal is unsigned, so it cannot appear on the LHS of arithmetic with `SInt`. The best practice is to use **sized signed literals** (`sd"W'value"`) with the target operation width:
+
+```scala
+// Verilog: y <= 2 * mul_val + y0;   (all signed, 16-bit)
+// ERROR: plain 2 is unsigned
+y :== 2 * mul_val + y0
+// CORRECT: use a sized signed literal
+y :== sd"16'2" * mul_val + y0
+
+// Verilog: err <= 2 - (2 * r0);    (signed, 18-bit result)
+// ERROR: sd"2" is SInt[3], narrower than RHS
+err :== sd"2" - (r0.resize(CORDW + 2) * 2)
+// CORRECT: match the LHS width to the operation width
+err :== sd"${CORDW + 2}'2" - (r0.resize(CORDW + 2) * 2)
+```
+
+The general rule: the **wider** operand must be on the LHS, and when mixing constants with signed DFHDL values, use `sd"W'value"` with the appropriate width `W`.
+
+See [Arithmetic Operations][arithmetic-ops] and [Carry Arithmetic][carry-ops] for full details.
 ///
 
 ## Parametric Constants
