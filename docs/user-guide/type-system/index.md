@@ -1852,6 +1852,52 @@ val t1 = 1 max param    // Int <> CONST = 2
 val t2 = 1 min param    // Int <> CONST = 1
 ```
 
+### Physical Arithmetic (`Time`, `Freq`) {#physical-ops}
+
+Applies to: `Time`, `Freq`
+
+Physical types follow dimensional analysis rules. Operations between `Time` and `Freq` produce dimensionally correct results.
+
+/// html | div.operations
+| Operation | LHS | RHS | Returns |
+| --------- | --- | --- | ------- |
+| `lhs + rhs` | `Time` | `Time` | `Time` |
+| `lhs - rhs` | `Time` | `Time` | `Time` |
+| `lhs * rhs` | `Time` | Number | `Time` |
+| `lhs * rhs` | `Freq` | Number | `Freq` |
+| `lhs * rhs` | `Time` | `Freq` | Number |
+| `lhs * rhs` | `Freq` | `Time` | Number |
+| `lhs / rhs` | `Time` | Number | `Time` |
+| `lhs / rhs` | `Freq` | Number | `Freq` |
+| `lhs / rhs` | `Time` | `Time` | Number |
+| `lhs / rhs` | `Freq` | `Freq` | Number |
+| `lhs / rhs` | Number | `Time` | `Freq` |
+| `lhs / rhs` | Number | `Freq` | `Time` |
+///
+
+```scala
+val period = 10.ns
+val freq   = 100.MHz
+
+// Scaling
+val half_period = period / 2       // Time: 5 ns
+val double_freq = freq * 2         // Freq: 200 MHz
+
+// Dimensional conversions
+val cycles = period * freq         // Number: 1.0
+val calc_freq = 1 / period         // Freq: 100 MHz
+val calc_period = 1 / freq         // Time: 10 ns
+```
+
+/// admonition | Cycle-based waits in RT domains
+    type: tip
+The `.cy` unit creates cycle-count values for use with `.wait` in register-transfer domains:
+```scala
+class Example extends RTDesign:
+  5.cy.wait        // wait 5 clock cycles
+```
+///
+
 ### `Int` Parameter Operations (`**`, `clog2`) {#int-param-ops}
 
 Applies to: `Int` (constant parameters)
