@@ -338,6 +338,40 @@ enum Phase(val value: UInt[3] <> CONST) extends Encoded.Manual(3):
 
 The constructor parameter `(val value: UInt[N] <> CONST)` is required for `Encoded.Manual` and the bit width `N` must match the argument to `Encoded.Manual(N)`. Omitting it causes a compile error. See [Enumeration][DFEnum] for all encoding options.
 
+When the Verilog FSM uses an explicit reset instead of `initial`, omit the `init` and handle reset inside the clocked process:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+always @(posedge clk)
+  if (rst)
+    state <= READY;
+  else
+    case (state)
+      READY:   if (go) state <= AIM;
+      AIM:     state <= FIRE;
+      FIRE:    state <= READY;
+      default: state <= READY;
+    endcase
+```
+
+```scala linenums="0" title="DFHDL"
+val state = State <> VAR  // no init
+
+process(clk):
+  if (clk.rising)
+    if (rst)
+      state :== Ready
+    else
+      state match
+        case Ready => if (go) state :== Aim
+        case Aim   => state :== Fire
+        case Fire  => state :== Ready
+        case _     => state :== Ready
+```
+
+</div>
+
 Avoid modeling FSM states as `Bits` or `UInt` constants -- it is an anti-pattern. When compiling to SystemVerilog (SV), the SV enums are being utilized as well.
 ///
 
