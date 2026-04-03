@@ -1267,9 +1267,25 @@ val e2 = u4 + u8
 val e3 = u8 + (-22)
 ```
 
-/// admonition | Overflow behavior
+/// admonition | Overflow and automatic carry promotion
     type: warning
 Standard arithmetic operations wrap on overflow. For example, `d"8'255" + d"8'1"` produces `d"8'0"`. Use the carry variants (`+^`, `-^`, `*^`) described below to get a wider result that preserves the full value.
+
+However, when an **anonymous** arithmetic expression (`+`, `-`, `*`) is assigned or connected to a variable that is **wider** than the operation's result, the operation is **automatically promoted** to a carry operation. This matches Verilog's behavior where the assignment target width determines the operation width. The carry result is then resized to fit the target if needed.
+
+```scala
+val u8  = UInt(8) <> VAR
+val u9  = UInt(9) <> VAR
+val u12 = UInt(12) <> VAR
+val u16 = UInt(16) <> VAR
+u9  := u8 + u8   // promoted to carry addition (width 9), exact fit
+u16 := u8 * u8   // promoted to carry multiplication (width 16), exact fit
+u12 := u8 * u8   // promoted to carry multiplication (width 16), resized to 12
+
+// Named expressions are NOT promoted:
+val sum = u8 + u8  // UInt[8], named value
+u9 := sum          // resized from 8 to 9, no carry promotion
+```
 ///
 
 #### Carry Operations (`+^`, `-^`, `*^`)

@@ -598,6 +598,56 @@ class DFDecimalSpec extends DFSpec:
       """u8 % d"9'22""""
     )
   }
+  test("Arithmetic auto-carry promotion") {
+    val u8 = UInt(8) <> VAR
+    val u5 = UInt(5) <> VAR
+    val s8 = SInt(8) <> VAR
+    val u8b = UInt(8) <> VAR
+    val u9 = UInt(9) <> VAR
+    val u10 = UInt(10) <> VAR
+    val u12 = UInt(12) <> VAR
+    val u16 = UInt(16) <> VAR
+    val s9 = SInt(9) <> VAR
+    assertCodeString {
+      """|u9 := u8 +^ u8
+         |u9 := u8 -^ u8
+         |u16 := u8 *^ u8
+         |u10 := (u8 +^ u8).resize(10)
+         |u8b := u8 + u8
+         |val sum = u8 + u8
+         |u9 := sum.resize(9)
+         |s9 := s8 +^ s8
+         |u9 := (u8 / u8).resize(9)
+         |u9 := u8 +^ u5.resize(8)
+         |u9 := u8 +^ d"8'200"
+         |u12 := (u8 *^ u8).resize(12)
+         |""".stripMargin
+    } {
+      // Basic carry promotion for +
+      u9 := u8 + u8
+      // Basic carry promotion for -
+      u9 := u8 - u8
+      // Basic carry promotion for *
+      u16 := u8 * u8
+      // Target wider than carry width: promote to 9, resize to 10
+      u10 := u8 + u8
+      // Target = func width: no promotion
+      u8b := u8 + u8
+      // Named value: no promotion
+      val sum = u8 + u8
+      u9 := sum
+      // SInt version
+      s9 := s8 + s8
+      // Division: no carry variant, normal resize
+      u9 := u8 / u8
+      // Asymmetric widths: u8 + u5 → func width 8, carry = 9
+      u9 := u8 + u5
+      // Int literal: 200 is 8 bits, carry width = 9
+      u9 := u8 + 200
+      // Partial mul promotion: target (12) > funcWidth (8), promote to 16, resize to 12
+      u12 := u8 * u8
+    }
+  }
   test("Int32 arithmetic") {
     val param: Int <> CONST = 2
     val t1 = 1 + param

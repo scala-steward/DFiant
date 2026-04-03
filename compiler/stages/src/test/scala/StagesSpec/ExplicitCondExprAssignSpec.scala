@@ -84,7 +84,7 @@ class ExplicitCondExprAssignSpec extends StageSpec(stageCreatesUnrefAnons = true
          |          case sd"16'1" => sd"4'5"
          |          case sd"16'2" => sd"4'3"
          |        end match
-         |      if (x < sd"16'11") z2 := (zz + sd"4'3").resize(16)
+         |      if (x < sd"16'11") z2 := (zz +^ sd"4'3").resize(16)
          |      else z2 := zz.resize(16)
          |    case _ => z2 := z + sd"16'12"
          |  end match

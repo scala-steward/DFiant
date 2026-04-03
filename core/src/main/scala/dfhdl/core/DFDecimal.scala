@@ -978,16 +978,38 @@ object DFXInt:
                 if (dfType.signed != lhsSigned && !lhs.dfType.asIR.isDFInt32)
                   lhs.asValOf[DFUInt[Int]].signed.asValOf[DFSInt[Int]]
                 else lhs.asValOf[DFSInt[Int]]
-              val nativeTypeChanged = dfType.nativeType != lhs.dfType.nativeType
+              // Auto-promote anonymous +/-/* to carry when target is wide enough
+              import IntParam.+
+              val funcWidth = lhsSignFix.widthIntParam
+              val lhsCarryPromo: DFValOf[DFSInt[Int]] =
+                lhsSignFix.asIR match
+                  case func @ ir.DFVal.Func(
+                        dfType = dt: ir.DFDecimal,
+                        op = op @ (FuncOp.+ | FuncOp.- | FuncOp.*)
+                      )
+                      if func.isAnonymous && !dt.isDFInt32 && dfType.widthInt > func.width =>
+                    val cw: IntParam[Int] = func.op.runtimeChecked match
+                      case FuncOp.+ | FuncOp.- => funcWidth + 1
+                      case FuncOp.*            => funcWidth + funcWidth
+                    val newDT = dt.copy(widthParamRef = cw.ref)
+                    dfc.mutableDB
+                      .setMember(func, _.updateDFType(newDT))
+                      .asValOf[DFSInt[Int]]
+                  case _ => lhsSignFix
+              val nativeTypeChanged = dfType.nativeType != lhsCarryPromo.dfType.nativeType
               if (nativeTypeChanged)
                 dfType.asIR.nativeType match
                   case Int32 =>
-                    lhsSignFix.toInt.asIR
+                    lhsCarryPromo.toInt.asIR
                   case BitAccurate =>
-                    DFVal.Alias.AsIs(dfType, lhsSignFix).asIR
-              else if (!dfType.asIR.widthParamRef.isSimilarTo(lhsSignFix.dfType.asIR.widthParamRef))
-                lhsSignFix.resize(dfType.widthIntParam).asIR
-              else lhsSignFix.asIR
+                    DFVal.Alias.AsIs(dfType, lhsCarryPromo).asIR
+              else if (
+                !dfType.asIR.widthParamRef.isSimilarTo(
+                  lhsCarryPromo.dfType.asIR.widthParamRef
+                )
+              )
+                lhsCarryPromo.resize(dfType.widthIntParam).asIR
+              else lhsCarryPromo.asIR
               end if
             end if
           end dfValIR
@@ -1045,7 +1067,8 @@ object DFXInt:
       end arithOp
 
       type ArithOp =
-        FuncOp.+.type | FuncOp.-.type | FuncOp.*.type | FuncOp./.type | FuncOp.%.type | FuncOp.max.type | FuncOp.min.type
+        FuncOp.+.type | FuncOp.-.type | FuncOp.*.type | FuncOp./.type | FuncOp.%.type |
+          FuncOp.max.type | FuncOp.min.type
       given evOpArithIntDFInt32[
           Op <: ArithOp,
           L <: Int,
