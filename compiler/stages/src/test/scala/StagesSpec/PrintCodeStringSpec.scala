@@ -1702,4 +1702,20 @@ class PrintCodeStringSpec extends StageSpec:
          |end Foo""".stripMargin
     )
   }
+
+  test("parameterized selection") {
+    class Foo extends DFDesign:
+      val LEN: Int <> CONST = 8
+      val v                 = Bits(LEN) <> VAR
+      val o                 = v(LEN - 2, 0)
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|class Foo extends DFDesign:
+         |  val LEN: Int <> CONST = 8
+         |  val v = Bits(LEN) <> VAR
+         |  val o = v(LEN - 2, 0)
+         |end Foo""".stripMargin
+    )
+  }
 end PrintCodeStringSpec

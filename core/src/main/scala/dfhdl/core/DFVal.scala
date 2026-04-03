@@ -775,8 +775,13 @@ object DFVal extends DFValLP:
                   if (prevLHSArg.isAnonymous) Some(prevLHSArg.setMeta(_ => dfc.getMeta))
                   else Some(prevLHSArg)
                 else
-                  dfc.mutableDB.setMember(prevRHSArg, _.copy(data = Some(newRHSData)))
-                  Some(dfc.mutableDB.setMember(prevFunc, _.copy(meta = dfc.getMeta)))
+                  // Clone prevFunc to avoid destructively modifying shared IR nodes
+                  val clonedFunc = prevFunc.cloneAnonValueAndDepsHere
+                    .asInstanceOf[ir.DFVal.Func]
+                  val clonedRHSArg = clonedFunc.args.last.get
+                    .asInstanceOf[ir.DFVal.Const]
+                  dfc.mutableDB.setMember(clonedRHSArg, _.copy(data = Some(newRHSData)))
+                  Some(dfc.mutableDB.setMember(clonedFunc, _.copy(meta = dfc.getMeta)))
               case _ => None
             end match
           case _ => None
