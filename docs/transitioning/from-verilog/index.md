@@ -385,6 +385,40 @@ o3 <> a.bool || b || c
 See [Logical Operations][logical-ops] for the full reference and Verilog/VHDL mapping tables.
 ///
 
+## Parametric Constants
+
+/// admonition | Parametric-Width Bits Constants
+    type: verilog
+Verilog parameters can be bit-vector constants whose width depends on another parameter. In DFHDL, use `Bits[Int] <> CONST` (unbounded width) for the parameter. The width is inferred from the default literal value, and other local values can derive their widths from it:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+module MyDesign #(
+    parameter WIDTH = 8,
+    parameter [WIDTH-1:0] MASK = 8'hB8
+)(
+    output logic [WIDTH-1:0] data
+);
+  // ...
+endmodule
+```
+
+```scala linenums="0" title="DFHDL"
+class MyDesign(
+    val WIDTH: Int <> CONST = 8,
+    val MASK:  Bits[Int] <> CONST = h"B8"
+) extends EDDesign:
+  // MASK.width gives the actual width
+  val data = Bits(MASK.width) <> OUT
+  // ...
+```
+
+</div>
+
+See the [Parameter Declarations](#parameter-declarations) section above for a complete inter-dependent parameters example.
+///
+
 ## Common Pitfalls
 
 /// admonition | Scala Reserved Keywords as DFHDL Port or Variable Names
@@ -483,5 +517,22 @@ else out := b
 </div>
 
 The `.sel` method compiles directly to Verilog's ternary operator. For complex nested conditions, prefer `if`/`else` or `match` over chaining `.sel` calls. See [Selection (.sel)][sel-ops] for details.
+
+When using inline `if`/`else` as the RHS of `:=` or `:==`, **parentheses are required**. Without them, Scala 3 parses the `if` as a statement, not an expression:
+
+```scala
+// CORRECT: parenthesized inline if with := and <>
+out := (if (cond) a else b)
+out <> (if (cond) a else b)
+
+// PARSE ERROR: bare inline if on RHS of := or <>
+// out := if (cond) a else b  // "end of statement expected"
+
+// CORRECT: statement form (no parentheses needed)
+if (cond) out := a
+else out := b
+```
+
+This applies to all assignment operators (`:=`, `:==`, `<>`). Use `.sel` or the parenthesized form for inline conditionals; use the statement form for multi-assignment branches.
 ///
 

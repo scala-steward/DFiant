@@ -1635,6 +1635,13 @@ process(clk):
   if (clk.rising)
     data(pos) :== din        // dynamic write
 ```
+
+When the index variable is wider than needed, use `.truncate` to automatically narrow it to the required width:
+```scala
+val data    = Bits(8) <> VAR init all(0)
+val pos     = UInt(4) <> VAR init 0  // 4-bit, but Bits(8) needs UInt(3)
+val bit_out = data(pos.truncate)     // .truncate narrows to UInt(3) automatically
+```
 ///
 
 ### Width Adjustment {#width-adjustment}
@@ -2168,6 +2175,11 @@ See the [DFType Constructors][DFDecimal] and [Bits constructors][DFBits] section
 /// admonition | Non-constant DFHDL `Int` values
     type: note
 Non-constant DFHDL `Int` values (e.g., `Int <> VAR`) are possible and support the same arithmetic operations (`+`, `-`, `*`, `/`, `%`). However, they are discouraged for synthesizable designs because they map to a fixed 32-bit signed representation -- use `SInt[32]` instead for explicit control over the hardware. For simulation purposes, non-constant `Int` values are acceptable as long as the 32-bit width limitation is understood.
+///
+
+/// admonition | Slicing bits from a DFHDL `Int`
+    type: note
+To extract a partial bit range from a DFHDL `Int` value, first convert it to `Bits` using `.bits`, then apply the slice: `myInt.bits(hi, lo)`. This is a `.bits` conversion followed by `(hi, lo)` slicing. The `.bits` conversion is a DFHDL extension method available on DFHDL `Int <> CONST` values, not on plain Scala `Int`.
 ///
 
 ### History Operations {#history-ops}
