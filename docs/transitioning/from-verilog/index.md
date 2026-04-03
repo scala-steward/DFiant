@@ -60,32 +60,41 @@ parameter [7:0] p = 8’b1011;
 ```scala linenums="0" title="DFHDL"
 val p: Bits[8] <> CONST = b"8'1011"
 ```
+</div>
+
+Inter-dependent parameters and ports example:
+
+<div class="grid" markdown>
 
 ```sv linenums="0" title="Verilog"
-module Concat #(
-  parameter  int len1;
-  parameter  int len2;
-  localparam int outlen = len1 + len2
-) (
-  input  [len1-1:0]   i1;
-  input  [len2-1:0]   i2;
-  output [outlen-1:0] o
+module Concat#(
+    parameter int len1 = 8,
+    parameter int len2 = 8,
+    parameter logic [7:0] midVec = 8'h55
+)(
+  input  wire logic [len1 - 1:0]   i1,
+  input  wire logic [len2 - 1:0]   i2,
+  output      logic [outlen - 1:0] o
 );
-  assign o = {i1, i2};
+  localparam int midLen = 8;
+  localparam int outlen = len1 + midLen + len2;
+  assign o = {i1, midVec, i2};
 endmodule
 ```
 
 ```scala linenums="0" title="DFHDL"
 class Concat(
-    val len1: Int <> CONST
-    val len2: Int <> CONST
+    val len1: Int <> CONST = 8,
+    val len2: Int <> CONST = 8,
+    val midVec: Bits[Int] <> CONST = h"55"
 ) extends EDDesign:
-  val outlen = len1 + len2
-  val i1 = Bits(len1)   <> IN
-  val i2 = Bits(len2)   <> IN
-  val o  = Bits(outlen) <> OUT
-  
-  o <> (i1, i2)
+  val midLen = midVec.width
+  val outlen = len1 + midLen + len2
+  val i1 = Bits(len1) <> IN
+  val i2 = Bits(len2) <> IN
+  val o = Bits(outlen) <> OUT
+
+  o <> (i1, midVec, i2)
 end Concat
 ```
 
@@ -530,30 +539,3 @@ err :== (-(r0_wide + r0_wide) + sd"2").truncate
 
 See [Arithmetic type constraints][arithmetic-ops] for the sign and width rules.
 ///
-
-/// admonition | Parametric Bit-Vector Constants
-    type: verilog
-DFHDL does not support `Bits` CONST parameters whose width depends on another parameter. Use `Int <> CONST` and extract bits internally:
-
-<div class="grid" markdown>
-
-```sv linenums="0" title="Verilog"
-parameter LEN=8;
-parameter TAPS=8'b10111000;
-// TAPS width depends on LEN
-```
-
-```scala linenums="0" title="DFHDL"
-val LEN:  Int <> CONST = 8
-val TAPS: Int <> CONST = 0xB8
-
-// Extract bits internally
-val taps_b = Bits(LEN) <> VAR
-taps_b <> TAPS.bits(LEN-1, 0)
-```
-
-</div>
-
-Note: `.bits(hi, lo)` is an extension method on `Int <> CONST` DFHDL values. It does **not** work on plain Scala `Int`. If you have a compile-time constant, pass it as an `Int <> CONST` parameter, or use a hex/binary literal directly: `h"21'140000"`.
-///
-
