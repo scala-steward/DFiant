@@ -38,8 +38,8 @@ class CustomControlPhase(setting: Setting) extends CommonPhase:
   // override val debugFilter: String => Boolean = _.contains("Playground.scala")
   override val runsAfter = Set(transform.Pickler.name)
   override val runsBefore = Set("MetaContextGen")
-  val ignoreIfs = mutable.Set.empty[String]
-  val replaceIfs = mutable.Set.empty[String]
+  val ignoreIfs = mutable.Set.empty[PosKey]
+  val replaceIfs = mutable.Set.empty[PosKey]
   var fromBooleanSym: Symbol = uninitialized
   var toFunc1Sym: Symbol = uninitialized
   var fromBranchesSym: Symbol = uninitialized
@@ -99,16 +99,16 @@ class CustomControlPhase(setting: Setting) extends CommonPhase:
         case _        => false
 
   @tailrec private def ignoreElseIfRecur(tree: If)(using Context): Unit =
-    ignoreIfs += tree.srcPos.show
+    ignoreIfs += tree.posKey
     tree.elsep match
       case tree: If => ignoreElseIfRecur(tree)
       case _        => // done
   override def prepareForIf(tree: If)(using Context): Context =
-    if (!ignoreIfs.contains(tree.srcPos.show) && isHackedIfRecur(tree))
+    if (!ignoreIfs.contains(tree.posKey) && isHackedIfRecur(tree))
       tree.elsep match
         case tree: If => ignoreElseIfRecur(tree)
         case _        => // do nothing
-      replaceIfs += tree.srcPos.show
+      replaceIfs += tree.posKey
     ctx
 
   private def transformIfCond(condTree: Tree, dfcTree: Tree)(using
@@ -167,7 +167,7 @@ class CustomControlPhase(setting: Setting) extends CommonPhase:
       case _                                  => false
 
   override def transformIf(tree: If)(using Context): Tree =
-    if (replaceIfs.contains(tree.srcPos.show))
+    if (replaceIfs.contains(tree.posKey))
       // debug("=======================")
       val dfcTree = dfcStack.head
       val combinedTpe = tree.tpe.widen
@@ -780,7 +780,8 @@ class CustomControlPhase(setting: Setting) extends CommonPhase:
             }
             if (idxHigh != -1)
               report.error(
-                s"""Cannot compare a value of ${selectorWidth} bits width (LHS) to a value of ${selectorWidth - idxHigh - 1} bits width (RHS).
+                s"""Cannot compare a value of ${selectorWidth} bits width (LHS) to a value of ${selectorWidth -
+                    idxHigh - 1} bits width (RHS).
                    |An explicit conversion must be applied.""".stripMargin,
                 patternTree.srcPos
               )

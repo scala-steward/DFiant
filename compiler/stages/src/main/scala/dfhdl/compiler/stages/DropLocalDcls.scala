@@ -5,11 +5,79 @@ import dfhdl.compiler.ir.*
 import dfhdl.compiler.patching.*
 import dfhdl.options.CompilerOptions
 
-/** This stage moves the local vars or named constants (at the conditional/process block level) to
-  * either the design level (in Verilog) or its owner level (in VHDL), where the owner can be a
-  * design or a process. Verilog does not support declarations inside an always block, so they must
-  * be moved to the design level. VHDL does support declarations at the process level.
+//format: off
+/** This stage moves local variable and constant declarations out of their lexical scope to a
+  * position where the target language supports them. It also inserts reset-to-init assignments for
+  * local variables with initialization values inside RT process blocks.
+  *
+  * ==Context==
+  *
+  * Verilog `always` blocks (process blocks) do not support variable declarations — all declarations
+  * must appear at the design (module) level. VHDL `process` blocks DO support variable
+  * declarations, so only conditional-block-level declarations need lifting in VHDL.
+  *
+  * ==Rules==
+  *
+  * ===Rule 1: Declarations inside conditional blocks===
+  * Any local variable (`VAR`) or non-global named constant (`CONST`) that is declared inside a
+  * conditional block (`if`, `match`, or `while`) is moved to before the top-level conditional
+  * header that contains it:
+  *   - For non-VHDL backends: if the top-level conditional is itself inside a process block, the
+  *     declaration is moved to before the process block (design level).
+  *   - For VHDL: the declaration is moved to just before the top-level conditional header, staying
+  *     inside the process block if one exists.
+  * {{{
+  * // Before — zz declared inside an if inside a process
+  * class ID extends EDDesign:
+  *   process(all):
+  *     if (x > 5)
+  *       val zz = SInt(16) <> VAR
+  *       ...
+  *
+  * // After (Verilog) — moved to design level, before the process
+  * class ID extends EDDesign:
+  *   val zz = SInt(16) <> VAR
+  *   process(all):
+  *     if (x > 5)
+  *       ...
+  *
+  * // After (VHDL) — moved to just before the if, inside the process
+  * class ID extends EDDesign:
+  *   process(all):
+  *     val zz = SInt(16) <> VAR
+  *     if (x > 5)
+  *       ...
+  * }}}
+  *
+  * ===Rule 2: Declarations directly inside process blocks===
+  * A local variable declared directly inside a process block (not inside a conditional):
+  *   - For non-VHDL backends: moved to before the process block (design level).
+  *   - For VHDL: moved to the top of the process block (before any statements), because VHDL
+  *     requires all variable declarations to precede statements in a process.
+  * {{{
+  * // Before
+  * class ID extends EDDesign:
+  *   process(all):
+  *     stmt1
+  *     val zz = SInt(16) <> VAR
+  *     stmt2
+  *
+  * // After (Verilog) — moved to design level
+  * class ID extends EDDesign:
+  *   val zz = SInt(16) <> VAR
+  *   process(all):
+  *     stmt1
+  *     stmt2
+  *
+  * // After (VHDL) — moved to top of process
+  * class ID extends EDDesign:
+  *   process(all):
+  *     val zz = SInt(16) <> VAR
+  *     stmt1
+  *     stmt2
+  * }}}
   */
+//format: on
 case object DropLocalDcls extends Stage:
   override def dependencies: List[Stage] = List(ExplicitNamedVars)
   override def nullifies: Set[Stage] = Set()

@@ -65,6 +65,10 @@ final case class DFC(
   def lateConstruction: Boolean = mutableDB.OwnershipContext.lateConstruction
   def ownerOption: Option[DFOwnerAny] =
     mutableDB.OwnershipContext.ownerOption.map(_.asFE)
+  // Returns the IR ref for the current owner, or a ref to DFMember.Empty when there is no
+  // owner in the context. Prefer this over `dfc.owner.ref` when constructing raw IR members
+  // (e.g. ir.Goto) inside a MetaDesign body: the `ref` extension method requires
+  // `import dfhdl.core.*` in scope, which can conflict with other `dfhdl.core` imports.
   def ownerOrEmptyRef: ir.DFOwner.Ref =
     ownerOption.map(_.asIR.ref(using this)).getOrElse(ir.DFMember.Empty.ref(using this))
   def setName(name: String): this.type =

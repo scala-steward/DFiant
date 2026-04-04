@@ -1,7 +1,6 @@
 /* A two-bits left shifter */
 `default_nettype none
 `timescale 1ns/1ps
-`include "LeftShift2_defs.svh"
 
 module LeftShift2(
   /* bits input */

@@ -23,7 +23,6 @@ class IssuesSpec extends FunSuite:
          |use ieee.std_logic_1164.all;
          |use ieee.numeric_std.all;
          |use work.dfhdl_pkg.all;
-         |use work.ArrayIssue_pkg.all;
          |
          |entity ArrayIssue is
          |port (
@@ -61,7 +60,6 @@ class IssuesSpec extends FunSuite:
       i135.VerilogSRA().getCompiledCodeString,
       """|`default_nettype none
          |`timescale 1ns/1ps
-         |`include "VerilogSRA_defs.svh"
          |
          |module VerilogSRA(
          |  input  wire logic signed [9:0] a

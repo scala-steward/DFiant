@@ -3,7 +3,6 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use work.dfhdl_pkg.all;
-use work.LeftShift2_pkg.all;
 
 entity LeftShift2 is
 port (

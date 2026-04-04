@@ -54,6 +54,7 @@ trait Design extends Container, HasClsMetaArgs:
   final override def onCreateStartLate: Unit =
     hasStartedLate = true
     import dfc.getSet
+    Design.Block.updateWithParams(containedOwner.asIR)
     if (dfc.owner.asIR.getThisOrOwnerDesign.isDeviceTop)
       handleResourceConstraints()
       dfc.mutableDB.ResourceOwnershipContext.emptyTopResourceOwners()
@@ -152,12 +153,28 @@ object Design:
   type Block = DFOwner[ir.DFDesignBlock]
   object Block:
     def apply(domain: ir.DomainType, dclMeta: ir.Meta, instMode: InstMode)(using DFC): Block =
-      ir.DFDesignBlock(
-        domain, dclMeta, instMode, dfc.ownerOrEmptyRef, dfc.getMeta, dfc.tags
+      val paramMap = ListMap.from(
+        dfc.mutableDB.DesignContext.getDesignParamValueMap.view.mapValues(
+          _.asIR.refTW[ir.DFDesignBlock]
+        )
       )
-        .addMember
-        .asFE
+      ir.DFDesignBlock(
+        domain, dclMeta, instMode, paramMap, dfc.ownerOrEmptyRef, dfc.getMeta, dfc.tags
+      ).addMember.asFE
     end apply
+    protected[core] def updateWithParams(designBlock: ir.DFDesignBlock)(using dfc: DFC): Unit =
+      import dfc.getSet
+      val paramMap =
+        ListMap.from(
+          dfc.mutableDB.DesignContext.current.getImmutableMemberList.view.collect {
+            case dp: ir.DFVal.DesignParam =>
+              val dfVal = dp.appliedValOpt.get
+              // invalidating the param cache value after design elaboration
+              dp.clearCachedAppliedVal()
+              dp.getName -> dfVal.refTW[ir.DFDesignBlock](knownReachable = true)
+          }.toMap
+        )
+      getSet.replace(designBlock)(designBlock.copy(paramMap = paramMap))
   end Block
   extension [D <: Design](dsn: D)
     def getDB: ir.DB = dsn.dfc.mutableDB.immutable

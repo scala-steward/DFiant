@@ -1,7 +1,6 @@
 /* This is a led blinker */
 `default_nettype none
 `timescale 1ns/1ps
-`include "Blinker_defs.vh"
 
 module Blinker(
   clk,
@@ -9,7 +8,6 @@ module Blinker(
   led
 );
   `include "dfhdl_defs.vh"
-  `include "Blinker_defs.vh"
   parameter integer CLK_FREQ_KHz = 50000;
   parameter integer LED_FREQ_Hz = 1;
   /* Half-count of the toggle for 50% duty cycle */

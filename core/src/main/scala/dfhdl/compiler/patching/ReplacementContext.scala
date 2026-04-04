@@ -99,11 +99,14 @@ private final case class ReplacementContext(
 
   def removeMember(origMember: DFMember): ReplacementContext =
     // Total references to be removed are:
-    // * refs from memberTable - references from other members to this member
+    // * refs from memberTable that still point to origMember in refTable (references from other
+    //   members to this member; may have been reassigned by a prior Replace(ChangeRefOnly))
     // * refs from origMember - references from this member to other members
     // Together these cover both directions of two-way references
+    val refsToOrigThatStillPointHere =
+      memberTable.getOrElse(origMember, Set()).filter(r => refTable.get(r).contains(origMember))
     val purgedRefs =
-      memberTable.getOrElse(origMember, Set()) ++ origMember.getRefs + origMember.ownerRef
+      refsToOrigThatStillPointHere ++ origMember.getRefs + origMember.ownerRef
     val (updatedTypeRefRepeats, purgedRefsWithoutRepeatedTypeRefs) =
       getUpdatedTypeRefCount(purgedRefs)
     val updatedMemberTable = purgedRefsWithoutRepeatedTypeRefs.foldLeft(memberTable) {

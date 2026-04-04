@@ -28,6 +28,7 @@ import dfhdl.compiler.analysis.filterPublicMembers
 
 import scala.reflect.{ClassTag, classTag}
 import collection.mutable
+import collection.immutable.ListMap
 
 private case class MemberEntry(
     irValue: DFMember,
@@ -168,6 +169,17 @@ final class MutableDB():
     var stack = List.empty[DesignContext]
     val designMembers = mutable.Map.empty[DFDesignBlock, List[DFMember]]
     val uniqueDesigns = mutable.Map.empty[String, List[List[DFDesignBlock]]]
+
+    // for design parameters we save them via the plugin before the design is elaborated, and then
+    // construct the design block with the parameters referenced in its paramMap.
+    private var designParamValueMap = ListMap.empty[String, DFValAny]
+    def prepareDesignParamValues(paramNames: List[String], paramValues: List[DFValAny]): Unit =
+      designParamValueMap = ListMap.from(paramNames.lazyZip(paramValues))
+    def getDesignParamValueMap: ListMap[String, DFValAny] =
+      val ret = designParamValueMap
+      designParamValueMap = ListMap.empty
+      ret
+
     def startDesign(design: DFDesignBlock): Unit =
       stack = current :: stack
       current = new DesignContext
@@ -178,10 +190,7 @@ final class MutableDB():
       var isDuplicate = false
       def sameDesignAs(groupDesign: DFDesignBlock): Boolean =
         if (design.dclMeta == groupDesign.dclMeta)
-          val groupMembers = designMembers(groupDesign)
-          if (currentMembers.length == groupMembers.length)
-            (currentMembers lazyZip groupMembers).forall { case (l, r) => l =~ r }
-          else false
+          currentMembers =~ designMembers(groupDesign)
         else false
       uniqueDesigns.get(designType) match
         // this design type already exists and has at least one group
@@ -201,21 +210,25 @@ final class MutableDB():
         // first time encountering this design type, so add the first group
         case None => uniqueDesigns += designType -> List(List(design))
       end match
-      // generally, if this design is a duplicate we want to add only the by-name members and their
-      // owner references. however, if current design context is known to be a duplicate (as a result
-      // of a `hw.pure` annotation), then we can skip this extra step since the design context is
-      // already minimized to the named members.
+      // If this design is a duplicate, we retain only the public members (ports, design
+      // parameters, domain blocks, and their dependencies) during elaboration, because
+      // user code may still reference them (e.g., connecting to a port requires the Dcl
+      // before a PortByNameSelect is created). These public members are later removed
+      // during immutable DB creation (see `immutable`), where ports are resolved
+      // on-demand via DuplicationRef in `DB.dupPortsByName`.
+      // If the current design context is already known to be a duplicate (as a result
+      // of a `hw.pure` annotation), then we can skip this extra step since the design
+      // context is already minimized to the named members.
       if (isDuplicate && !current.isDuplicate)
-        // public members are ports, design design parameters, and
-        // design domains. for design parameters we also get dependencies.
-        // all these members are interacted with outside the design,
-        // so they are kept as duplicates in the design instances
         val publicMembers = currentMembers.filterPublicMembers
         designMembers += design -> publicMembers
-        val transferredRefs = publicMembers.view.flatMap(m =>
-          (m.ownerRef -> currentRefTable(m.ownerRef)) ::
-            m.getRefs.map(r => r -> currentRefTable(r))
-        )
+        val transferredRefs =
+          // getting the design references to parameters
+          design.getRefs.map(r => r -> currentRefTable(r)) ++
+            publicMembers.view.flatMap(m =>
+              (m.ownerRef -> currentRefTable(m.ownerRef)) ::
+                m.getRefs.map(r => r -> currentRefTable(r))
+            )
         stack.head.refTable ++= transferredRefs
       else
         designMembers += design -> currentMembers
@@ -373,8 +386,9 @@ final class MutableDB():
           else resource.allSigConstraints
         }
         // merge the existing constraints with the new constraints
-        val updatedSigConstraints =
-          (existingSigConstraints ++ newSigConstraints).merge.consolidate(dcl.width)
+        val updatedSigConstraints = (existingSigConstraints ++ newSigConstraints).merge.consolidate(
+          dcl.width
+        )
         // merge all other annotations
         val updatedAnnotations = updatedSigConstraints ++ otherAnnotations
         dcl -> dcl.copy(meta = dcl.meta.copy(annotations = updatedAnnotations))
@@ -568,6 +582,7 @@ final class MutableDB():
           case (ref: DFRef.TypeRef, m) => usedTypeRefs.contains(ref)
           case _                       => true
         }.toMap
+        val duplicateDesignSet = mutable.Set.empty[DFDesignBlock]
         val duplicateDesignRepMap = DesignContext.uniqueDesigns.view.flatMap {
           case (designType, groupList) =>
             groupList.view.reverse.zipWithIndex.flatMap {
@@ -581,7 +596,9 @@ final class MutableDB():
                     if (first)
                       first = false
                       design.tags
-                    else design.tags.tag(DuplicateTag)
+                    else
+                      duplicateDesignSet += design
+                      design.tags.tag(DuplicateTag)
                   design -> design.copy(
                     dclMeta = design.dclMeta.copy(nameOpt = Some(updatedDclName)),
                     tags = tags
@@ -609,7 +626,24 @@ final class MutableDB():
           case dcl: DFVal.Dcl             => constrainedDcls.getOrElse(dcl, dcl)
           case m                          => m
         }
-        (members.map(finalFixFunc), fixedRefTable.view.mapValues(finalFixFunc).toMap)
+        // Remove all remaining public members (ports, domain blocks, and their
+        // dependencies) from duplicate designs. During elaboration these were kept
+        // so user code could reference them, but in the immutable DB they are no
+        // longer needed. Ports for duplicate designs are resolved on-demand via
+        // DuplicationRef in `DB.dupPortsByName`.
+        val redundantRefs = mutable.Set.empty[DFRefAny]
+        val finalMembers = members.flatMap {
+          case m: DFVal if m.isGlobal => Some(finalFixFunc(m))
+          case m: (DomainBlock | DFVal) if duplicateDesignSet.contains(m.getOwnerDesign) =>
+            redundantRefs += m.ownerRef
+            redundantRefs ++= m.getRefs
+            None
+          case m => Some(finalFixFunc(m))
+        }
+        val finalRefTable = fixedRefTable.view.flatMap { case (ref, member) =>
+          if (redundantRefs.contains(ref)) None else Some(ref -> finalFixFunc(member))
+        }.toMap
+        (finalMembers, finalRefTable)
     val membersNoGlobalCtx = members.map {
       case m: DFVal.CanBeGlobal => m.copyWithoutGlobalCtx
       case m                    => m

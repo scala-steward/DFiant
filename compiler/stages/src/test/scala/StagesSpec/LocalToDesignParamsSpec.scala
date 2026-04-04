@@ -205,10 +205,7 @@ class LocalToDesignParamsSpec extends StageSpec:
          |class PrimeDiv5 extends RTDesign:
          |  val primeDiv5_DIVIDEND_WIDTH: Int <> CONST = 5 + 1
          |  val dividend = UInt(6) <> VAR.REG init d"6'0"
-         |  val primeDiv5 = PrimeDiv(
-         |      primeDivisor = 5,
-         |      DIVIDEND_WIDTH = primeDiv5_DIVIDEND_WIDTH
-         |  )
+         |  val primeDiv5 = PrimeDiv(primeDivisor = 5)
          |  primeDiv5.dividend <> dividend
          |end PrimeDiv5""".stripMargin
     )

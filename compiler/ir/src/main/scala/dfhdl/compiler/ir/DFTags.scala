@@ -14,6 +14,8 @@ case object BindTag extends DFTag
 type BindTag = BindTag.type
 case object CombinationalTag extends DFTag
 type CombinationalTag = CombinationalTag.type
+case object FallThroughTag extends DFTag
+type FallThroughTag = FallThroughTag.type
 case class DefaultRTDomainCfgTag(cfg: RTDomainCfg.Explicit) extends DFTag
 case object ExtendTag extends DFTag
 type ExtendTag = ExtendTag.type

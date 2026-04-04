@@ -15,7 +15,8 @@ case object ViaConnection extends Stage:
       case (ib, members) if !ib.isTop =>
         // getting only ports that are not already connected to variables
         val (ports, nets): (List[DFVal.Dcl], List[DFNet]) =
-          members.foldRight((List.empty[DFVal.Dcl], List.empty[DFNet])) {
+          val ports = designDB.dupPortsByName(ib).values
+          ports.foldRight((List.empty[DFVal.Dcl], List.empty[DFNet])) {
             case (p @ DclOut(), (ports, nets)) =>
               val conns = p.getConnectionsFrom
               conns.headOption match
@@ -43,6 +44,7 @@ case object ViaConnection extends Stage:
                 case _ => (p :: ports, nets)
             case (_, x) => x
           }
+        end val
 
         extension (port: DFVal.Dcl)
           // set reachable type parameters for the selected ports by setting the MetaDesign context's

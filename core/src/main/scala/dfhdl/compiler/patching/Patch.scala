@@ -41,7 +41,7 @@ object Patch:
           def apply(refs: Set[DFRefAny])(using MemberGetSet): Set[DFRefAny] =
             refs -- rf(refs)
       // All references are replaced
-      object All extends RefFilter:
+      case object All extends RefFilter:
         def apply(refs: Set[DFRefAny])(using MemberGetSet): Set[DFRefAny] = refs
       // Only references from outside the given owner are replaced
       final case class Outside(block: DFOwner) extends RefFilter:
@@ -51,6 +51,10 @@ object Patch:
       final case class Inside(block: DFOwner) extends RefFilter:
         def apply(refs: Set[DFRefAny])(using MemberGetSet): Set[DFRefAny] =
           refs.collect { case r: DFRef.TwoWayAny if r.originMember.isInsideOwner(block) => r }
+      // Only references to the given members are replaced
+      final case class OfMembers(members: Set[DFMember]) extends RefFilter:
+        def apply(refs: Set[DFRefAny])(using MemberGetSet): Set[DFRefAny] =
+          refs.collect { case r: DFRef.TwoWayAny if members.contains(r.originMember) => r }
     end RefFilter
   end Replace
   final case class Add private[patching] (db: DB, config: Add.Config) extends Patch:
@@ -101,8 +105,36 @@ object Patch:
       case object Via extends Config
     end Config
   end Add
-  // movedMembers: members to move
-  // origOwner: the original owner of the top members
+
+  /** Moves `movedMembers` to a new position in the flat member list relative to the anchor member.
+    *
+    * `origOwner` is the original direct owner of the top-level moved members. During ownership
+    * resolution, only members in `movedMembers` whose current owner equals `origOwner` have their
+    * `ownerRef` updated to the new owner (determined by the anchor and config). Members owned by
+    * nested sub-blocks are not re-owned — their `ownerRef` is assumed to already point to the
+    * correct intermediate owner.
+    *
+    * '''Descendants are NOT moved automatically.''' Only the explicitly listed `movedMembers` are
+    * repositioned in the flat list. Moving a `DFOwner` (e.g. a `StepBlock`) without its children
+    * breaks the pre-order DFS ownership invariant. Always include all descendants:
+    * {{{
+    *   val all = block :: block.members(MemberView.Flattened)
+    *   anchor -> Patch.Move(all, block.getOwner, Patch.Move.Config.After)
+    * }}}
+    *
+    * '''`DFOwner` anchor + `After`/`InsideLast` redirect.''' When the anchor is a `DFOwner`,
+    * physical placement is redirected to `anchor.getVeryLastMember` (deepest recursive last
+    * descendant). Ownership resolution still uses the original anchor, so `newOwner =
+    * anchor.getOwnerBlock`.
+    *
+    * '''Concatenation.''' Multiple `Move` patches targeting the same anchor and config are merged
+    * in patchList order into a single Move before being applied to the member list.
+    *
+    * '''Conflict detection.''' This patch internally generates `Patch.Remove` for every member in
+    * `movedMembers`. If any of those members also appear in a separate patch in the same patchList
+    * (e.g. as the anchor of another `Move.Before`), an `IllegalArgumentException` is thrown.
+    * Resolve by splitting conflicting patches into sequential `db.patch()` calls.
+    */
   final case class Move(movedMembers: List[DFMember], origOwner: DFOwner, config: Move.Config)
       extends Patch:
     override def toString(): String =
@@ -119,14 +151,21 @@ object Patch:
     sealed trait Config extends Product with Serializable derives CanEqual:
       def ==(addConfig: Add.Config): Boolean = addConfig == this
     object Config:
-      // moves members before the patched member
+      // Moves members before the anchor member. The anchor must not be a DFOwner when
+      // members to be moved using Before are also referenced by other patches (e.g., as movedMembers
+      // in another Move), as the internal Remove generated here would conflict.
       case object Before extends Config
-      // moves members after the patched member
+      // Moves members after the anchor member.
+      // When the anchor is a DFOwner, placement is redirected to anchor.getVeryLastMember.
+      // Ownership update: newOwner = anchor.getOwnerBlock (NOT anchor itself).
       case object After extends Config
-      // moves members inside the given block, at the beginning
+      // Moves members inside the given block, at the beginning (after the block header).
+      // The anchor must be a DFOwner; members become direct children of the anchor.
       case object InsideFirst extends Config
-      // moves members inside the given block, at the end
+      // Moves members inside the given block, at the end.
+      // The anchor must be a DFOwner; redirects to anchor.getVeryLastMember for placement.
       case object InsideLast extends Config
+    end Config
   end Move
 
   final case class ChangeRef(
@@ -172,6 +211,16 @@ extension (db: DB)
       .foldLeft(ReplacementContext.fromRefTable(refTable)) {
         case (rc, (origMember, Patch.Replace(repMember, config, refFilter)))
             if (origMember != repMember) =>
+          // TODO: consider using this code in the future
+          // Include refs from any Add for this member so refs shared with added members (e.g. when
+          // the added block reuses the same member) are not purged and lost from the ref table.
+          // val addRefsForSameMember =
+          //   patchList.collect {
+          //     case (m, Patch.Add(db, _)) if m == origMember => db.members.flatMap(_.getRefs)
+          //   }.flatten.toList
+          // val keepRefs = (repMember.getRefs ++ addRefsForSameMember).distinct
+          // val ret =
+          //   rc.replaceMember(origMember, repMember, config, refFilter, keepRefs)
           val ret =
             rc.replaceMember(origMember, repMember, config, refFilter, repMember.getRefs)
           // patchDebug {
@@ -182,16 +231,21 @@ extension (db: DB)
         case (rc, (origMember, Patch.Add(db, config))) =>
           // if the original member is a global value, the all references pointing to the top design in the patch
           // db should point to an empty member for global placement
-          val fixedGlobalRefTable = origMember match
-            case dfVal: DFVal.CanBeGlobal if dfVal.isGlobal =>
+          val globalPlacement =
+            (origMember, config) match
+              case (dfVal: DFVal.CanBeGlobal, _) if dfVal.isGlobal                  => true
+              case (design: DFDesignBlock, Patch.Add.Config.Before) if design.isTop => true
+              case _                                                                => false
+          val fixedGlobalRefTable =
+            if (globalPlacement)
               db.refTable.map { case (ref, member) =>
                 if (member == db.top) (ref, DFMember.Empty)
                 else (ref, member)
               }
-            case _ => db.refTable
+            else db.refTable
           // updating the patched DB reference table members with the newest members kept by the replacement context
           val updatedPatchRefTable = rc.getUpdatedRefTable(fixedGlobalRefTable)
-          val keepRefList = db.members.flatMap(_.getRefs)
+          lazy val keepRefList = db.members.flatMap(_.getRefs)
           val repRT = config match
             case Patch.Add.Config.ReplaceWithMemberN(n, repConfig, refFilter) =>
               val repMember = db.members(n + 1) // At index 0 we have the Top. We don't want that.
@@ -209,23 +263,19 @@ extension (db: DB)
                 Patch.Replace.RefFilter.All, keepRefList
               )
             case _ => rc
-          //          patchDebug {
-          //            println("repRT.refTable:")
-          //            println(repRT.refTable.mkString("\n"))
-          //          }
-          //          patchDebug {
-          //            println("dbPatched.refTable:")
-          //            println(dbPatched.refTable.mkString("\n"))
-          //          }
-          //          patchDebug {
-          //            println("updatedPatchRefTable:")
-          //            println(updatedPatchRefTable.mkString("\n"))
-          //          }
+          // patchDebug {
+          //   println("repRT.refTable:")
+          //   println(repRT.refTable.mkString("\n"))
+          // }
+          // patchDebug {
+          //   println("updatedPatchRefTable:")
+          //   println(updatedPatchRefTable.mkString("\n"))
+          // }
           val ret = repRT.copy(refTable = repRT.refTable ++ updatedPatchRefTable)
-          //          patchDebug {
-          //            println("rc.refTable:")
-          //            println(ret.refTable.mkString("\n"))
-          //          }
+          // patchDebug {
+          //   println("rc.refTable:")
+          //   println(ret.refTable.mkString("\n"))
+          // }
           ret
         // skip over empty move
         case (rc, (origMember, Patch.Move(Nil, _, config))) => rc
@@ -338,6 +388,32 @@ extension (db: DB)
                   Patch.Add(db2, Patch.Add.Config.After)
                 ) =>
               tbl + (m -> Patch.Add(db1 concat db2, config1))
+            // concatenating additions with Before and After configurations, respectively
+            case (
+                  Patch.Add(db1, Patch.Add.Config.Before),
+                  Patch.Add(db2, Patch.Add.Config.After)
+                ) =>
+              val combinedDB = (db1 concat db2).copy(members =
+                db1.members ++ (m :: db2.members.drop(1))
+              )
+              val config = Patch.Add.Config.ReplaceWithMemberN(
+                db1.members.length - 1,
+                Patch.Replace.Config.FullReplacement
+              )
+              tbl + (m -> Patch.Add(combinedDB, config))
+            // concatenating additions with After and Before configurations, respectively
+            case (
+                  Patch.Add(db1, Patch.Add.Config.After),
+                  Patch.Add(db2, Patch.Add.Config.Before)
+                ) =>
+              val combinedDB = (db1 concat db2).copy(members =
+                (db1.members.head :: db2.members.drop(1)) ++ (m :: db1.members.drop(1))
+              )
+              val config = Patch.Add.Config.ReplaceWithMemberN(
+                db2.members.length - 1,
+                Patch.Replace.Config.FullReplacement
+              )
+              tbl + (m -> Patch.Add(combinedDB, config))
             // concatenating moves with the same configuration
             // (the patch table does not care about original owner, so we ignore it.
             // only the patchList that has all the move patches uses the original owners
@@ -360,16 +436,20 @@ extension (db: DB)
               tbl + (m -> Patch.Add(add.db, Patch.Add.Config.ReplaceWithFirst()))
             // add followed by a replacement is allowed via a tandem patch execution
             case (add: Patch.Add, replace: Patch.Replace) if add.config == Patch.Add.Config.After =>
-              tbl + (m -> Patch.Add(
-                add.db.copy(add.db.members.head :: replace.updatedMember :: add.db.members.drop(1)),
-                Patch.Add.Config.ReplaceWithFirst()
-              ))
+              tbl +
+                (m -> Patch.Add(
+                  add.db.copy(add.db.members.head :: replace.updatedMember ::
+                    add.db.members.drop(1)),
+                  Patch.Add.Config.ReplaceWithFirst()
+                ))
             // replacement followed by an add via a tandem patch execution
             case (replace: Patch.Replace, add: Patch.Add) if add.config == Patch.Add.Config.After =>
-              tbl + (m -> Patch.Add(
-                add.db.copy(add.db.members.head :: replace.updatedMember :: add.db.members.drop(1)),
-                Patch.Add.Config.ReplaceWithFirst()
-              ))
+              tbl +
+                (m -> Patch.Add(
+                  add.db.copy(add.db.members.head :: replace.updatedMember ::
+                    add.db.members.drop(1)),
+                  Patch.Add.Config.ReplaceWithFirst()
+                ))
             // allow the same member to be removed more than once by getting rid of the redundant removals
             case (Patch.Remove(isMovedL), Patch.Remove(isMovedR)) =>
               tbl + (m -> Patch.Remove(isMovedL || isMovedR))

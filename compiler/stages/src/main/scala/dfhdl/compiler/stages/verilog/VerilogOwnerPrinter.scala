@@ -13,7 +13,12 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
   type TPrinter <: VerilogPrinter
   val useStdSimLibrary: Boolean = true
   def fileSuffix = "v"
-  def defsName: String = s"${getSet.topName}_defs"
+  def defsName: String =
+    val name = printerOptions.globalDefsFileName
+    if (name.nonEmpty)
+      val dotIdx = name.lastIndexOf('.')
+      if (dotIdx > 0) name.substring(0, dotIdx) else name
+    else s"${getSet.topName}_defs"
   def csLibrary(inSimulation: Boolean, minTimeUnitOpt: Option[TimeNumber.Unit]): String =
     val csTimeScale = minTimeUnitOpt.map { unit =>
       def unitToStr(unit: TimeNumber.Unit): String =
@@ -24,9 +29,9 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
       val precisionUnit = unitToStr(TimeNumber(1e-3, unit).normalize.unit)
       s"`timescale 1${scaleUnit}/1${precisionUnit}"
     }.getOrElse(s"`timescale 1ns/1ps")
-    s"""`default_nettype none
-       |$csTimeScale
-       |`include "${printer.globalFileName}"""".stripMargin
+    sn"""|`default_nettype none
+         |$csTimeScale
+         |${if (printer.hasGlobalContent) s"""`include "${printer.globalFileName}"""" else ""}"""
   def moduleName(design: DFDesignBlock): String = design.dclName
   val parameterizedModuleSupport: Boolean =
     printer.dialect match
@@ -105,9 +110,9 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
     )
     val designParamList = designMembers.collect { case param: DesignParam =>
       val defaultValue =
-        if (design.isTop) s" = ${param.dfValRef.refCodeString}"
+        if (design.isTop) s" = ${param.appliedOrDefaultValRef.refCodeString}"
         else
-          param.defaultRef.get match
+          param.defaultValRef.get match
             case DFMember.Empty =>
               // missing default values are supported
               if (noDefaultParamSupport) ""
@@ -115,7 +120,7 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
               // (different instances may have different constant data, but for default,
               // a single module description can have any valid data, just to satisfy the standard)
               else s" = ${printer.csConstData(param.dfType, param.getConstData.get)}"
-            case _ => s" = ${param.defaultRef.refCodeString}"
+            case _ => s" = ${param.defaultValRef.refCodeString}"
       val csType = printer.csDFType(param.dfType).emptyOr(_ + " ")
       val csTypeNoLogic = if (printer.supportLogicType) csType else csType.replace("logic ", "")
       s"parameter ${csTypeNoLogic}${param.getName}$defaultValue"
@@ -125,7 +130,8 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
       else if (designParamList.length == 1) designParamList.mkString("#(", ", ", ")")
       else "#(" + designParamList.mkString("\n", ",\n", "\n").hindent(2) + ")"
     val includeModuleDefs =
-      if (printer.allowTypeDef) "" else s"""`include "${printer.globalFileName}""""
+      if (printer.allowTypeDef || !printer.hasGlobalContent) ""
+      else s"""`include "${printer.globalFileName}""""
     // include parameter definitions only when parameters are used in the design
     val paramDefines =
       if (printer.supportGlobalParameters) ""
@@ -162,9 +168,9 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
        |""".stripMargin
   def csDFDesignBlockInst(design: DFDesignBlock): String =
     val body = csDFDesignLateBody(design)
-    val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
-      s".${param.getName} (${param.dfValRef.refCodeString})"
-    }
+    val designParamList = design.paramMap.view.map { (name, ref) =>
+      s".${name} (${ref.refCodeString})"
+    }.toList
     val designParamCS =
       if (designParamList.isEmpty || design.isVendorIPBlackbox) ""
       else " #(" + designParamList.mkString("\n", ",\n", "\n").hindent(1) + ")"
@@ -189,13 +195,18 @@ protected trait VerilogOwnerPrinter extends AbstractOwnerPrinter:
   def csDFCaseKeyword: String = ""
   def csDFCaseSeparator: String = ":"
   def csDFCaseGuard(guardRef: DFConditional.Block.GuardRef): String = printer.unsupported
-  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean): String =
+  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean, isUnique: Boolean): String =
     val insideSupport = printer.dialect match
       case VerilogDialect.v2001 | VerilogDialect.v95 => false
       case _                                         => true
+    val uniqueSupport = printer.dialect match
+      case VerilogDialect.v2001 | VerilogDialect.v95 => false
+      case _                                         => true
+    val uniquePrefix =
+      if (isUnique && uniqueSupport) "unique " else ""
     val keyWord = if (wildcardSupport && !insideSupport) "casez" else "case"
     val insideStr = if (wildcardSupport && insideSupport) " inside" else ""
-    s"$keyWord ($csSelector)$insideStr"
+    s"$uniquePrefix$keyWord ($csSelector)$insideStr"
   def csDFMatchEnd: String = "endcase"
   val sensitivityListSep =
     printer.dialect match

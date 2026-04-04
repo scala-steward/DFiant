@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "UART_Tx_defs.svh"
 
 module UART_Tx#(
     parameter int CLK_FREQ_KHz = 50000,
@@ -16,7 +15,7 @@ module UART_Tx#(
 );
   `include "dfhdl_defs.svh"
   localparam int BIT_CLOCKS = (CLK_FREQ_KHz * 1000) / BAUD_RATE_BPS;
-  typedef enum {
+  typedef enum logic [4:0] {
     Status_Idle     = 1,
     Status_StartBit = 2,
     Status_DataBits = 4,
@@ -35,7 +34,7 @@ module UART_Tx#(
       dataBitCnt         <= 3'd0;
     end
     else begin
-      case (status)
+      unique case (status)
         Status_Idle:     begin
           tx_en          <= 1'b0;
           tx             <= 1'b1;

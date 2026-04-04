@@ -8,7 +8,8 @@ final case class PrinterOptions(
     align: Align,
     color: Color,
     showGlobals: ShowGlobals,
-    designPrintFilter: DesignPrintFilter
+    designPrintFilter: DesignPrintFilter,
+    globalDefsFileName: GlobalDefsFileName
 )
 object PrinterOptions:
   opaque type Defaults[-T] <: PrinterOptions = PrinterOptions
@@ -17,12 +18,14 @@ object PrinterOptions:
         align: Align,
         color: Color,
         showGlobals: ShowGlobals,
-        designPrintFilter: DesignPrintFilter
+        designPrintFilter: DesignPrintFilter,
+        globalDefsFileName: GlobalDefsFileName
     ): Defaults[Any] = PrinterOptions(
       align = align,
       color = color,
       showGlobals = showGlobals,
-      designPrintFilter = designPrintFilter
+      designPrintFilter = designPrintFilter,
+      globalDefsFileName = globalDefsFileName
     )
   given (using defaults: Defaults[Any]): PrinterOptions = defaults
   into opaque type Align <: Boolean = Boolean
@@ -40,6 +43,11 @@ object PrinterOptions:
   object ShowGlobals:
     given ShowGlobals = false
     given Conversion[Boolean, ShowGlobals] = identity
+
+  into opaque type GlobalDefsFileName <: String = String
+  object GlobalDefsFileName:
+    given GlobalDefsFileName = ""
+    given Conversion[String, GlobalDefsFileName] = identity
 
   trait DesignPrintFilter:
     def apply(design: ir.DFDesignBlock): Boolean

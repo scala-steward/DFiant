@@ -42,33 +42,35 @@ object TextOut:
     transparent inline def print(inline msg: Any): Unit =
       compiletime.summonFrom {
         case given ScalaPrintsFlag => scala.Predef.print(msg)
-        case given DFC.Scope.Local => textOut(Op.Print, Some(msg))
-        case _                     => scala.Predef.print(msg)
+        case given DFC.Scope.Local =>
+          textOut(Op.Print, Some(msg))(using compiletime.summonInline[DFC])
+        case _ => scala.Predef.print(msg)
       }
 
     transparent inline def println(inline msg: Any): Unit =
       compiletime.summonFrom {
         case given ScalaPrintsFlag => scala.Predef.println(msg)
-        case given DFC.Scope.Local => textOut(Op.Println, Some(msg))
-        case _                     => scala.Predef.println(msg)
+        case given DFC.Scope.Local =>
+          textOut(Op.Println, Some(msg))(using compiletime.summonInline[DFC])
+        case _ => scala.Predef.println(msg)
       }
 
     transparent inline def println(): Unit =
       compiletime.summonFrom {
         case given ScalaPrintsFlag => scala.Predef.println()
-        case given DFC.Scope.Local => textOut(Op.Println, None)
+        case given DFC.Scope.Local => textOut(Op.Println, None)(using compiletime.summonInline[DFC])
         case _                     => scala.Predef.println()
       }
 
     inline def report(inline message: Any, severity: Severity = Severity.Info): Unit =
-      textOut(Op.Report(severity), Some(message))
+      textOut(Op.Report(severity), Some(message))(using compiletime.summonInline[DFC])
 
     inline def assert(
         inline assertion: Any,
         inline message: Any,
         severity: Severity
     )(using dfc: DFC): Unit =
-      assertDFHDL(assertion, Some(message), severity)
+      assertDFHDL(assertion, Some(message), severity)(using compiletime.summonInline[DFC])
 
     transparent inline def assert(inline assertion: Any, inline message: => Any): Unit =
       compiletime.summonFrom {
@@ -118,11 +120,11 @@ object TextOut:
     private inline def textOut(
         op: ir.TextOut.Op,
         inline msgOption: Option[Any]
-    ): Unit = ${ textOutMacro('op, 'msgOption) }
+    )(using dfc: DFC): Unit = ${ textOutMacro('op, 'msgOption)('dfc) }
     private def textOutMacro(
         op: Expr[ir.TextOut.Op],
         msgOption: Expr[Option[Any]]
-    )(using
+    )(dfc: Expr[DFC])(using
         Quotes
     ): Expr[Unit] =
       import quotes.reflect.*
@@ -133,7 +135,6 @@ object TextOut:
         case _                => t
       var msgPartsExpr: Expr[List[String]] = '{ List.empty[String] }
       var msgArgsExpr: Expr[List[DFValAny]] = '{ List.empty[DFValAny] }
-      val dfc = Expr.summon[DFC].get
       recurse(msgOption.asTerm).asExpr match
         case '{ None }       =>
         case '{ Some($msg) } =>

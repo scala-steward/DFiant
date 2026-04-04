@@ -12,14 +12,20 @@ protected trait VHDLOwnerPrinter extends AbstractOwnerPrinter:
   type TPrinter <: VHDLPrinter
   val useStdSimLibrary: Boolean = true
   def fileSuffix = "vhdl"
-  def packageName: String = s"${getSet.topName}_pkg"
+  def packageName: String =
+    val name = printerOptions.globalDefsFileName
+    if (name.nonEmpty)
+      val dotIdx = name.lastIndexOf('.')
+      if (dotIdx > 0) name.substring(0, dotIdx) else name
+    else s"${getSet.topName}_pkg"
   def csLibrary(inSimulation: Boolean, usesMathReal: Boolean): String =
     val default =
-      s"""library ieee;
-         |use ieee.std_logic_1164.all;
-         |use ieee.numeric_std.all;${if (usesMathReal) "\nuse ieee.math_real.all;" else ""}
-         |use work.dfhdl_pkg.all;
-         |use work.$packageName.all;""".stripMargin
+      sn"""|library ieee;
+           |use ieee.std_logic_1164.all;
+           |use ieee.numeric_std.all;
+           |${if (usesMathReal) "use ieee.math_real.all;" else ""}
+           |use work.dfhdl_pkg.all;
+           |${if (printer.hasGlobalContent) s"use work.$packageName.all;" else ""}"""
     if (useStdSimLibrary && inSimulation)
       s"""$default
          |
@@ -36,11 +42,11 @@ protected trait VHDLOwnerPrinter extends AbstractOwnerPrinter:
       .mkString(";\n")
     val designParamList = designMembers.collect { case param: DesignParam =>
       val defaultValue =
-        if (design.isTop) s" := ${param.dfValRef.refCodeString}"
+        if (design.isTop) s" := ${param.appliedOrDefaultValRef.refCodeString}"
         else
-          param.defaultRef.get match
+          param.defaultValRef.get match
             case DFMember.Empty => ""
-            case _              => s" := ${param.defaultRef.refCodeString}"
+            case _              => s" := ${param.defaultValRef.refCodeString}"
       s"${param.getName} : ${printer.csDFType(param.dfType)}$defaultValue"
     }
     val genericBlock =
@@ -177,9 +183,9 @@ protected trait VHDLOwnerPrinter extends AbstractOwnerPrinter:
   end csDFDesignBlockDcl
   def csDFDesignBlockInst(design: DFDesignBlock): String =
     val body = csDFDesignLateBody(design)
-    val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
-      s"${param.getName} => ${param.dfValRef.refCodeString}"
-    }
+    val designParamList = design.paramMap.view.map { (name, ref) =>
+      s"${name} => ${ref.refCodeString}"
+    }.toList
     val designParamCS =
       if (designParamList.isEmpty || design.isVendorIPBlackbox) ""
       else " generic map (" + designParamList.mkString("\n", ",\n", "\n").hindent(1) + ")"
@@ -211,7 +217,7 @@ protected trait VHDLOwnerPrinter extends AbstractOwnerPrinter:
   def csDFCaseKeyword: String = "when "
   def csDFCaseSeparator: String = " =>"
   def csDFCaseGuard(guardRef: DFConditional.Block.GuardRef): String = printer.unsupported
-  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean): String =
+  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean, isUnique: Boolean): String =
     s"case $csSelector is"
   def csDFMatchEnd: String = "end case;"
   def csProcessBlock(pb: ProcessBlock): String =

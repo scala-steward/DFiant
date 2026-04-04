@@ -5,7 +5,6 @@
   */
 `default_nettype none
 `timescale 1ns/1ps
-`include "LeftShiftGen_defs.svh"
 
 module LeftShiftGen#(parameter int width = 8)(
   /* bits input */

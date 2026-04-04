@@ -104,15 +104,19 @@ object r__For_Plugin:
     Pattern.BindSI(op, parts, bindVals.map(_.asIR.refTW[DFConditional.DFCaseBlock]))
   @metaContextIgnore
   def genDesignParam[V <: DFValAny](
-      paramValue: DFValAny,
-      default: Option[DFValAny],
+      appliedVal: DFValAny,
+      defaultVal: Option[DFValAny],
       paramMeta: ir.Meta
   )(using DFC): V =
     trydf:
       dfc.mutableDB.DesignContext.getReachableNamedValue(
-        paramValue.asIR,
-        DFVal.DesignParam(paramValue, default)(using dfc.setMeta(paramMeta)).asIR
+        appliedVal.asIR,
+        DFVal.DesignParam(appliedVal, defaultVal)(using dfc.setMeta(paramMeta)).asIR
       ).asValAny.asInstanceOf[V]
+  def prepareDesignParamValues(paramNames: List[String], paramValues: List[DFValAny])(using
+      DFC
+  ): Unit =
+    dfc.mutableDB.DesignContext.prepareDesignParamValues(paramNames, paramValues)
   @metaContextIgnore
   def designFromDefGetInput[V <: DFValAny](idx: Int)(using DFC): V =
     dfc.mutableDB.DesignContext.getDefInput(idx).asInstanceOf[V]
@@ -135,6 +139,7 @@ object r__For_Plugin:
     }
     val (isDuplicate, ret): (Boolean, V) =
       dfc.mutableDB.DesignContext.runFuncWithInputs(func, inputs)
+    Design.Block.updateWithParams(designBlock.asIR)
     def exitAndConnectInputs() =
       dfc.exitOwner()
       inputs.lazyZip(args).foreach { case (input, (arg, _)) =>
@@ -157,4 +162,6 @@ object r__For_Plugin:
       output.asInstanceOf[V]
     end if
   end designFromDef
+  def identVal[V <: DFValAny](value: V)(using DFC): V =
+    DFVal.Alias.AsIs.ident(value).asInstanceOf[V]
 end r__For_Plugin

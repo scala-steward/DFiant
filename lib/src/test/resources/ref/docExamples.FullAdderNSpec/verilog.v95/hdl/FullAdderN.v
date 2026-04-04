@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "FullAdderN_defs.vh"
 
 module FullAdderN(
   a,
@@ -10,7 +9,6 @@ module FullAdderN(
   c_out
 );
   `include "dfhdl_defs.vh"
-  `include "FullAdderN_defs.vh"
   input  wire [3:0] a;
   input  wire [3:0] b;
   input  wire       c_in;

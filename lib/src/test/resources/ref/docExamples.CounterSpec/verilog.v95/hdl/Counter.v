@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "Counter_defs.vh"
 
 module Counter(
   clk,
@@ -9,7 +8,6 @@ module Counter(
   cnt
 );
   `include "dfhdl_defs.vh"
-  `include "Counter_defs.vh"
   parameter integer width = 8;
   input  wire clk;
   input  wire rst;

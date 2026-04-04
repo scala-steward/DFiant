@@ -26,7 +26,7 @@ object DFFor:
   )(using DFC): Unit =
     val iter = DFVal.Dcl.iterator(using dfc.setMeta(iterMeta))
     dfc.mutableDB.DesignContext.addLoopIter(iterMeta, iter)
-    val block = Block(iter, range)(using dfc.setMetaAnon(forPos))
+    val block = Block(iter, range)(using dfc.setMeta(position = forPos))
     dfc.enterOwner(block)
     guards.foreach { guard =>
       val guardVal = guard()

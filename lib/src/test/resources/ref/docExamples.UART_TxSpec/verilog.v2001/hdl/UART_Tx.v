@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "UART_Tx_defs.vh"
 
 module UART_Tx#(
     parameter integer CLK_FREQ_KHz = 50000,
@@ -15,7 +14,6 @@ module UART_Tx#(
   output reg    tx_done
 );
   `include "dfhdl_defs.vh"
-  `include "UART_Tx_defs.vh"
   parameter integer BIT_CLOCKS = (CLK_FREQ_KHz * 1000) / BAUD_RATE_BPS;
   `define Status_Idle 1
   `define Status_StartBit 2

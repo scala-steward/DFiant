@@ -65,7 +65,7 @@ object StrippedPortByNameSelect:
 object DefaultOfDesignParam:
   def unapply(dfVal: DFVal)(using MemberGetSet): Option[DFVal.DesignParam] =
     dfVal.originMembers.collectFirst {
-      case dp: DFVal.DesignParam if dp.defaultRef.get == dfVal => dp
+      case dp: DFVal.DesignParam if dp.defaultValRef.get == dfVal => dp
     }
 
 object OpaqueActual:
@@ -84,8 +84,7 @@ object AsOpaque:
 
 object Bind:
   def unapply(alias: DFVal.Alias)(using MemberGetSet): Option[DFVal] =
-    if (alias.getTagOf[BindTag].isDefined)
-      Some(alias.relValRef.get)
+    if (alias.hasTagOf[BindTag]) Some(alias.relValRef.get)
     else None
 
 object ClkEdge:
@@ -200,6 +199,8 @@ extension (member: DFMember)
   def originMembersNoTypeRef(using MemberGetSet): Set[DFMember] =
     getSet.designDB.originMemberTableNoTypeRef.getOrElse(member, Set())
 
+type DFValReadDep = TextOut | DFNet | DFVal | DFConditional.Block
+
 extension (dfVal: DFVal)
   def getPartialAliases(using MemberGetSet): Set[DFVal.Alias.Partial] =
     dfVal.originMembers.flatMap {
@@ -234,8 +235,8 @@ extension (dfVal: DFVal)
     dfVal.originMembers.view
       .collect { case dfVal: DFVal => dfVal }
       .exists(dfVal => cond(dfVal) || dfVal.existsInComposedReadDeps(cond))
-  def getReadDeps(using MemberGetSet): Set[TextOut | DFNet | DFVal | DFConditional.Block] =
-    val fromRefs: Set[TextOut | DFNet | DFVal | DFConditional.Block] =
+  def getReadDeps(using MemberGetSet): Set[DFValReadDep] =
+    val fromRefs: Set[DFValReadDep] =
       dfVal.originMembersNoTypeRef.flatMap {
         case net: DFNet =>
           net match
@@ -260,12 +261,13 @@ extension (dfVal: DFVal)
           .toSet ++ fromRefs
       case _ => fromRefs
   end getReadDeps
-  def isReferencedByAnyDcl(using MemberGetSet): Boolean =
+  def isReferencedByAnyDclOrDesign(using MemberGetSet): Boolean =
     dfVal.originMembers.view.exists {
-      case _: DFVal.Dcl => true
-      case DclConst()   => true
-      case dfVal: DFVal => dfVal.isReferencedByAnyDcl
-      case _            => false
+      case _: DFVal.Dcl     => true
+      case DclConst()       => true
+      case _: DFDesignBlock => true
+      case dfVal: DFVal     => dfVal.isReferencedByAnyDclOrDesign
+      case _                => false
     }
 
   @tailrec private def flatName(member: DFVal, suffix: String)(using MemberGetSet): String =
@@ -415,11 +417,12 @@ extension (origVal: DFVal)
       forceIncludeOrigVal: Boolean
   )(using MemberGetSet): List[DFVal] =
     if (origVal.isAnonymous && !origVal.isGlobal || forceIncludeOrigVal)
-      origVal :: origVal.getRefs.map(_.get).view
-        .flatMap {
-          case dfVal: DFVal => dfVal.collectRelMembersRecur(false)
-          case _            => Nil
-        }.toList
+      origVal ::
+        origVal.getRefs.map(_.get).view
+          .flatMap {
+            case dfVal: DFVal => dfVal.collectRelMembersRecur(false)
+            case _            => Nil
+          }.toList
     else Nil
   @targetName("collectRelMembersDFVal")
   def collectRelMembers(includeOrigVal: Boolean)(using MemberGetSet): List[DFVal] =

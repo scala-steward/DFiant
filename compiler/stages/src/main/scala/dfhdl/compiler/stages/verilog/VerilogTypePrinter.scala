@@ -74,11 +74,8 @@ protected trait VerilogTypePrinter extends AbstractTypePrinter:
         dfType.entries.view
           .map((n, v) => s"${enumName}_$n = $v")
           .mkString(",\n")
-      // TODO: quartus seems to not accept an explicit size, so we drop it locally where it's not required.
-      // Globally, size is required (at least for verilator linter), so we need to drop enumeration altogether
-      // in such a case (change to a vector and list of constants) and then remove the special case handling
-      // here.
-      val explicitWidth = if (global) s" logic [${dfType.width - 1}:0]" else ""
+      // TODO: quartus seems to not accept an explicit size Globally
+      val explicitWidth = s" logic [${dfType.width - 1}:0]"
       s"typedef enum$explicitWidth {\n${entries.hindent}\n} ${csDFEnumTypeName(dfType)};"
     else
       dfType.entries.view

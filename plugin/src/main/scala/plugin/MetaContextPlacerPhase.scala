@@ -27,6 +27,7 @@ import dotty.tools.dotc.ast.Trees.Alternative
   is instantiated regularly the instance is transformed into an anonymous
   class instance with the override, otherwise all is required is to add the
   additional override to an existing anonymous DFHDL class instance.
+  Additionally, it transforms basic val x = y to val x = dfhdl.core.r__For_Plugin.identVal(y) if y is a DFVal
  */
 class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
   import tpd._
@@ -49,6 +50,7 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
   var noTopAnnotIsRequired: TypeRef = uninitialized
   var listMapEmptySym: TermSymbol = uninitialized
   var listMapSym: TermSymbol = uninitialized
+  var dfhdlDFValIdentSym: TermSymbol = uninitialized
   val defaultParamMap = mutable.Map.empty[ClassSymbol, Map[Int, Tree]]
   override def prepareForTypeDef(tree: TypeDef)(using Context): Context =
     val sym = tree.symbol
@@ -237,7 +239,8 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
       case Apply(Select(New(Ident(n)), _), _) if n == StdNames.tpnme.ANON_CLASS => tree
       case _
           if (
-            tree.fun.symbol.isClassConstructor && tpe.isParameterless && !ctx.owner.isClassConstructor &&
+            tree.fun.symbol.isClassConstructor && tpe.isParameterless &&
+              !ctx.owner.isClassConstructor &&
               !ctx.owner.isClassConstructor && tpe.typeConstructor <:< hasDFCTpe
           ) =>
         val cls = newNormalizedClassSymbol(
@@ -291,6 +294,29 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
           cpy.Block(tree)(stats = List(updatedTypeDef), expr = tree.expr)
       case _ =>
         tree
+  // transform basic val x = y to val x = dfhdl.core.r__For_Plugin.identVal(y) if y is a DFVal
+  override def transformValDef(tree: ValDef)(using Context): ValDef =
+    object DFValIdent:
+      def unapply(tree: Tree)(using Context): Option[Tree] =
+        tree match
+          case ident @ Ident(name) if !name.toString.contains("$") => Some(tree)
+          case Select(DFValIdent(_), _)                            => Some(tree)
+          case This(DFValIdent(_))                                 => Some(tree)
+          case _                                                   => None
+    end DFValIdent
+    tree.rhs match
+      case DFValIdent(rhs)
+          if !tree.symbol.flags.is(InlineProxy) && tree.tpt.tpe.dfValTpeOpt.nonEmpty =>
+        val dfc = dfcArgStack.headOption.getOrElse(ref(emptyNoEODFCSym))
+        val updatedRHS =
+          ref(dfhdlDFValIdentSym)
+            .appliedToType(rhs.tpe.widen)
+            .appliedTo(rhs)
+            .appliedTo(dfc)
+        cpy.ValDef(tree)(rhs = updatedRHS)
+      case _ => tree
+    end match
+  end transformValDef
 
   override def prepareForUnit(tree: Tree)(using Context): Context =
     super.prepareForUnit(tree)
@@ -306,6 +332,7 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
     noTopAnnotIsRequired = requiredClassRef("dfhdl.internals.NoTopAnnotIsRequired")
     listMapEmptySym = requiredMethod("scala.collection.immutable.ListMap.empty")
     listMapSym = requiredModule("scala.collection.immutable.ListMap")
+    dfhdlDFValIdentSym = requiredMethod("dfhdl.core.r__For_Plugin.identVal")
     dfcArgStack = Nil
     defaultParamMap.clear()
     ctx

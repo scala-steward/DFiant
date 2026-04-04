@@ -1,7 +1,6 @@
 /* This is a led blinker */
 `default_nettype none
 `timescale 1ns/1ps
-`include "Blinker_defs.svh"
 
 module Blinker#(
     parameter int CLK_FREQ_KHz = 50000,

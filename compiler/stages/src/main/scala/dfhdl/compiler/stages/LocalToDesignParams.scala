@@ -6,8 +6,9 @@ import dfhdl.compiler.patching.*
 import dfhdl.options.CompilerOptions
 import scala.collection.mutable
 
-/** This stage converts local parameters that are used in IOs to be design parameters, since VHDL
-  * does not support local parameters for IO access.
+/** This stage converts local parameters that are used in IOs to be design parameters with default
+  * values, since VHDL does not support local parameters for IO access. These kind of design
+  * parameters remain at their default (relative) values and are never directly applied.
   */
 case object LocalToDesignParams extends Stage:
   override def runCondition(using co: CompilerOptions): Boolean =

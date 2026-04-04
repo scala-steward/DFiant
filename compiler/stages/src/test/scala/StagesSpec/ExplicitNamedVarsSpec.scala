@@ -103,7 +103,7 @@ class ExplicitNamedVarsSpec extends StageSpec:
          |        case sd"16'1" => zz := sd"4'5"
          |        case sd"16'2" => zz := sd"4'3"
          |      end match
-         |      if (x < sd"16'11") z2 := (zz + sd"4'3").resize(16)
+         |      if (x < sd"16'11") z2 := (zz +^ sd"4'3").resize(16)
          |      else z2 := zz.resize(16)
          |    case _ => z2 := z + sd"16'12"
          |  end match
@@ -118,10 +118,10 @@ class ExplicitNamedVarsSpec extends StageSpec:
       val lhs     = Bits(8) <> IN
       val shifted = lhs << 1
       val o       = Bits(8) <> OUT
-      o <> ((
+      o <> (
         if (lhs(7)) shifted ^ h"1b"
         else shifted
-      ): Bits[8] <> VAL)
+      )
     end xtime
     val id = (new xtime).explicitNamedVars
     assertCodeString(
@@ -137,4 +137,128 @@ class ExplicitNamedVarsSpec extends StageSpec:
     )
   }
 
+  test("Simple named ident") {
+    class ID extends DFDesign:
+      val x = SInt(16) <> IN
+      val y = SInt(16) <> OUT
+      val v = x
+      y := v
+    end ID
+    val id = (new ID).explicitNamedVars
+    assertCodeString(
+      id,
+      """|class ID extends DFDesign:
+         |  val x = SInt(16) <> IN
+         |  val y = SInt(16) <> OUT
+         |  val v = SInt(16) <> VAR
+         |  v := x
+         |  y := v
+         |end ID
+         |""".stripMargin
+    )
+  }
+
+  test("RT process block named values") {
+    class ID extends RTDesign:
+      val x = SInt(16) <> IN
+      val y = SInt(16) <> OUT.REG init 0
+      process:
+        def S0: Step =
+          val v = x
+          y.din := v
+          NextStep
+        val vr       = x
+        def S1: Step =
+          y.din := vr + 1
+          NextStep
+        val vrc      = (if (x > 5) x else x + 1)
+        def S2: Step =
+          y.din := vrc
+          NextStep
+        val vm = x
+        y.din := vm
+        def S3: Step =
+          y.din := vm
+          NextStep
+        val vrcm = (if (x > 5) x else x + 1)
+        y.din := vrcm
+        def S4: Step =
+          y.din := vrcm
+          NextStep
+    end ID
+    val id = (new ID).explicitNamedVars
+    assertCodeString(
+      id,
+      """|class ID extends RTDesign:
+         |  val x = SInt(16) <> IN
+         |  val y = SInt(16) <> OUT.REG init sd"16'0"
+         |  process:
+         |    def S0: Step =
+         |      val v = SInt(16) <> VAR
+         |      v := x
+         |      y.din := v
+         |      NextStep
+         |    end S0
+         |    val vr = SInt(16) <> VAR.REG
+         |    vr.din := x
+         |    def S1: Step =
+         |      y.din := vr + sd"16'1"
+         |      NextStep
+         |    end S1
+         |    val vrc = SInt(16) <> VAR.REG
+         |    if (x > sd"16'5") vrc.din := x
+         |    else vrc.din := x + sd"16'1"
+         |    def S2: Step =
+         |      y.din := vrc
+         |      NextStep
+         |    end S2
+         |    val vm_din = SInt(16) <> VAR
+         |    val vm = SInt(16) <> VAR.REG
+         |    vm_din := x
+         |    vm.din := vm_din
+         |    y.din := vm_din
+         |    def S3: Step =
+         |      y.din := vm
+         |      NextStep
+         |    end S3
+         |    val vrcm_din = SInt(16) <> VAR
+         |    val vrcm = SInt(16) <> VAR.REG
+         |    if (x > sd"16'5") vrcm_din := x
+         |    else vrcm_din := x + sd"16'1"
+         |    y.din := vrcm_din
+         |    def S4: Step =
+         |      y.din := vrcm
+         |      NextStep
+         |    end S4
+         |end ID""".stripMargin
+    )
+  }
+  test("EDDomain rules") {
+    class ID extends EDDesign:
+      val x  = SInt(16) <> IN
+      val y  = SInt(16) <> OUT
+      val py = SInt(16) <> OUT
+      val v  = x
+      y <> v
+      process:
+        val pv = x
+        py := pv
+    end ID
+    val id = (new ID).explicitNamedVars
+    assertCodeString(
+      id,
+      """|class ID extends EDDesign:
+         |  val x = SInt(16) <> IN
+         |  val y = SInt(16) <> OUT
+         |  val py = SInt(16) <> OUT
+         |  val v = SInt(16) <> VAR
+         |  v <> x
+         |  y <> v
+         |  process:
+         |    val pv = SInt(16) <> VAR
+         |    pv := x
+         |    py := pv
+         |end ID""".stripMargin
+    )
+  }
 end ExplicitNamedVarsSpec

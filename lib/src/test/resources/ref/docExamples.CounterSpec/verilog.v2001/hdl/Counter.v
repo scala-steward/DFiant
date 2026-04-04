@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "Counter_defs.vh"
 
 module Counter#(parameter integer width = 8)(
   input  wire clk,
@@ -9,7 +8,6 @@ module Counter#(parameter integer width = 8)(
   output reg [width - 1:0] cnt
 );
   `include "dfhdl_defs.vh"
-  `include "Counter_defs.vh"
   always @(posedge clk)
   begin
     if (rst == 1'b1) cnt <= `dPW(0, 1, width);

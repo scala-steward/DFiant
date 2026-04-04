@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "RegFile_defs.vh"
 
 module RegFile(
   clk,
@@ -13,7 +12,6 @@ module RegFile(
   rd_wren
 );
   `include "dfhdl_defs.vh"
-  `include "RegFile_defs.vh"
   parameter integer DATA_WIDTH = 32;
   parameter integer REG_NUM = 32;
   input  wire                        clk;

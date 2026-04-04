@@ -3,6 +3,7 @@ import scala.annotation.unchecked.uncheckedVariance
 import dfhdl.internals.hashString
 import upickle.default.*
 import scala.collection.mutable
+import scala.collection.immutable.ListMap
 
 type DFRefAny = DFRef[DFMember]
 sealed trait DFRef[+M <: DFMember] extends Product, Serializable derives CanEqual:
@@ -20,11 +21,18 @@ object DFRef:
     val id: Int = 0
     override def get(using getSet: MemberGetSet): DFMember.Empty = DFMember.Empty
   sealed trait OneWay[+M <: DFMember] extends DFRef[M]:
-    final def copyAsNewRef(using refGen: RefGen): this.type =
+    def copyAsNewRef(using refGen: RefGen): this.type =
       refGen.genOneWay[M].asInstanceOf[this.type]
   object OneWay:
     final case class Gen[M <: DFMember](grpId: (Int, Int), id: Int) extends OneWay[M]
     case object Empty extends OneWay[DFMember.Empty] with DFRef.Empty
+
+  final case class DuplicationRef(owner: DFOwnerNamed) extends OneWay[DFOwnerNamed]:
+    val grpId: (Int, Int) = (-1, -1)
+    val id: Int = -1
+    override def get(using getSet: MemberGetSet): DFOwnerNamed = owner
+    override def getOption(using getSet: MemberGetSet): Option[DFOwnerNamed] = Some(owner)
+    override def copyAsNewRef(using refGen: RefGen): this.type = this
 
   sealed trait TwoWay[+M <: DFMember, +O <: DFMember] extends DFRef[M]:
     def copyAsNewRef(using refGen: RefGen): this.type =
@@ -39,6 +47,16 @@ object DFRef:
       extends TwoWay[DFVal.CanBeExpr, DFVal.CanBeExpr]:
     override def copyAsNewRef(using refGen: RefGen): this.type =
       refGen.genTypeRef.asInstanceOf[this.type]
+
+  extension (list: List[DFRefAny])
+    def =~(that: List[DFRefAny])(using MemberGetSet): Boolean =
+      list.length == that.length && list.lazyZip(that).forall(_ =~ _)
+
+  extension (list: ListMap[String, DFRefAny])
+    def =~(that: ListMap[String, DFRefAny])(using MemberGetSet): Boolean =
+      list.size == that.size && list.lazyZip(that).forall {
+        case ((k1, v1), (k2, v2)) => k1 == k2 && v1 =~ v2
+      }
 
   extension (ref: DFRefAny)
     def isTypeRef: Boolean = ref match
@@ -55,6 +73,8 @@ object DFRef:
           case TypeRef(grpId, id)    => s"TR_${grpId._1.toHexString}_${grpId._2.toHexString}_${id}"
           case TwoWay.Gen(grpId, id) => s"TW_${grpId._1.toHexString}_${grpId._2.toHexString}_${id}"
           case OneWay.Gen(grpId, id) => s"OW_${grpId._1.toHexString}_${grpId._2.toHexString}_${id}"
+          case _: DuplicationRef     =>
+            throw new IllegalArgumentException("DuplicationRef must never be serialized")
       ,
       str =>
         if str == "TWE" then TwoWay.Empty.asInstanceOf[T]

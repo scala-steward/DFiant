@@ -1,6 +1,5 @@
 `default_nettype none
 `timescale 1ns/1ps
-`include "TrueDPR_defs.svh"
 
 module TrueDPR#(
     parameter int DATA_WIDTH = 8,

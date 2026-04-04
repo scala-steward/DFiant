@@ -642,20 +642,21 @@ object DFVal extends DFValLP:
   end Const
 
   object DesignParam:
+    // Note: in meta-programming, the user needs to manually set the Design's paramMap.
     def apply[T <: DFTypeAny](
-        dfVal: DFValOf[T],
-        default: Option[DFValOf[T]] = None
+        appliedVal: DFValOf[T],
+        defaultVal: Option[DFValOf[T]] = None
     )(using DFC): DFConstOf[T] =
       val alias: ir.DFVal.DesignParam =
         ir.DFVal.DesignParam(
-          dfVal.asIR.dfType.dropUnreachableRefs,
-          dfVal.asIR.refTW[ir.DFVal.DesignParam](knownReachable = true),
-          default.map(_.asIR.refTW[ir.DFVal.DesignParam])
+          appliedVal.asIR.dfType.dropUnreachableRefs,
+          defaultVal.map(_.asIR.refTW[ir.DFVal.DesignParam])
             .getOrElse(ir.DFMember.Empty.refTW[ir.DFVal.DesignParam]),
           dfc.ownerOrEmptyRef,
           dfc.getMeta,
           dfc.tags
         )
+      if (!dfc.inMetaProgramming) alias.setCachedAppliedVal(appliedVal.asIR)
       alias.addMember.asConstOf[T]
     end apply
   end DesignParam
@@ -774,8 +775,13 @@ object DFVal extends DFValLP:
                   if (prevLHSArg.isAnonymous) Some(prevLHSArg.setMeta(_ => dfc.getMeta))
                   else Some(prevLHSArg)
                 else
-                  dfc.mutableDB.setMember(prevRHSArg, _.copy(data = Some(newRHSData)))
-                  Some(dfc.mutableDB.setMember(prevFunc, _.copy(meta = dfc.getMeta)))
+                  // Clone prevFunc to avoid destructively modifying shared IR nodes
+                  val clonedFunc = prevFunc.cloneAnonValueAndDepsHere
+                    .asInstanceOf[ir.DFVal.Func]
+                  val clonedRHSArg = clonedFunc.args.last.get
+                    .asInstanceOf[ir.DFVal.Const]
+                  dfc.mutableDB.setMember(clonedRHSArg, _.copy(data = Some(newRHSData)))
+                  Some(dfc.mutableDB.setMember(clonedFunc, _.copy(meta = dfc.getMeta)))
               case _ => None
             end match
           case _ => None
@@ -830,9 +836,12 @@ object DFVal extends DFValLP:
               )
             ).asVal[AT, M]
           // remove redundant intermediate casting when the final result needs to be `.bits` anyways
-          case asIs: ir.DFVal.Alias.AsIs
+          // as long as the alias is anonymous and has the same width as the related value,
+          // to avoid modifying the semantics of named values that can be referenced in multiple places.
+          case asIs @ ir.DFVal.Alias.AsIs(relValRef = ir.DFRef(relValIR))
               if aliasType.asIR.isInstanceOf[ir.DFBits] && asIs.isAnonymous &&
-                dfc.isAnonymous && !forceNewAlias && asIs.tags.isEmpty =>
+                dfc.isAnonymous && !forceNewAlias && asIs.tags.isEmpty &&
+                relValIR.width == asIs.width =>
             asIs.relValRef.get.asVal[AT, M]
           // remove redundant intermediate casting converting from BoolOrBit to Bits/UInt/SInt + resize
           case asIs @ ir.DFVal.Alias.AsIs(
@@ -1869,8 +1878,8 @@ extension (dfVal: ir.DFVal)
           else
             dfVal match
               // design parameter, so recurse on the referenced value
-              case ir.DFVal.DesignParam(dfValRef = ir.DFRef(of)) =>
-                of.cloneUnreachable
+              case dp: ir.DFVal.DesignParam =>
+                dp.appliedOrDefaultVal.cloneUnreachable
               // named constant, so clone under a new name within relation to the current design
               case _ =>
                 val newMeta =

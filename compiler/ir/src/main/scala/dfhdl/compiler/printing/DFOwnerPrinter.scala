@@ -26,14 +26,20 @@ trait AbstractOwnerPrinter extends AbstractPrinter:
         // a def design that is anonymous may not be referenced later,
         // so we need to check if it has an output port that is referenced later
         case design: DFDesignBlock if design.instMode == InstMode.Def && design.isAnonymous =>
-          design.members(MemberView.Folded).view.reverse.collectFirst { case port @ DclOut() =>
+          // For duplicate designs, ports may not be in the members list but are
+          // available via dupPortsByName (with DuplicationRef owners).
+          // For DuplicationRef-backed ports, we check the PBNS read deps instead.
+          val ports = getSet.designDB.dupPortsByName(design).view.values.collect {
+            case port @ DclOut() => port
+          }
+          val hasOutput = ports.lastOption.map(port =>
             // no dependencies means the output is not read (referenced later),
             // so we need to print now
-            port.getReadDeps.isEmpty
-          }
-            // no output port means a Unit return that cannot be referenced,
-            // so we need to print it now
-            .getOrElse(true)
+            port.getPortsByNameSelectors.forall(_.getReadDeps.isEmpty)
+          )
+          // no output port means a Unit return that cannot be referenced,
+          // so we need to print it now
+          hasOutput.getOrElse(true)
         // named members
         case m: DFMember.Named if !m.isAnonymous => true
         // excluding late (via) connections
@@ -116,7 +122,10 @@ trait AbstractOwnerPrinter extends AbstractPrinter:
         case DFMember.Empty => ""
         case _              => csDFCaseGuard(caseBlock.guardRef)
     s"$csDFCaseKeyword${csDFCasePattern(caseBlock.pattern)}$csGuard$csDFCaseSeparator"
-  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean): String
+  // isUnique is true when the selector is a local enum type, enabling `unique case` in
+  // SystemVerilog to avoid lint warnings. Global enums are excluded because
+  // their full set of entries is not guaranteed to be covered at every match site.
+  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean, isUnique: Boolean): String
   def csDFMatchEnd: String
   def csStepBlock(stepBlock: StepBlock): String
   def csDFForBlock(forBlock: DFLoop.DFForBlock): String
@@ -156,7 +165,10 @@ trait AbstractOwnerPrinter extends AbstractPrinter:
     ch match
       case mh: DFConditional.DFMatchHeader =>
         val csSelector = mh.selectorRef.refCodeString.applyBrackets()
-        sn"""|${csDFMatchStatement(csSelector, mh.hasWildcards)}
+        val isUnique = mh.selectorRef.get.dfType match
+          case e: DFEnum => !getSet.designDB.getGlobalNamedDFTypes.contains(e)
+          case _         => false
+        sn"""|${csDFMatchStatement(csSelector, mh.hasWildcards, isUnique)}
              |${csChains.hindent}
              |${csDFMatchEnd}"""
       case ih: DFConditional.DFIfHeader => csChains
@@ -202,14 +214,16 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
       s"def ${design.dclName}$designParamCS($defArgsCS)$retTypeCS =\n${bodyWithDcls.hindent}\nend ${design.dclName}"
     s"${printer.csAnnotations(design.dclMeta.annotations)}$dcl\n"
   end csDFDesignDefDcl
+  private def csDesignParamList(design: DFDesignBlock): List[String] =
+    design.paramMap.view.map { (name, ref) =>
+      s"${name} = ${ref.refCodeString}"
+    }.toList
   def csDFDesignDefInst(design: DFDesignBlock): String =
-    val ports = design.members(MemberView.Folded).view.collect { case port @ DclIn() =>
+    val ports = getSet.designDB.dupPortsByName(design).view.values.collect { case port @ DclIn() =>
       val DFNet.Connection(_, from: DFVal, _) = port.getConnectionTo.get.runtimeChecked
       printer.csDFValRef(from, design.getOwner)
     }.mkString(", ")
-    val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
-      s"${param.getName} = ${param.dfValRef.refCodeString}"
-    }
+    val designParamList = csDesignParamList(design)
     val designParamCS =
       if (designParamList.length == 0) ""
       else if (designParamList.length == 1) designParamList.mkString("(", ", ", ")")
@@ -219,9 +233,7 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
     else s"val ${design.getName} = $dcl"
   end csDFDesignDefInst
   def csDFDesignBlockParamInst(design: DFDesignBlock): String =
-    val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
-      s"${param.getName} = ${param.dfValRef.refCodeString}"
-    }
+    val designParamList = csDesignParamList(design)
     if (designParamList.length <= 1) designParamList.mkString("(", ", ", ")")
     else "(" + designParamList.mkString("\n", ",\n", "\n").hindent(2) + ")"
   def csDFDesignBlockDcl(design: DFDesignBlock): String =
@@ -247,11 +259,11 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
           case _ => "EDDesign"
     val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
       val defaultValue =
-        if (design.isTop) s" = ${param.dfValRef.refCodeString}"
+        if (design.isTop) s" = ${param.appliedOrDefaultValRef.refCodeString}"
         else
-          param.defaultRef.get match
+          param.defaultValRef.get match
             case DFMember.Empty => ""
-            case _              => s" = ${param.defaultRef.refCodeString}"
+            case _              => s" = ${param.defaultValRef.refCodeString}"
       s"val ${param.getName}${printer.csDFValConstType(param.dfType)}$defaultValue"
     }
     val designIsVendorIPBlackbox = design.isVendorIPBlackbox
@@ -279,9 +291,7 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
   end csDFDesignBlockDcl
   def csDFDesignBlockInst(design: DFDesignBlock): String =
     val body = csDFDesignLateBody(design)
-    val designParamList = design.members(MemberView.Folded).collect { case param: DesignParam =>
-      s"${param.getName} = ${param.dfValRef.refCodeString}"
-    }
+    val designParamList = csDesignParamList(design)
     val designParamCS =
       // for vendor IP blackbox, we define the parameters in the class extension instead of the
       // blackbox instantiation
@@ -344,7 +354,7 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
   def csDFCaseKeyword: String = "case "
   def csDFCaseSeparator: String = " =>"
   def csDFMatchEnd: String = "end match"
-  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean): String =
+  def csDFMatchStatement(csSelector: String, wildcardSupport: Boolean, isUnique: Boolean): String =
     s"$csSelector match"
   def csProcessBlock(pb: ProcessBlock): String =
     val body = csDFOwnerBody(pb)
@@ -357,28 +367,38 @@ protected trait DFOwnerPrinter extends AbstractOwnerPrinter:
   def csStepBlock(stepBlock: StepBlock): String =
     val body = csDFOwnerBody(stepBlock)
     val name = stepBlock.getName
-    val defType = if (stepBlock.isRegular) "Step" else "Unit"
-    s"def $name: $defType =\n${body.hindent}\nend $name"
+    val defType =
+      if (stepBlock.isRegular) ": Step"
+      else if (stepBlock.isFallThrough)
+        printer.csDFValType(stepBlock.getVeryLastMember.get.asInstanceOf[DFVal].dfType)
+      else ": Unit"
+    s"def $name$defType =\n${body.hindent}\nend $name"
   def csDFForBlock(forBlock: DFLoop.DFForBlock): String =
     val csCOMB_LOOP = if (forBlock.isCombinational) "COMB_LOOP" else ""
+    val csFALL_THROUGH = if (forBlock.isFallThrough) "FALL_THROUGH" else ""
     val body =
       sn"""|${csCOMB_LOOP}
+           |${csFALL_THROUGH}
            |${csDFOwnerBody(forBlock)}"""
     val named = forBlock.meta.nameOpt.map(n => s"val $n = ").getOrElse("")
+    val endName = forBlock.meta.nameOpt.map(n => s"end $n").getOrElse("end for")
     //format: off
     sn"""|${named}for (${forBlock.iteratorRef.refCodeString} <- ${printer.csDFRange(forBlock.rangeRef.get)})
          |${body.hindent}
-         |end for"""
+         |$endName"""
     //format: on
   def csDFWhileBlock(whileBlock: DFLoop.DFWhileBlock): String =
     val csCOMB_LOOP = if (whileBlock.isCombinational) "COMB_LOOP" else ""
+    val csFALL_THROUGH = if (whileBlock.isFallThrough) "FALL_THROUGH" else ""
     val body =
       sn"""|${csCOMB_LOOP}
+           |${csFALL_THROUGH}
            |${csDFOwnerBody(whileBlock)}"""
     val named = whileBlock.meta.nameOpt.map(n => s"val $n = ").getOrElse("")
+    val endName = whileBlock.meta.nameOpt.map(n => s"end $n").getOrElse("end while")
     sn"""|${named}while (${whileBlock.guardRef.refCodeString})
          |${body.hindent}
-         |end while"""
+         |$endName"""
   def csDomainBlock(domain: DomainBlock): String =
     val body = csDFOwnerBody(domain)
     val named = domain.meta.nameOpt.map(n => s"val $n = ").getOrElse("")

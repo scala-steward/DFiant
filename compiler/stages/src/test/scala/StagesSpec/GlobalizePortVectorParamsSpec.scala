@@ -4,7 +4,7 @@ import dfhdl.*
 import dfhdl.compiler.stages.globalizePortVectorParams
 // scalafmt: { align.tokens = [{code = "<>"}, {code = "="}, {code = "=>"}, {code = ":="}]}
 
-class GlobalizePortVectorParams extends StageSpec(stageCreatesUnrefAnons = true):
+class GlobalizePortVectorParamsSpec extends StageSpec(stageCreatesUnrefAnons = true):
   given options.CompilerOptions.Backend = backends.vhdl.v93
   test("Various vector params are kept"):
     val width: Int <> CONST  = 8
@@ -46,9 +46,13 @@ class GlobalizePortVectorParams extends StageSpec(stageCreatesUnrefAnons = true)
     )
   test("Various vector params are globalized, only ports are affected"):
     class Foo(
-        val width: Int <> CONST  = 8,
-        val length: Int <> CONST = 10
+        val keepThisParam: Int <> CONST = 4,
+        val width: Int <> CONST         = 8,
+        val length: Int <> CONST        = 10
     ) extends RTDesign:
+      val x0 = Bits(keepThisParam) <> IN
+      val y0 = Bits(keepThisParam) <> OUT
+      y0 <> x0
       val x1 = Bits(width) X length <> IN
       val y1 = Bits(width) X length <> OUT
       val v1 = Bits(width) X length <> VAR
@@ -76,7 +80,10 @@ class GlobalizePortVectorParams extends StageSpec(stageCreatesUnrefAnons = true)
       """|val Foo_length: Int <> CONST = 10
          |val Foo_width: Int <> CONST = 8
          |
-         |class Foo extends RTDesign:
+         |class Foo(val keepThisParam: Int <> CONST = 4) extends RTDesign:
+         |  val x0 = Bits(keepThisParam) <> IN
+         |  val y0 = Bits(keepThisParam) <> OUT
+         |  y0 <> x0
          |  val x1 = Bits(Foo_width) X Foo_length <> IN
          |  val y1 = Bits(Foo_width) X Foo_length <> OUT
          |  val v1 = Bits(Foo_width) X Foo_length <> VAR
@@ -312,4 +319,52 @@ class GlobalizePortVectorParams extends StageSpec(stageCreatesUnrefAnons = true)
          |  y3 <> id3.y
          |end IDTop""".stripMargin
     )
-end GlobalizePortVectorParams
+
+  test("Duplicate designs with nested design instances"):
+    class ID extends EDDesign:
+      val x = Bits(8) <> IN
+      val y = Bits(8) <> OUT
+      y <> x
+    end ID
+
+    class Internal(val param: Bits[8] <> CONST) extends EDDesign:
+      val x  = Bits(8) <> IN
+      val y  = Bits(8) <> OUT
+      val id = ID()
+      id.x <> x
+      y    <> id.y
+    end Internal
+
+    class Foo extends EDDesign:
+      val state = Bits(8) <> IN
+      val o00   = Internal(param = h"02")
+      val o01   = Internal(param = h"01")
+      o00.x <> state
+      o01.x <> state
+    val top = (new Foo).globalizePortVectorParams
+    assertCodeString(
+      top,
+      """|class ID extends EDDesign:
+         |  val x = Bits(8) <> IN
+         |  val y = Bits(8) <> OUT
+         |  y <> x
+         |end ID
+         |
+         |class Internal(val param: Bits[8] <> CONST) extends EDDesign:
+         |  val x = Bits(8) <> IN
+         |  val y = Bits(8) <> OUT
+         |  val id = ID()
+         |  id.x <> x
+         |  y <> id.y
+         |end Internal
+         |
+         |class Foo extends EDDesign:
+         |  val state = Bits(8) <> IN
+         |  val o00 = Internal(param = h"02")
+         |  val o01 = Internal(param = h"01")
+         |  o00.x <> state
+         |  o01.x <> state
+         |end Foo
+         |""".stripMargin
+    )
+end GlobalizePortVectorParamsSpec

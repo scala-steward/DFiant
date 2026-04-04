@@ -38,8 +38,8 @@ object OrderMembers:
         // design parameters come second as they are dependent only on external
         // initialization or default values and everything else can depend on them
         case _: DFVal.DesignParam => 2
-        // anonymous members that are referenced by declarations come third
-        case dfVal: DFVal if dfVal.isReferencedByAnyDcl => 3
+        // anonymous members that are referenced by declarations or design instances come third
+        case dfVal: DFVal if dfVal.isReferencedByAnyDclOrDesign => 3
         // fourth to come are constant declarations that may be referenced by ports
         case DclConst() => 4
         // fifth are ports

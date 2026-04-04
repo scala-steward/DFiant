@@ -43,14 +43,6 @@ final case class DB(
   // considered to be in build if not in simulation and has a device constraint
   lazy val inBuild: Boolean = !inSimulation && top.isDeviceTop
 
-  lazy val portsByName: Map[DFDesignInst, Map[String, DFVal.Dcl]] =
-    members.view
-      .collect { case m: DFVal.Dcl if m.isPort => m }
-      .groupBy(_.getOwnerDesign)
-      .map { case (design, dcls) =>
-        design -> dcls.map(m => m.getRelativeName(design) -> m).toMap
-      }.toMap
-
   lazy val topIOs: List[DFVal.Dcl] = designMemberTable(top).collect {
     case dcl: DFVal.Dcl if dcl.isPort => dcl
   }
@@ -124,7 +116,8 @@ final case class DB(
                 if (owner == namedDFTypeMember.getOwnerDesign)
                   namedDFTypeMap // same design block -> nothing to do
                 else
-                  namedDFTypeMap + (dfType -> None) // used in more than one block -> global named type
+                  namedDFTypeMap +
+                    (dfType -> None) // used in more than one block -> global named type
               case Some(None) => namedDFTypeMap // known to be a global type
               // found new named type
               case None =>
@@ -263,13 +256,114 @@ final case class DB(
       List(top -> List())
     ).reverse
 
+  // holds a hash table that lists members of each owner block. The member list order is maintained.
+  lazy val designMemberTable: Map[DFDesignBlock, List[DFMember]] =
+    Map(designMemberList*)
+
   // holds the topological order of unique design block dependency
   lazy val uniqueDesignMemberList: List[(DFDesignBlock, List[DFMember])] =
     designMemberList.filterNot(_._1.isDuplicate)
 
-  // holds a hash table that lists members of each owner block. The member list order is maintained.
-  lazy val designMemberTable: Map[DFDesignBlock, List[DFMember]] =
-    Map(designMemberList*)
+  // maps each duplicated design to its origin (first non-duplicate design with the same dclName)
+  lazy val dupDesignToOrigMap: Map[DFDesignBlock, DFDesignBlock] =
+    val origByName =
+      uniqueDesignMemberList.map(_._1).groupBy(_.dclName).view.mapValues(_.head).toMap
+    designMemberList.collect {
+      case (design, _) if design.isDuplicate => design -> origByName(design.dclName)
+    }.toMap
+
+  // Single pass: for each duplicate design, compute dup domain blocks AND dup ports together.
+  // dupDesignDomainBlockMap: maps (dupDesign, origDomainBlock) -> dupDomainBlock
+  // dupPortsByName: maps design -> port name -> Dcl (including dup entries with DuplicationRef)
+  lazy val (dupDesignDomainBlockMap, dupPortsByName) =
+    val origDomainBlocks: Map[DFDesignBlock, List[DomainBlock]] =
+      members.view
+        .collect { case db: DomainBlock => db }
+        .groupBy(_.getOwnerDesign)
+        .map { (design, blocks) => design -> blocks.toList }
+        .toMap
+    val origPortMap = members.view
+      .collect { case m: DFVal.Dcl if m.isPort => m }
+      .groupBy(_.getOwnerDesign)
+      .map { case (design, dcls) =>
+        design -> ListMap.from(dcls.view.map(m => m.getRelativeName(design) -> m))
+      }.toMap
+    // PBNS members carry the correct dfType for each duplicate's port (reflecting the
+    // actual instantiation parameters), so we use it to override the origin Dcl's dfType.
+    val pbnsByDesign = members.view
+      .collect { case m: DFVal.PortByNameSelect => m }
+      .groupBy(m => m.designInstRef.get)
+      .view.mapValues(_.map(m => m.portNamePath -> m.dfType).toMap).toMap
+    val domainBlockMap = mutable.Map.empty[(DFDesignBlock, DomainBlock), DomainBlock]
+    val portEntries = mutable.Map.empty[DFDesignInst, ListMap[String, DFVal.Dcl]]
+    dupDesignToOrigMap.foreach { (dupDesign, origDesign) =>
+      // 1. Build domain block copies
+      val origToDupMap = mutable.Map.empty[DFDomainOwner, DFDomainOwner]
+      origToDupMap += origDesign -> dupDesign
+      origDomainBlocks.getOrElse(origDesign, Nil).foreach { origBlock =>
+        val dupOwner = origToDupMap(origBlock.getOwnerDomain)
+        val dupBlock = origBlock.copy(ownerRef = DFRef.DuplicationRef(dupOwner))
+        origToDupMap += origBlock -> dupBlock
+        domainBlockMap += (dupDesign, origBlock) -> dupBlock
+      }
+      // 2. Build port copies (reusing origToDupMap from step 1)
+      val pbnsTypes = pbnsByDesign.getOrElse(dupDesign, Map.empty)
+      portEntries += dupDesign -> ListMap.from(origPortMap(origDesign).view.map { (name, dcl) =>
+        val dfType = pbnsTypes.getOrElse(name, dcl.dfType)
+        val dupOwnerDomain = origToDupMap(dcl.getOwnerDomain)
+        name -> dcl.copy(ownerRef = DFRef.DuplicationRef(dupOwnerDomain), dfType = dfType)
+      })
+    }
+    // dupEntries only fills in missing entries (designs without real port members)
+    (domainBlockMap.toMap, portEntries.toMap ++ origPortMap)
+
+  lazy val dupDomainOwnerPublicMemberList: List[(DFDomainOwner, List[DFMember])] =
+    def publicMemberFilter(member: DFMember): Boolean =
+      member match
+        case dcl: DFVal.Dcl if dcl.isPort => true
+        case design: DFDesignBlock        => true
+        case domainBlock: DomainBlock     => true
+        case _                            => false
+    // For duplicate designs, generate entries for their dup-copy domain blocks
+    // by mirroring the origin's domain owner structure.
+    def dupEntriesFor(
+        origOwner: DFDomainOwner,
+        dupDesign: DFDesignBlock
+    ): List[(DFDomainOwner, List[DFMember])] =
+      val dupOwner: DFDomainOwner = origOwner match
+        case _: DFDesignBlock    => dupDesign
+        case db: DomainBlock     => dupDesignDomainBlockMap((dupDesign, db))
+        case _: DFInterfaceOwner => ??? // TODO
+      val origMembers = domainOwnerMemberTable(origOwner)
+        .view.filter(publicMemberFilter).toList
+      val dupDesignPorts = dupPortsByName.getOrElse(dupDesign, ListMap.empty)
+      val dupMembers = origMembers.map {
+        case dcl: DFVal.Dcl =>
+          val relName = dcl.getRelativeName(origOwner.getThisOrOwnerDesign)
+          dupDesignPorts.getOrElse(relName, dcl)
+        case design: DFDesignBlock => design // nested designs stay as-is
+        case db: DomainBlock       => dupDesignDomainBlockMap((dupDesign, db))
+        case m                     => m
+      }
+      (dupOwner -> dupMembers) :: origMembers.collect { case db: DomainBlock =>
+        dupEntriesFor(db, dupDesign)
+      }.flatten
+    domainOwnerMemberList.flatMap { case (owner, members) =>
+      owner match
+        case dupDesign: DFDesignBlock if dupDesign.isDuplicate =>
+          val origDesign = dupDesignToOrigMap(dupDesign)
+          dupEntriesFor(origDesign, dupDesign)
+        case origDesign: DFDesignBlock =>
+          List(origDesign -> members.filter(publicMemberFilter))
+        case origDomainBlock: DomainBlock =>
+          List(origDomainBlock -> members.filter(publicMemberFilter))
+        // TODO: missing interface handling
+        case interface: DFInterfaceOwner => ???
+    }
+  end dupDomainOwnerPublicMemberList
+
+  lazy val dupDomainOwnerPublicMemberTable: Map[DFDomainOwner, List[DFMember]] =
+    Map(dupDomainOwnerPublicMemberList*)
 
   private def conditionalChainGen: Map[DFConditional.Header, List[DFConditional.Block]] =
     val handled = mutable.Set.empty[DFConditional.Block]
@@ -637,24 +731,25 @@ final case class DB(
           )
         }
     // collect all ports that are not connected directly or implicitly as magnets
-    val danglingPorts = members.collect {
-      case p: DFVal.Dcl
-          if p.isPortIn && !p.isClkDcl && !p.isRstDcl && !connectionTable.contains(p) &&
-            !p.getOwnerDesign.isTop && !magnetConnectionTable.contains(p) =>
-        val ownerDesign = p.getOwnerDesign
-        s"""|DFiant HDL connectivity error!
-            |Position:  ${ownerDesign.meta.position}
-            |Hierarchy: ${ownerDesign.getFullName}
-            |Message:   Found a dangling (unconnected) input port `${p.getName}`.""".stripMargin
-      case p: DFVal.Dcl
-          if p.isPortOut && !p.getOwnerDesign.isDuplicate && !p.getOwnerDesign.isBlackBox &&
-            !connectionTable.contains(p) && !assignmentsDclTable.contains(p) &&
-            !magnetConnectionTable.contains(p) && !p.hasNonBubbleInit =>
-        val ownerDesign = p.getOwnerDesign
-        s"""|DFiant HDL connectivity error!
-            |Position:  ${p.meta.position}
-            |Hierarchy: ${ownerDesign.getFullName}
-            |Message:   Found a dangling (unconnected/unassigned and uninitialized) output port `${p.getName}`.""".stripMargin
+    val danglingPorts = dupPortsByName.view.flatMap { (ownerDesign, ports) =>
+      ports.collect {
+        case (_, p: DFVal.Dcl)
+            if p.isPortIn && !p.isClkDcl && !p.isRstDcl && !connectionTable.contains(p) &&
+              !ownerDesign.isTop && !magnetConnectionTable.contains(p) =>
+          s"""|DFiant HDL connectivity error!
+              |Position:  ${ownerDesign.meta.position}
+              |Hierarchy: ${ownerDesign.getFullName}
+              |Message:   Found a dangling (unconnected) input port `${p.getName}`.""".stripMargin
+        case (_, p: DFVal.Dcl)
+            if p.isPortOut && !ownerDesign.isDuplicate && !ownerDesign.isBlackBox &&
+              !connectionTable.contains(p) && !assignmentsDclTable.contains(p) &&
+              !magnetConnectionTable.contains(p) && !p.hasNonBubbleInit =>
+          val ownerDesign = p.getOwnerDesign
+          s"""|DFiant HDL connectivity error!
+              |Position:  ${p.meta.position}
+              |Hierarchy: ${ownerDesign.getFullName}
+              |Message:   Found a dangling (unconnected/unassigned and uninitialized) output port `${p.getName}`.""".stripMargin
+      }
     }
     if (danglingPorts.nonEmpty)
       throw new IllegalArgumentException(
@@ -671,53 +766,51 @@ final case class DB(
         owner.domainType match
           case _: DomainType.RT => Some(owner)
           case _                => None
-    members.view.flatMap {
-      case domainOwner: DFDomainOwner =>
-        domainOwner.domainType match
-          // only RT domain owners are saved
-          case DomainType.RT(cfg) =>
-            cfg match
-              // derived configuration dependency is set according to various factors:
-              case RTDomainCfg.Derived =>
-                domainOwner match
-                  // for designs, the derived configuration is defined by the owner RT design, if such exists.
-                  // if not, then there is no domain configuration dependency
-                  case design: DFDesignBlock =>
-                    if (design.isTop) None
-                    else design.getRTOwnerOption.map(design -> _)
-                  // for domains, the derived configuration is defined according to the input ports source,
-                  // if such ports exist (ignoring Clk/Rst ports).
-                  // otherwise, the derived configuration is defined by the domain's owner.
-                  case domain: DomainBlock =>
-                    val domainMembers = domainOwnerMemberTable(domain)
-                    val inPorts = domainMembers.collect {
-                      case dcl: DFVal.Dcl if dcl.isPortIn && !dcl.isClkDcl && !dcl.isRstDcl => dcl
-                    }
-                    val inSourceDomains = inPorts.view.flatMap { port =>
-                      connectionTable.getNets(port).headOption match
-                        case Some(DFNet.Connection(_, from, _)) => from.getRTOwnerOption
-                        case _                                  => None
-                    }.toSet
-                    if (inSourceDomains.isEmpty) domain.getRTOwnerOption.map(domain -> _)
-                    else if (inSourceDomains.size > 1)
-                      throw new IllegalArgumentException(
-                        s"""|Found ambiguous source RT configurations for the domain:
-                            |${domain.getFullName}
-                            |Sources:
-                            |${inSourceDomains.map(_.getFullName).mkString("\n")}
-                            |Possible solution:
-                            |Either explicitly define a configuration for the domain or drive it from a single source domain.
-                            |""".stripMargin
-                      )
-                    else Some(domain -> inSourceDomains.head)
-                  case ifc: DFInterfaceOwner =>
-                    ??? // TODO: decide what are the rules are for interfaces
-              // related configuration is just dependent on the its related domain
-              case RTDomainCfg.Related(relatedDomainRef) =>
-                Some(domainOwner -> relatedDomainRef.get)
-              case _ => None
-          case _ => None
-      case _ => None
+    // Use dupDomainOwnerPublicMemberList to include domain owners from duplicate designs
+    dupDomainOwnerPublicMemberList.view.flatMap { (domainOwner, domainMembers) =>
+      domainOwner.domainType match
+        // only RT domain owners are saved
+        case DomainType.RT(cfg) =>
+          cfg match
+            // derived configuration dependency is set according to various factors:
+            case RTDomainCfg.Derived =>
+              domainOwner match
+                // for designs, the derived configuration is defined by the owner RT design, if such exists.
+                // if not, then there is no domain configuration dependency
+                case design: DFDesignBlock =>
+                  if (design.isTop) None
+                  else design.getRTOwnerOption.map(design -> _)
+                // for domains, the derived configuration is defined according to the input ports source,
+                // if such ports exist (ignoring Clk/Rst ports).
+                // otherwise, the derived configuration is defined by the domain's owner.
+                case domain: DomainBlock =>
+                  val inPorts = domainMembers.collect {
+                    case dcl: DFVal.Dcl if dcl.isPortIn && !dcl.isClkDcl && !dcl.isRstDcl => dcl
+                  }
+                  val inSourceDomains = inPorts.view.flatMap { port =>
+                    connectionTable.getNets(port).headOption match
+                      case Some(DFNet.Connection(_, from, _)) => from.getRTOwnerOption
+                      case _                                  => None
+                  }.toSet
+                  if (inSourceDomains.isEmpty) domain.getRTOwnerOption.map(domain -> _)
+                  else if (inSourceDomains.size > 1)
+                    throw new IllegalArgumentException(
+                      s"""|Found ambiguous source RT configurations for the domain:
+                          |${domain.getFullName}
+                          |Sources:
+                          |${inSourceDomains.map(_.getFullName).mkString("\n")}
+                          |Possible solution:
+                          |Either explicitly define a configuration for the domain or drive it from a single source domain.
+                          |""".stripMargin
+                    )
+                  else Some(domain -> inSourceDomains.head)
+                case ifc: DFInterfaceOwner =>
+                  ??? // TODO: decide what are the rules are for interfaces
+            // related configuration is just dependent on the its related domain
+            case RTDomainCfg.Related(relatedDomainRef) =>
+              Some(domainOwner -> relatedDomainRef.get)
+            case _ => None
+        case _ => None
     }
       .toMap
   end dependentRTDomainOwners
@@ -782,7 +875,8 @@ final case class DB(
       case internal: DFDesignBlock             => internal.usesClkRst.usesClk
       case _                                   => false
     } || reversedDependents.getOrElse(domainOwner, Set()).exists(_.usesClkRst.usesClk) ||
-      domainOwner.isTop && (domainOwner.getExplicitCfg.clkCfg match
+      domainOwner.isTop &&
+      (domainOwner.getExplicitCfg.clkCfg match
         case ClkCfg.Explicit(inclusionPolicy = ClkRstInclusionPolicy.AlwaysAtTop) => true
         case _                                                                    => false)
 
@@ -794,7 +888,8 @@ final case class DB(
       case internal: DFDesignBlock             => internal.usesClkRst.usesRst
       case _                                   => false
     } || reversedDependents.getOrElse(domainOwner, Set()).exists(_.usesClkRst.usesRst) ||
-      domainOwner.isTop && (domainOwner.getExplicitCfg.rstCfg match
+      domainOwner.isTop &&
+      (domainOwner.getExplicitCfg.rstCfg match
         case RstCfg.Explicit(inclusionPolicy = ClkRstInclusionPolicy.AlwaysAtTop) => true
         case _                                                                    => false)
   end extension
@@ -1029,9 +1124,6 @@ final case class DB(
       membersNoGlobals.view.drop(1).flatMap {
         case _: PortByNameSelect => None
         case m                   =>
-          val isDesignParam = m match
-            case _: DFVal.DesignParam => true
-            case _                    => false
           m.getRefs.view.map(_.get).flatMap {
             // global values are ok to be referenced
             case dfVal: DFVal.CanBeGlobal if dfVal.isGlobal => None
@@ -1047,17 +1139,9 @@ final case class DB(
             case refMember: DFDesignBlock =>
               if (m.isMemberOf(refMember)) None
               else Some(refMember)
-            case refMember =>
-              m match
-                // design parameters are expected to reference values from their parent design
-                // or from the same design for default parameter values
-                case dp: DFVal.DesignParam =>
-                  if (refMember.isSameOwnerDesignAs(dp) && dp.defaultRef.get == refMember) None
-                  else if (m.isOneLevelBelow(refMember)) None
-                  else Some(refMember)
-                // the rest must be in the same design
-                case _ if !refMember.isSameOwnerDesignAs(m) => Some(refMember)
-                case _                                      => None
+            // the rest must be in the same design
+            case refMember if !refMember.isSameOwnerDesignAs(m) => Some(refMember)
+            case _                                              => None
           }.map(m -> _)
       }.toList
     val errorMessages = problemReferences.map { (from, to) =>
@@ -1099,7 +1183,8 @@ final case class DB(
                 domainOwner.getDomainClkConstraintsView.foreach {
                   case constraints.IO(loc = loc: String) =>
                     locationMap.get(loc).foreach { prevPort =>
-                      locationCollisions += s"${prevPort} and ${domainOwner.getFullName} are both assigned to location `${loc}`"
+                      locationCollisions +=
+                        s"${prevPort} and ${domainOwner.getFullName} are both assigned to location `${loc}`"
                     }
                     locationMap += loc -> domainOwner.getFullName
                     foundLoc = true
@@ -1121,14 +1206,17 @@ final case class DB(
               case constraints.IO(bitIdx = None, loc = loc: String) =>
                 bitSet.clear()
                 locationMap.get(loc).foreach { prevPort =>
-                  locationCollisions += s"${prevPort} and ${port.getFullName} are both assigned to location `${loc}`"
+                  locationCollisions +=
+                    s"${prevPort} and ${port.getFullName} are both assigned to location `${loc}`"
                 }
                 locationMap += loc -> port.getFullName
                 if (port.width != 1)
-                  locationCollisions += s"${port.getFullName} has mutliple bits assigned to location `${loc}`"
+                  locationCollisions +=
+                    s"${port.getFullName} has mutliple bits assigned to location `${loc}`"
               case constraints.IO(bitIdx = bitIdx: Int, loc = loc: String) =>
                 locationMap.get(loc).foreach { prevPort =>
-                  locationCollisions += s"${prevPort} and ${port.getFullName}(${bitIdx}) are both assigned to location `${loc}`"
+                  locationCollisions +=
+                    s"${prevPort} and ${port.getFullName}(${bitIdx}) are both assigned to location `${loc}`"
                 }
                 locationMap += loc -> s"${port.getFullName}(${bitIdx})"
                 bitSet -= bitIdx
@@ -1176,7 +1264,8 @@ final case class DB(
               case constraints.IO(dir = dir: Dir) =>
                 (dir, port.modifier.dir) match
                   case (Dir.IN, Dir.OUT) | (Dir.OUT, Dir.IN) =>
-                    errors += s"${port.getFullName} direction (${port.modifier.dir}) has a resource direction ($dir) mismatch."
+                    errors +=
+                      s"${port.getFullName} direction (${port.modifier.dir}) has a resource direction ($dir) mismatch."
                   case _ =>
               case _ =>
             }
@@ -1193,7 +1282,6 @@ final case class DB(
             |Make sure you connect the resource to the port with the correct direction.
             |""".stripMargin
       )
-
   end portResourceDirCheck
 
   def check(): Unit =
@@ -1248,6 +1336,17 @@ object DB:
   def fromJsonString(json: String): DB = read[DB](json)
 end DB
 
+/** Controls how `owner.members(view)` traverses the ownership tree.
+  *   - `Folded`: returns only the direct children of the owner (members whose `getOwner == owner`).
+  *   - `Flattened`: returns all descendants recursively. For a `DFDesignBlock` owner this returns
+  *     every member in the design (via `designMemberTable`). For other owners it recurses into
+  *     nested blocks but does NOT cross `DFDesignBlock` boundaries — sub-designs appear as a single
+  *     opaque entry.
+  *
+  * Use `Folded` when you only need to process immediate children (e.g. steps at one nesting level).
+  * Use `Flattened` when you need to inspect or collect all descendants (e.g. all `Goto` members
+  * anywhere inside a `ProcessBlock`, or gathering every member to move together with a block).
+  */
 enum MemberView derives CanEqual:
   case Folded, Flattened
 

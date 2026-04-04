@@ -201,6 +201,7 @@ class PrintCodeStringSpec extends StageSpec:
 
   test("RTDesign with class extension and parameters") {
     val gp: Bit <> CONST     = 1
+    val gp2                  = gp
     val i: SInt[16] <> CONST = 0
     val i2                   = i + 5
     class ID(dp: Bit <> CONST) extends RTDesign:
@@ -210,19 +211,20 @@ class PrintCodeStringSpec extends StageSpec:
       val flag                 = Bit      <> IN init dp || gp
       y := x.reg.reg(2, init = c - i) - x
     end ID
-    class IDExt(dpNew: Bit <> CONST) extends ID(gp && dpNew):
+    class IDExt(dpNew: Bit <> CONST) extends ID(gp2 && dpNew):
       val z = Bit <> OUT
       z := dpNew
 
     val id = (new IDExt(gp)).getCodeString
     assertNoDiff(
       id,
-      """|val gp: Bit <> CONST = 1
-         |val i: SInt[16] <> CONST = sd"16'0"
+      """|val i: SInt[16] <> CONST = sd"16'0"
          |val i2: SInt[16] <> CONST = i + sd"16'5"
+         |val gp: Bit <> CONST = 1
+         |val gp2: Bit <> CONST = gp
          |
          |class IDExt(
-         |    val dp: Bit <> CONST = gp && gp,
+         |    val dp: Bit <> CONST = gp2 && gp,
          |    val dpNew: Bit <> CONST = gp
          |) extends RTDesign:
          |  val c: SInt[16] <> CONST = sd"16'3"
@@ -992,7 +994,8 @@ class PrintCodeStringSpec extends StageSpec:
           10.ms.wait
           if (i) S_2 else S_1
         def S_2: Step =
-          def onEntry =
+          def fallThrough = !i
+          def onEntry     =
             x := 0
           def onExit =
             x := 1
@@ -1015,6 +1018,9 @@ class PrintCodeStringSpec extends StageSpec:
          |      else S_1
          |    end S_1
          |    def S_2: Step =
+         |      def fallThrough: Bit <> VAL =
+         |        !i
+         |      end fallThrough
          |      def onEntry: Unit =
          |        x := 0
          |      end onEntry
@@ -1164,6 +1170,57 @@ class PrintCodeStringSpec extends StageSpec:
          |    val ii = UInt(3) <> VAR init d"3'0"
          |    while (ii != d"3'7")
          |      COMB_LOOP
+         |      matrix(ii.toInt)(0)(0).din := 0
+         |      ii := ii + d"3'1"
+         |    end while
+         |    10.sec.wait
+         |end Foo""".stripMargin
+    )
+  }
+  test("for/while loop printing with FALL_THROUGH") {
+    class Foo extends RTDesign:
+      val matrix = Bits(10) X 8 X 8 <> OUT.REG
+      process:
+        for (
+          i <- 0 until 8;
+          if i % 2 == 0;
+          j <- 0 until 8;
+          if j % 2 == 0;
+          k <- 0 until 10
+          if k % 2 == 0
+        )
+          FALL_THROUGH
+          matrix(i)(j)(k).din := 1
+        val ii = UInt.until(8) <> VAR init 0
+        while (ii != 7)
+          FALL_THROUGH
+          matrix(ii)(0)(0).din := 0
+          ii                   := ii + 1
+        10.sec.wait
+    end Foo
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|class Foo extends RTDesign:
+         |  val matrix = Bits(10) X 8 X 8 <> OUT.REG
+         |  process:
+         |    for (i <- 0 until 8)
+         |      FALL_THROUGH
+         |      if ((i % 2) == 0)
+         |        for (j <- 0 until 8)
+         |          FALL_THROUGH
+         |          if ((j % 2) == 0)
+         |            for (k <- 0 until 10)
+         |              FALL_THROUGH
+         |              if ((k % 2) == 0) matrix(i)(j)(k).din := 1
+         |            end for
+         |          end if
+         |        end for
+         |      end if
+         |    end for
+         |    val ii = UInt(3) <> VAR init d"3'0"
+         |    while (ii != d"3'7")
+         |      FALL_THROUGH
          |      matrix(ii.toInt)(0)(0).din := 0
          |      ii := ii + d"3'1"
          |    end while
@@ -1603,6 +1660,76 @@ class PrintCodeStringSpec extends StageSpec:
          |  val p5: Int <> CONST = p4 - 3
          |  val p6: Int <> CONST = p5 - 1
          |  val p7: Int <> CONST = p6 - 7
+         |end Foo""".stripMargin
+    )
+  }
+
+  test("named rt-process loops") {
+    class Foo extends RTDesign:
+      val x = Bit <> OUT.REG init 0
+      process:
+        val MyWhile = while (x)
+          def GoGo: Step =
+            NextStep
+          end GoGo
+          x.din := !x
+        end MyWhile
+        val MyFor = for (i <- 0 until 10)
+          def GoGo: Step =
+            NextStep
+          end GoGo
+          x.din := !x
+        end MyFor
+    end Foo
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|class Foo extends RTDesign:
+         |  val x = Bit <> OUT.REG init 0
+         |  process:
+         |    val MyWhile = while (x)
+         |      def GoGo: Step =
+         |        NextStep
+         |      end GoGo
+         |      x.din := !x
+         |    end MyWhile
+         |    val MyFor = for (i <- 0 until 10)
+         |      def GoGo: Step =
+         |        NextStep
+         |      end GoGo
+         |      x.din := !x
+         |    end MyFor
+         |end Foo""".stripMargin
+    )
+  }
+
+  test("parameterized selection") {
+    class Foo extends DFDesign:
+      val LEN: Int <> CONST = 8
+      val v                 = Bits(LEN) <> VAR
+      val o                 = v(LEN - 2, 0)
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|class Foo extends DFDesign:
+         |  val LEN: Int <> CONST = 8
+         |  val v = Bits(LEN) <> VAR
+         |  val o = v(LEN - 2, 0)
+         |end Foo""".stripMargin
+    )
+  }
+
+  test("cascade aliasing regression") {
+    class Foo() extends DFDesign:
+      val x = UInt(3) <> IN
+      val y = x.resize(16).bits.sint
+    end Foo
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|class Foo extends DFDesign:
+         |  val x = UInt(3) <> IN
+         |  val y = x.resize(16).bits.sint
          |end Foo""".stripMargin
     )
   }

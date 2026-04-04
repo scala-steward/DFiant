@@ -25,7 +25,8 @@ case object DropUnreferencedAnons extends Stage, NoCheckStage:
       case Ident(_)                                             => None
       case m: DFVal if m.isAnonymous && m.originMembers.isEmpty =>
         Some(m -> Patch.Remove())
-      case _ => None
+      case m: DFRange if m.originMembers.isEmpty => Some(m -> Patch.Remove())
+      case _                                     => None
     }
     if (patchList.isEmpty) designDB
     else

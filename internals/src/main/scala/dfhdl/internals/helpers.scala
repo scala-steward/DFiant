@@ -343,10 +343,11 @@ extension (str: String)
   def forceWindowsToLinuxPath: String = str.replaceAll("""\\""", "/")
   def simplePattenToRegex: Regex =
     val updatedPattern =
-      "^" + str
-        .replace(".", "\\.") // Escape dots to match literal dots
-        .replace("*", ".*") // Replace * with .*
-        .replace("?", ".") // Replace ? with .
+      "^"
+        + str
+          .replace(".", "\\.") // Escape dots to match literal dots
+          .replace("*", ".*") // Replace * with .*
+          .replace("?", ".") // Replace ? with .
         + "$"
     updatedPattern.r
 end extension
@@ -386,6 +387,9 @@ lazy val getShellCommand: Option[String] =
     case Failure(_) => None
   end match
 end getShellCommand
+
+lazy val sbtnIsRunning: Boolean =
+  sbtIsRunning && getShellCommand.exists(cmd => cmd.endsWith("--server"))
 
 lazy val sbtShellIsRunning: Boolean =
   getShellCommand.exists(cmd => cmd.endsWith("xsbt.boot.Boot") || cmd.endsWith("sbt-launch.jar"))

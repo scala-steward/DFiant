@@ -42,9 +42,11 @@ protected trait VerilogDataPrinter extends AbstractDataPrinter:
   def csDFSIntFormatBig(value: BigInt, width: IntParamRef): String =
     val csWidth = width.refCodeString.applyBrackets()
     if (width.isRef)
-      if (value.isValidInt && allowWidthCastSyntax) s"""${csWidth}'($value)"""
+      val actualWidth = value.bitsWidth(true)
+      if (value.isValidInt && allowWidthCastSyntax)
+        if (value >= 0) s"""${csWidth}'($actualWidth'sd$value)"""
+        else s"${csWidth}'(-$actualWidth'sd${-value})"
       else
-        val actualWidth = value.bitsWidth(true)
         if (allowWidthCastSyntax && printer.allowSignedKeywordAndOps)
           if (value >= 0) s"""${csWidth}'($actualWidth'sd$value)"""
           else s"""${csWidth}'(-$actualWidth'sd${-value})"""

@@ -124,10 +124,7 @@ class DropDesignParamDepsSpec extends StageSpec:
          |  val inner_depth: Int <> CONST = baseWidth + 1
          |  val x = Bits(baseWidth) <> IN
          |  val y = Bits(baseWidth) <> OUT
-         |  val inner = Inner(
-         |      width = baseWidth,
-         |      depth = inner_depth
-         |  )
+         |  val inner = Inner(width = baseWidth)
          |  inner.x <> x
          |  y <> inner.y.resize(baseWidth)
          |end Outer

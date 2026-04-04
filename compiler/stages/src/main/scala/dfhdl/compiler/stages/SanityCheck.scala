@@ -41,11 +41,23 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
         case m: DFDesignBlock if !m.isTop =>
           if (!refTable.contains(m.ownerRef))
             reportViolation(s"Missing owner ref for the member: $m")
+        // check that all blocks in a conditional chain share the same owner
+        case cb: DFConditional.Block =>
+          cb.prevBlockOrHeaderRef.get match
+            case prevBlock: DFConditional.Block if prevBlock.getOwner != cb.getOwner =>
+              reportViolation(
+                s"""|Conditional block chain has mismatched owners.
+                    |Block:      $cb
+                    |Owner:      ${cb.getOwner}
+                    |Prev block: $prevBlock
+                    |Prev owner: ${prevBlock.getOwner}""".stripMargin
+              )
+            case _ =>
         // check by-name selectors
         case pbns: DFVal.PortByNameSelect =>
           val design = pbns.designInstRef.get
           // check port existence
-          getSet.designDB.portsByName(design).get(pbns.portNamePath) match
+          getSet.designDB.dupPortsByName(design).get(pbns.portNamePath) match
             case None =>
               reportViolation(
                 s"Missing port ${pbns.portNamePath} for by-name port selection: ${pbns}"
@@ -90,6 +102,11 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
                     s"""|An anonymous value has no references.
                         |Referenced value: $dfVal""".stripMargin
                   )
+        case range: DFRange if !skipAnonRefCheck && range.originMembers.isEmpty =>
+          reportViolation(
+            s"""|An anonymous range has no references.
+                |Referenced range: $range""".stripMargin
+          )
         case _ =>
       end match
     }
@@ -139,13 +156,26 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
             originMember match
               case originVal: DFVal if originVal.isGlobal =>
               case _: DFVal.DesignParam                   =>
-              case _                                      =>
+              case _: DFDesignBlock => // paramMap entries may reference global anon vals
+              case _                =>
                 reportViolation(
                   s"""|A global anonymous member is referenced by a non-global member.
                       |Target member: ${targetVal}
                       |Origin member: ${originMember}""".stripMargin
                 )
           case _ =>
+    }
+    // check that no DuplicationRef exists in refTable
+    refTable.foreach { (ref, _) =>
+      if (ref.isInstanceOf[DFRef.DuplicationRef])
+        reportViolation(s"DuplicationRef found in refTable: $ref")
+    }
+    // check that no member has a DuplicationRef ownerRef
+    getSet.designDB.members.foreach { member =>
+      if (member.ownerRef.isInstanceOf[DFRef.DuplicationRef])
+        reportViolation(
+          s"Member with DuplicationRef ownerRef found in members: $member"
+        )
     }
     require(!hasViolations, "Failed reference check!")
   end refCheck
@@ -221,8 +251,10 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
                   s"The global member ${m.hashString}:\n$m\nHas reference $r pointing to a later member ${rm.hashString}:\n${rm}"
                 )
               case _ =>
+                val hierarchy =
+                  if (m.ownerRef.get == DFMember.Empty) "<top>" else m.getOwnerNamed.getFullName
                 println(
-                  s"The member ${m.hashString}:\n$m\nIn hierarchy:\n${m.getOwnerNamed.getFullName}\nHas reference $r pointing to a later member ${rm.hashString}:\n${rm}"
+                  s"The member ${m.hashString}:\n$m\nIn hierarchy:\n$hierarchy\nHas reference $r pointing to a later member ${rm.hashString}:\n${rm}"
                 )
             hasViolations = true
             require(!hasViolations, "Failed member order check!")
@@ -234,7 +266,7 @@ case class SanityCheck(skipAnonRefCheck: Boolean) extends Stage:
   end orderCheck
 
   def transform(designDB: DB)(using MemberGetSet, CompilerOptions): DB =
-    // refCheck()
+    refCheck()
     memberExistenceCheck()
     ownershipCheck(designDB.top, designDB.membersNoGlobals.drop(1))
     orderCheck()

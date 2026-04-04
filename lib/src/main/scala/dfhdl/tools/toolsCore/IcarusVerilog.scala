@@ -66,6 +66,9 @@ object IcarusVerilog extends VerilogLinter, VerilogSimulator:
         // suppress the "cannot be synthesized" warning when in simulation
         if (line.contains("cannot be synthesized") && getSet.designDB.inSimulation)
           true
+        // workaround for https://github.com/steveicarus/iverilog/issues/255
+        else if (line.contains("Case unique/unique0 qualities are ignored"))
+          true
         else
           false
     )
