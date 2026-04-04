@@ -574,6 +574,26 @@ def debugMacro(msg: => Any, fileName: String = "lib\\src\\test\\scala\\Playgroun
   if (Symbol.spliceOwner.pos.get.sourceFile.path.toString.endsWith(fileName))
     println(msg)
 
+// gets the left and right types of a union type T, if T is not a union type, report an error
+trait Union[T]:
+  type L
+  type R
+object Union:
+  object Success extends Union[Any]:
+    type L = Nothing; type R = Nothing
+  type Aux[T, L0, R0] = Union[T] { type L = L0; type R = R0 }
+  transparent inline given [T]: Union[T] = ${ unionMacro[T] }
+  def unionMacro[T: Type](using Quotes): Expr[Union[T]] =
+    import quotes.reflect.*
+    TypeRepr.of[T] match
+      case OrType(ltpe, rtpe) =>
+        val lType = ltpe.asTypeOf[Any]
+        val rType = rtpe.asTypeOf[Any]
+        '{ Success.asInstanceOf[Union.Aux[T, lType.Underlying, rType.Underlying]] }
+      case _ =>
+        report.errorAndAbort(s"Type ${Type.show[T]} is not a union type.")
+end Union
+
 // trait CompiletimeErrorPos[M <: String, S <: Int, E <: Int]
 // object CompiletimeErrorPos:
 //   inline given [M <: String, S <: Int, E <: Int]: CompiletimeErrorPos[M, S, E] =
