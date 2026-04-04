@@ -28,6 +28,21 @@ object TDFString:
       given fromDFStringVal[P, R <: DFValTP[DFString, P]]: Candidate[R] with
         type OutP = P
         def apply(arg: R)(using DFC): Out = arg
+      given fromIf[
+          C <: DFValOf[DFBoolOrBit],
+          T,
+          F,
+          TP,
+          FP,
+          R <: IfWrapper[C, T, F]
+      ](using
+          tTC: Candidate[T] { type OutP = TP },
+          fTC: DFVal.TC[DFString, F] { type OutP = FP }
+      ): Candidate[R] with
+        type OutP = TP | FP
+        def apply(value: R)(using DFC): Out = value.unwrap
+      end fromIf
+    end Candidate
 
     object TC:
       import DFVal.TC
@@ -59,9 +74,9 @@ object TDFString:
     object Ops:
       given evOpArithDFString[
           LP,
-          L <: DFValOf[DFString] | String,
+          L <: DFValOf[DFString] | String | IfWrapper[?, ?, ?],
           RP,
-          R <: DFValOf[DFString] | String
+          R <: DFValOf[DFString] | String | IfWrapper[?, ?, ?]
       ](using
           icL: Candidate.Aux[L, LP],
           icR: Candidate.Aux[R, RP]

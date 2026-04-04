@@ -3,6 +3,14 @@ import scala.quoted.*
 import util.NotGiven
 import scala.collection.concurrent.TrieMap
 
+final class IfWrapper[C, OT, OF] private (
+    val cond: C,
+    val onTrue: () => OT,
+    val onFalse: () => OF
+)
+object IfWrapper:
+  def apply[C, OT, OF](cond: C, onTrue: => OT, onFalse: => OF): IfWrapper[C, OT, OF] =
+    new IfWrapper(cond, () => onTrue, () => onFalse)
 final class ExactInfo[Q <: Quotes & Singleton](using val quotes: Q)(val term: quotes.reflect.Term):
   import quotes.reflect.*
   val exactTpe: quotes.reflect.TypeRepr =
@@ -55,6 +63,20 @@ extension [Q <: Quotes & Singleton](using quotes: Q)(term: quotes.reflect.Term)
         val AppliedType(tycon, _) = t.tpe.runtimeChecked
         val tupleTypeArgs = tpes.map(_.asTypeTree)
         Apply(TypeApply(fun, tupleTypeArgs), terms)
+      case ifTerm @ If(Apply(Apply(Ident("BooleanHack"), List(cond)), List(_)), onTrue, onFalse) =>
+        ifTerm.tpe match
+          case OrType(_, _) =>
+            val condType = cond.tpe.asTypeOf[Any]
+            val onTrueInfo = onTrue.exactInfo
+            val onFalseInfo = onFalse.exactInfo
+            '{
+              IfWrapper[condType.Underlying, onTrueInfo.Underlying, onFalseInfo.Underlying](
+                ${ cond.asExprOf[Any] },
+                ${ onTrueInfo.exactExpr },
+                ${ onFalseInfo.exactExpr }
+              )
+            }.asTerm
+          case _ => ifTerm
       case t => t
     end match
   end exactTerm

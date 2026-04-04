@@ -55,6 +55,11 @@ class DFBoolOrBitSpec extends DFSpec:
          |val t14: Boolean <> CONST = false
          |val t15: Boolean <> CONST = true
          |val t16: Boolean <> CONST = false
+         |val ifTest =
+         |  bt || ((
+         |    if (bl) bl
+         |    else true
+         |  ): Boolean <> VAL).bit
          |""".stripMargin
     ) {
       val t1 = bt && bl
@@ -93,6 +98,7 @@ class DFBoolOrBitSpec extends DFSpec:
       )(
         """t1.toScalaBoolean"""
       )
+      val ifTest = bt || (if (bl) bl else 1)
     }
   }
 

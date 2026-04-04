@@ -39,6 +39,11 @@ class DFDoubleSpec extends DFSpec:
          |val t7 = d1 min d2
          |val t8: Double <> CONST = 1.0
          |val t9: Double <> CONST = -2.5
+         |val ifTest =
+         |  1.0 + ((
+         |    if (d1 > 0.0) d1
+         |    else -2.0
+         |  ): Double <> VAL)
          |""".stripMargin
     ) {
       val t1 = d1 + d2
@@ -57,6 +62,7 @@ class DFDoubleSpec extends DFSpec:
       )(
         """t1.toScalaDouble"""
       )
+      val ifTest = 1.0 + (if (d1 > 0.0) d1 else -2.0)
     }
   }
 

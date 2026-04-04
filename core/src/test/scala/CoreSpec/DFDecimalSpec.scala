@@ -135,6 +135,11 @@ class DFDecimalSpec extends DFSpec:
          |val absTest2: SInt[7] <> CONST = abs(sintNeg42)
          |val numSignedBit: Bit <> CONST = sint42(6)
          |val numSignedBitP = s8p(param - 1)
+         |val ifTest =
+         |  d"8'20" + ((
+         |    if (u8 > d"8'5") u8
+         |    else d"8'22"
+         |  ): UInt[8] <> VAL)
          |""".stripMargin
     } {
       val c: UInt[8] <> CONST = 1
@@ -284,6 +289,7 @@ class DFDecimalSpec extends DFSpec:
       ) {
         d"${strNeg42}"
       }
+      val ifTest = d"8'20" + (if (u8 > 5) u8 else 22)
     }
     assertDSLErrorLog(
       """|Cannot apply this operation between an unsigned value (LHS) and a signed value (RHS).
