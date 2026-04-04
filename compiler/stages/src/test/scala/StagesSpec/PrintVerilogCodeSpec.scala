@@ -1598,4 +1598,22 @@ class PrintVerilogCodeSpec extends StageSpec:
          |endmodule""".stripMargin
     )
   }
+  test("signed literal with parametric width") {
+    class Foo(
+        val WIDTH: Int <> CONST = 8
+    ) extends EDDesign:
+      val arg = sd"${WIDTH}'2"
+    end Foo
+    val top = (new Foo).getCompiledCodeString
+    assertNoDiff(
+      top,
+      """|`default_nettype none
+         |`timescale 1ns/1ps
+         |
+         |module Foo#(parameter int WIDTH = 8);
+         |  `include "dfhdl_defs.svh"
+         |  localparam logic signed [WIDTH - 1:0] arg = WIDTH'(3'sd2);
+         |endmodule""".stripMargin
+    )
+  }
 end PrintVerilogCodeSpec
