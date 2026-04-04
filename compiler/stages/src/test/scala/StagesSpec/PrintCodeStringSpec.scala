@@ -1718,4 +1718,19 @@ class PrintCodeStringSpec extends StageSpec:
          |end Foo""".stripMargin
     )
   }
+
+  test("cascade aliasing regression") {
+    class Foo() extends DFDesign:
+      val x = UInt(3) <> IN
+      val y = x.resize(16).bits.sint
+    end Foo
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|class Foo extends DFDesign:
+         |  val x = UInt(3) <> IN
+         |  val y = x.resize(16).bits.sint
+         |end Foo""".stripMargin
+    )
+  }
 end PrintCodeStringSpec

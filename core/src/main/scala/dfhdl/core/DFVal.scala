@@ -836,9 +836,12 @@ object DFVal extends DFValLP:
               )
             ).asVal[AT, M]
           // remove redundant intermediate casting when the final result needs to be `.bits` anyways
-          case asIs: ir.DFVal.Alias.AsIs
+          // as long as the alias is anonymous and has the same width as the related value,
+          // to avoid modifying the semantics of named values that can be referenced in multiple places.
+          case asIs @ ir.DFVal.Alias.AsIs(relValRef = ir.DFRef(relValIR))
               if aliasType.asIR.isInstanceOf[ir.DFBits] && asIs.isAnonymous &&
-                dfc.isAnonymous && !forceNewAlias && asIs.tags.isEmpty =>
+                dfc.isAnonymous && !forceNewAlias && asIs.tags.isEmpty &&
+                relValIR.width == asIs.width =>
             asIs.relValRef.get.asVal[AT, M]
           // remove redundant intermediate casting converting from BoolOrBit to Bits/UInt/SInt + resize
           case asIs @ ir.DFVal.Alias.AsIs(
