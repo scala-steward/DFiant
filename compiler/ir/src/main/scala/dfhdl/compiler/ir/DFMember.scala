@@ -602,7 +602,7 @@ object DFVal:
     protected def `prot_=~`(that: DFMember)(using MemberGetSet): Boolean = that match
       case that: Func =>
         this.dfType =~ that.dfType && this.op == that.op && this.args =~ that.args &&
-        this.meta =~ that.meta && this.tags =~ that.tags
+        this.tags =~ that.tags
       case _ => false
     // TODO: consider algebraic equivalence be added here
     protected[ir] def protIsSimilarTo(that: CanBeExpr)(using MemberGetSet): Boolean =
