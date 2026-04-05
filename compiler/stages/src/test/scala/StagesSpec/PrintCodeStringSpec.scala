@@ -1733,4 +1733,21 @@ class PrintCodeStringSpec extends StageSpec:
          |end Foo""".stripMargin
     )
   }
+
+  test("empty deduplicated designs") {
+    class Mid() extends EDDesign
+    class Foo extends EDDesign:
+      val inst_a = Mid()
+      val inst_b = Mid()
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|class Mid extends EDDesign
+         |
+         |class Foo extends EDDesign:
+         |  val inst_a = Mid()
+         |  val inst_b = Mid()
+         |end Foo""".stripMargin
+    )
+  }
 end PrintCodeStringSpec

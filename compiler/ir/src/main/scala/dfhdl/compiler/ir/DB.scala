@@ -308,7 +308,7 @@ final case class DB(
       }
       // 2. Build port copies (reusing origToDupMap from step 1)
       val pbnsTypes = pbnsByDesign.getOrElse(dupDesign, Map.empty)
-      portEntries += dupDesign -> ListMap.from(origPortMap(origDesign).view.map { (name, dcl) =>
+      portEntries += dupDesign -> ListMap.from(origPortMap.getOrElse(origDesign, ListMap.empty).view.map { (name, dcl) =>
         val dfType = pbnsTypes.getOrElse(name, dcl.dfType)
         val dupOwnerDomain = origToDupMap(dcl.getOwnerDomain)
         name -> dcl.copy(ownerRef = DFRef.DuplicationRef(dupOwnerDomain), dfType = dfType)
