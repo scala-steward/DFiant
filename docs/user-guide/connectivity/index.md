@@ -293,7 +293,7 @@ trait TopInit extends DFDesign {
 We learn from the above that port initial conditions are often overridden due to connections. So why should we apply initial conditions to a port? Answer: If we want to define what happens when a port is open (unconnected). Read the next two sections for more information.
 
  <div style="page-break-after: always;"></div>
-###Open (Unconnected) Ports
+###Open (Unconnected) Ports {#connectivity-open-ports}
 
 Ports have two connection sides: a consumer side and a producer side. Typically ports have both sides connected, except for top-level ports. When either port side is unconnected, we refer to it as *open*, and expect the following behavior:
 
@@ -301,29 +301,26 @@ Ports have two connection sides: a consumer side and a producer side. Typically 
 
 * When the port producer side is open (unless it is a top-level output port), the port is considered as not used, and is pruned during compilation. All dataflow streams that are only used by this port will be pruned as well.
 
-**Note**: the current compiler implementation does not warn of open ports.  
-
-Example:
+To explicitly mark a port as unconnected, use the `OPEN` keyword with the `<>` connection operator:
 
 ```scala
-trait IOInit2 extends DFDesign {
-  val i1 = DFUInt(8) <> IN init 5
-  val o1 = DFUInt(8) <> OUT
-  val i2 = DFUInt(8) <> IN
-  val o2 = DFUInt(8) <> OUT init 2
-  o1 <> i1 
-}
-trait TopIO2 extends DFDesign {
-  val i = DFUInt(8) <> IN  
-  val o = DFUInt(8) <> OUT //Will generate infinite tokens of 2, due to io.o2 init
-  val io = new IO5 {}
-  o <> io.o2
-  i <> io.i1
-  io.i2 <> 5
-}
+class Sensor extends EDDesign:
+  val din   = UInt(8) <> IN
+  val dout  = UInt(8) <> OUT
+  val debug = UInt(8) <> OUT
+  dout  <> din
+  debug <> din
+
+class Top extends EDDesign:
+  val din  = UInt(8) <> IN
+  val dout = UInt(8) <> OUT
+  val sensor_inst = Sensor()
+  sensor_inst.din   <> din
+  sensor_inst.dout  <> dout
+  sensor_inst.debug <> OPEN  // explicitly unconnected
 ```
 
-![1541633749924](1541633749924.png)
+**Note**: `OPEN` can only be used with the `<>` connection operator. Using it with `:=` assignment will result in a compile error.
 
  <div style="page-break-after: always;"></div>
 ### Initial Condition Cyclic Loop Errors

@@ -124,7 +124,7 @@ child_inst.dout  <> dout
 
 </div>
 
-Use `OPEN` to explicitly mark an output port as unconnected. This is equivalent to Verilog’s empty port connection (`.port()`). See [Open Ports][open-ports] for more details.
+Use `OPEN` to explicitly mark an output port as unconnected. This is equivalent to Verilog’s empty port connection (`.port()`). See [Open (Unconnected) Ports][open-ports] for more details.
 ///
 
 /// admonition | logic/reg/wire
