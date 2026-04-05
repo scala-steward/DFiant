@@ -101,6 +101,32 @@ end Concat
 </div>
 ///
 
+/// admonition | Unconnected Output Ports
+    type: verilog
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+child_mod child_inst(
+    .clk    (clk),
+    .din    (din),
+    .debug  (),     // unconnected
+    .dout   (dout)
+);
+```
+
+```scala linenums="0" title="DFHDL"
+val child_inst = child_mod()
+child_inst.clk   <> clk
+child_inst.din   <> din
+child_inst.debug <> OPEN  // unconnected
+child_inst.dout  <> dout
+```
+
+</div>
+
+Use `OPEN` to explicitly mark an output port as unconnected. This is equivalent to Verilog’s empty port connection (`.port()`). See [Open Ports][open-ports] for more details.
+///
+
 /// admonition | logic/reg/wire
     type: verilog
 <div class="grid" markdown>

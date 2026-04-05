@@ -745,6 +745,7 @@ Where:
     - A variable
     - A port of the parent design
     - A port of another child design instance
+    - `OPEN` - to explicitly leave an output port unconnected (see [Open Ports](#open-ports) below)
 
 The `<>` connection operator has no explicit directionality - it automatically infers producer/consumer relationships based on the connected value types and scope. See the [connectivity][connectivity] section for details.
 
@@ -905,6 +906,73 @@ children = [
 ///
 ///
 
+#### Open (Unconnected) Ports {#open-ports}
+
+To leave a child design's output port unconnected, use the `OPEN` keyword.
+In the following example, the `debug` output port of `Sensor` is left unconnected:
+
+```scala linenums="0"
+class Sensor extends EDDesign:
+  val din   = UInt(8) <> IN
+  val dout  = UInt(8) <> OUT
+  val debug = UInt(8) <> OUT
+  dout  <> din
+  debug <> din
+
+class Top extends EDDesign:
+  val din  = UInt(8) <> IN
+  val dout = UInt(8) <> OUT
+  val sensor_inst = Sensor()
+  sensor_inst.din   <> din
+  sensor_inst.dout  <> dout
+  sensor_inst.debug <> OPEN  // explicitly unconnected
+```
+
+/// admonition
+    type: note
+`OPEN` can only be used with the `<>` connection operator. Using it with `:=` assignment will result in a compile error.
+///
+
+/// admonition | Verilog Equivalent
+    type: verilog
+
+```sv linenums="0" title="Generated Verilog"
+module Top(
+  input  wire logic [7:0] din,
+  output logic [7:0] dout
+);
+  Sensor sensor_inst(
+    .din   /*<--*/ (din),
+    .dout  /*-->*/ (dout),
+    .debug /*-->*/ (/*open*/)
+  );
+endmodule
+```
+///
+
+/// admonition | VHDL Equivalent
+    type: vhdl
+
+```vhdl linenums="0" title="Generated VHDL"
+entity Top is
+port (
+  din  : in  unsigned(7 downto 0);
+  dout : out unsigned(7 downto 0)
+);
+end Top;
+
+architecture Top_arch of Top is
+begin
+  sensor_inst : entity work.Sensor(Sensor_arch)
+  port map (
+    din   => din,
+    dout  => dout,
+    debug => open
+  );
+end Top_arch;
+```
+///
+
 ### Via Connection Composition
 Via connection composition is a legacy mechanism that connects child design ports within the child design instantiation. It exists for compatibility with Verilog module instantiation and VHDL component instantiation. The DFHDL compiler automatically transforms direct connections into via connections.
 
@@ -918,7 +986,7 @@ val _childDesignName_ = new _designClass_(_params_):
     _childPort_ <> _connectedValue_
 ```
 
-The `#!scala new` keyword and colon `:` syntax creates an anonymous class instance. Port connections must be made within this instantiation block, similar to Verilog module and VHDL component instantiation. This means connected values must be declared before they are used in the connection operation.
+The `#!scala new` keyword and colon `:` syntax creates an anonymous class instance. Port connections must be made within this instantiation block, similar to Verilog module and VHDL component instantiation. This means connected values must be declared before they are used in the connection operation. As with direct composition, `OPEN` can be used as a connected value to leave an output port unconnected (see [Open Ports](#open-ports)).
 
 /// admonition | Handling port name collisions between parent and child designs
     type: tip
