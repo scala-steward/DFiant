@@ -259,8 +259,11 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
           tree match
             case Apply(fun, args) =>
               val updatedArgs = args.map { a =>
+                val strippedNamedArg = a match
+                  case NamedArg(_, arg) => arg
+                  case arg              => arg
                 val uniqueName = NameKinds.UniqueName.fresh(s"arg_plugin".toTermName)
-                val valDef = SyntheticValDef(uniqueName, a)
+                val valDef = SyntheticValDef(uniqueName, strippedNamedArg)
                 valDefs = valDef :: valDefs
                 ref(valDef.symbol)
               }

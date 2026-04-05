@@ -66,17 +66,17 @@ class UniqueDesignsSpec extends StageSpec:
         y := x
 
     class Mid(val FP_WIDTH: Int <> CONST = 25, val FP_INT: Int <> CONST = 4) extends EDDesign:
-      val x = SInt(FP_WIDTH) <> IN
-      val y = SInt(FP_WIDTH) <> OUT
+      val x         = SInt(FP_WIDTH) <> IN
+      val y         = SInt(FP_WIDTH) <> OUT
       val leaf_inst = Leaf(W = FP_WIDTH, F = FP_WIDTH - FP_INT)
       leaf_inst.x <> x
       leaf_inst.y <> y
 
     class Top extends EDDesign:
-      val x1  = SInt(25) <> IN
-      val y1  = SInt(25) <> OUT
-      val x2  = SInt(25) <> IN
-      val y2  = SInt(25) <> OUT
+      val x1     = SInt(25) <> IN
+      val y1     = SInt(25) <> OUT
+      val x2     = SInt(25) <> IN
+      val y2     = SInt(25) <> OUT
       val inst_a = Mid(FP_WIDTH = 25, FP_INT = 4)
       val inst_b = Mid(FP_WIDTH = 25, FP_INT = 4)
       inst_a.x <> x1
@@ -102,10 +102,9 @@ class UniqueDesignsSpec extends StageSpec:
          |) extends EDDesign:
          |  val x = SInt(FP_WIDTH) <> IN
          |  val y = SInt(FP_WIDTH) <> OUT
-         |  val inst_a: Int <> CONST = FP_WIDTH - FP_INT
          |  val leaf_inst = Leaf(
          |      W = FP_WIDTH,
-         |      F = inst_a
+         |      F = FP_WIDTH - FP_INT
          |  )
          |  leaf_inst.x <> x
          |  y <> leaf_inst.y
