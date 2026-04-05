@@ -309,7 +309,8 @@ class MetaContextPlacerPhase(setting: Setting) extends CommonPhase:
     end DFValIdent
     tree.rhs match
       case DFValIdent(rhs)
-          if !tree.symbol.flags.is(InlineProxy) && tree.tpt.tpe.dfValTpeOpt.nonEmpty =>
+          if !tree.name.toString.contains("$") &&
+            !tree.symbol.flags.is(InlineProxy) && tree.tpt.tpe.dfValTpeOpt.nonEmpty =>
         val dfc = dfcArgStack.headOption.getOrElse(ref(emptyNoEODFCSym))
         val updatedRHS =
           ref(dfhdlDFValIdentSym)
