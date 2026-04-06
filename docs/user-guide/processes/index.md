@@ -202,7 +202,7 @@ Use `:=` for combinational (e.g. in `process(all)` or combinational branches). U
 
 ## Local variables
 
-You can declare local variables inside a process with `VAL` or `VAR`; they are visible only within that process and help structure combinational or sequential logic.
+You can declare local variables inside a process with `VAR`; they are visible only within that process and help structure combinational or sequential logic.
 
 ```scala
 process(all):
@@ -213,6 +213,35 @@ process(all):
     z := x - 1
   y := z
 ```
+
+You can also use plain Scala `val` declarations (without `<> VAR` or `<> CONST`) inside process blocks to name intermediate sub-expressions. These are DFHDL values created inline -- they do not declare new ports or variables but serve as readable names for parts of a computation:
+
+```scala
+process(clk):
+  if (clk.rising)
+    val sum = a + b          // intermediate DFHDL value
+    val overflow = sum(8)    // single-bit check
+    if (overflow) result :== max_val
+    else result :== sum.resize(8)
+```
+
+Do not use `<> CONST` or `<> VAR` modifiers inside processes for these intermediates -- plain `val name = expr` is sufficient.
+
+/// admonition | Local `VAR` in clocked processes become registers
+    type: warning
+Local `VAR` declared inside a clocked `process(clk):` block are synthesized as **flip-flop registers** in the generated Verilog, not combinational wires. This is because the DFHDL compiler treats any variable written inside a clocked process as sequential storage.
+
+```scala
+process(clk):
+  if (clk.rising)
+    // This VAR becomes a register in Verilog:
+    val temp = UInt(8) <> VAR
+    temp := x + 1
+    y :== temp
+```
+
+If you need a purely combinational intermediate inside a clocked process, use a plain Scala `val` (without `<> VAR`) for simple expressions, or compute the intermediate in a separate `process(all):` block and read the result in the clocked process.
+///
 
 ## Relation to design domains
 
