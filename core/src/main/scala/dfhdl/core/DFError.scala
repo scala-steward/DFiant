@@ -5,9 +5,12 @@ import dfhdl.internals.*
 import scala.annotation.targetName
 import dfhdl.options.OnError
 
+sealed trait LogEvent derives CanEqual:
+  val dfMsg: String
+
 sealed abstract class DFError(
     val dfMsg: String
-) extends Exception(dfMsg) derives CanEqual
+) extends Exception(dfMsg), LogEvent
 
 object DFError:
   class Basic(
@@ -54,14 +57,36 @@ object DFError:
     inline def asOwner: DFOwnerAny = DFOwner[ir.DFOwner](dfErr)
 end DFError
 
+class DFWarning(
+    val opName: String,
+    val dfMsg: String
+)(using dfc: DFC)
+    extends LogEvent derives CanEqual:
+  import dfc.getSet
+  val designName = dfc.ownerOption match
+    case Some(owner) => owner.asIR.getThisOrOwnerDesign.getFullName
+    case None        => ""
+  val fullName =
+    if (dfc.isAnonymous) designName
+    else if (designName.nonEmpty) s"$designName.${dfc.name}"
+    else dfc.name
+  val position = dfc.position
+  override def toString: String =
+    s"""|DFiant HDL elaboration warning!
+        |Position:  ${position}
+        |Hierarchy: ${fullName}
+        |Operation: `${opName}`
+        |Message:   ${dfMsg}""".stripMargin
+end DFWarning
+
 class Logger:
-  private[Logger] var errors: List[DFError] = Nil
-  def logError(err: DFError): Unit =
-    errors = err :: errors
-  def injectErrors(fromLogger: Logger): Unit =
-    errors = fromLogger.errors ++ errors
-  def getErrors: List[DFError] = errors.reverse
-  def clearErrors(): Unit = errors = Nil
+  private[Logger] var events: List[LogEvent] = Nil
+  def logEvent(event: LogEvent): Unit = events = event :: events
+  def injectEvents(fromLogger: Logger): Unit = events = fromLogger.events ++ events
+  def getErrors: List[DFError] = events.reverse.collect { case e: DFError => e }
+  def getWarnings: List[DFWarning] = events.reverse.collect { case w: DFWarning => w }
+  def getEvents: List[LogEvent] = events.reverse
+  def clearEvents(): Unit = events = Nil
 
 def trydfSpecific[T](
     block: => T
@@ -77,7 +102,7 @@ def trydfSpecific[T](
           case e                           => throw e
         if (dfc.ownerOption.isEmpty)
           exitWithError(dfErr.toString())
-        dfc.logError(dfErr)
+        dfc.logEvent(dfErr)
         finale(dfErr)
 
 @targetName("tryDFType")

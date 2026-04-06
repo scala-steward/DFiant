@@ -76,10 +76,12 @@ final case class DFC(
   def setAnnotations(annotations: List[HWAnnotation]): this.type =
     copy(annotations = annotations).asInstanceOf[this.type]
   def anonymize: this.type = copy(nameOpt = None).asInstanceOf[this.type]
-  def logError(err: DFError): Unit = mutableDB.logger.logError(err)
+  def logEvent(event: LogEvent): Unit = mutableDB.logger.logEvent(event)
   def getErrors: List[DFError] = mutableDB.logger.getErrors
+  def getWarnings: List[DFWarning] = mutableDB.logger.getWarnings
+  def getEvents: List[LogEvent] = mutableDB.logger.getEvents
   def inMetaProgramming: Boolean = mutableDB.inMetaProgramming
-  def clearErrors(): Unit = mutableDB.logger.clearErrors()
+  def clearEvents(): Unit = mutableDB.logger.clearEvents()
 end DFC
 object DFC:
   import java.util.concurrent.atomic.AtomicInteger

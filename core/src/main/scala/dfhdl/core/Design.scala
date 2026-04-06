@@ -125,8 +125,22 @@ trait Design extends Container, HasClsMetaArgs:
     else
       dfc.exitOwner()
     import dfc.getSet
-    // At the end of the top-level instance we check for errors
+    // At the end of the top-level instance we check for warnings and errors
     if (containedOwner.asIR.isTop && thisOwner.isEmpty)
+      val warnings = dfc.getWarnings
+      if (warnings.nonEmpty)
+        System.err.println(
+          warnings.map(_.toString).mkString("\n\n")
+        )
+        if (dfc.elaborationOptions.Werror.toBoolean)
+          dfc.logEvent(
+            DFError.Basic(
+              "Werror",
+              new IllegalArgumentException(
+                "Warnings found with -Werror enabled. Fix the warnings or disable the Werror flag."
+              )
+            )
+          )
       val errors = dfc.getErrors
       // If we have errors, then we print them to stderr and exit
       if (errors.nonEmpty)
