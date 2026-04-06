@@ -131,8 +131,10 @@ class ExplicitNamedVarsSpec extends StageSpec:
          |  val shifted = Bits(8) <> VAR
          |  shifted := lhs << 1
          |  val o = Bits(8) <> OUT
-         |  if (lhs(7)) o := shifted ^ h"1b"
-         |  else o := shifted
+         |  o <> ((
+         |    if (lhs(7)) shifted ^ h"1b"
+         |    else shifted
+         |  ): Bits[8] <> VAL)
          |end xtime""".stripMargin
     )
   }
