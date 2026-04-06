@@ -55,7 +55,8 @@ class ExplicitCondExprAssignSpec extends StageSpec(stageCreatesUnrefAnons = true
       val z2 = SInt(16) <> VAR
       z2 := z match
         case 1 | 2 =>
-          val zz: SInt[4] <> VAL = z match
+          val zz = SInt(4) <> VAR
+          zz := z match
             case 1 => 5
             case 2 => 3
           if (x < 11) zz + 3
@@ -79,11 +80,11 @@ class ExplicitCondExprAssignSpec extends StageSpec(stageCreatesUnrefAnons = true
          |  val z2 = SInt(16) <> VAR
          |  z match
          |    case sd"16'1" | sd"16'2" =>
-         |      val zz: SInt[4] <> VAL =
-         |        z match
-         |          case sd"16'1" => sd"4'5"
-         |          case sd"16'2" => sd"4'3"
-         |        end match
+         |      val zz = SInt(4) <> VAR
+         |      z match
+         |        case sd"16'1" => zz := sd"4'5"
+         |        case sd"16'2" => zz := sd"4'3"
+         |      end match
          |      if (x < sd"16'11") z2 := (zz +^ sd"4'3").resize(16)
          |      else z2 := zz.resize(16)
          |    case _ => z2 := z + sd"16'12"
@@ -96,19 +97,22 @@ class ExplicitCondExprAssignSpec extends StageSpec(stageCreatesUnrefAnons = true
   test("AES xtime example") {
     class xtime extends DFDesign:
       val lhs     = Bits(8) <> IN
-      val shifted = lhs << 1
-      val o       = Bits(8) <> OUT
-      o <> ((
-        if (lhs(7)) shifted ^ h"1b"
-        else shifted
-      ): Bits[8] <> VAL)
+      val shifted = Bits(8) <> VAR
+      shifted := lhs << 1
+      val o = Bits(8) <> OUT
+      o <>
+        ((
+          if (lhs(7)) shifted ^ h"1b"
+          else shifted
+        ): Bits[8] <> VAL)
     end xtime
     val id = (new xtime).explicitCondExprAssign
     assertCodeString(
       id,
       """|class xtime extends DFDesign:
          |  val lhs = Bits(8) <> IN
-         |  val shifted = lhs << 1
+         |  val shifted = Bits(8) <> VAR
+         |  shifted := lhs << 1
          |  val o = Bits(8) <> OUT
          |  if (lhs(7)) o := shifted ^ h"1b"
          |  else o := shifted
@@ -150,4 +154,68 @@ class ExplicitCondExprAssignSpec extends StageSpec(stageCreatesUnrefAnons = true
          |end LRShiftFlat""".stripMargin
     )
   }
+  test("ED domain conditional expression connection outside process") {
+    class Top extends EDDesign:
+      val x = Bits(8) <> IN
+      val y = Bits(8) <> OUT
+      y <>
+        ((
+          if (x(7)) x ^ h"1b"
+          else x
+        ): Bits[8] <> VAL)
+    end Top
+    val result = (new Top).explicitCondExprAssign
+    assertCodeString(
+      result,
+      """|class Top extends EDDesign:
+         |  val x = Bits(8) <> IN
+         |  val y = Bits(8) <> OUT
+         |  process(all):
+         |    if (x(7)) y := x ^ h"1b"
+         |    else y := x
+         |end Top
+         |""".stripMargin
+    )
+  }
+
+  test("ED domain conditional expression connection to child input port") {
+    class Child extends EDDesign:
+      val x = Bits(8) <> IN
+      val y = Bits(8) <> OUT
+      y <> x
+    class Top extends EDDesign:
+      val a          = Bits(8) <> IN
+      val b          = Bits(8) <> OUT
+      val child_inst = Child()
+      child_inst.x <>
+        ((
+          if (a(7)) a ^ h"1b"
+          else a
+        ): Bits[8] <> VAL)
+      b <> child_inst.y
+    end Top
+    val result = (new Top).explicitCondExprAssign
+    assertCodeString(
+      result,
+      """|class Child extends EDDesign:
+         |  val x = Bits(8) <> IN
+         |  val y = Bits(8) <> OUT
+         |  y <> x
+         |end Child
+         |
+         |class Top extends EDDesign:
+         |  val a = Bits(8) <> IN
+         |  val b = Bits(8) <> OUT
+         |  val child_inst = Child()
+         |  val x_part = Bits(8) <> VAR
+         |  process(all):
+         |    if (a(7)) x_part := a ^ h"1b"
+         |    else x_part := a
+         |  child_inst.x <> x_part
+         |  b <> child_inst.y
+         |end Top
+         |""".stripMargin
+    )
+  }
+
 end ExplicitCondExprAssignSpec

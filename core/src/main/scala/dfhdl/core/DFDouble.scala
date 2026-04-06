@@ -28,6 +28,21 @@ object TDFDouble:
       given fromDFDoubleVal[P, R <: DFValTP[DFDouble, P]]: Candidate[R] with
         type OutP = P
         def apply(arg: R)(using DFC): Out = arg
+      given fromIf[
+          C <: DFValOf[DFBoolOrBit],
+          T,
+          F,
+          TP,
+          FP,
+          R <: IfWrapper[C, T, F]
+      ](using
+          tTC: Candidate[T] { type OutP = TP },
+          fTC: DFVal.TC[DFDouble, F] { type OutP = FP }
+      ): Candidate[R] with
+        type OutP = TP | FP
+        def apply(value: R)(using DFC): Out = value.unwrap
+      end fromIf
+    end Candidate
 
     object TC:
       import DFVal.TC
@@ -51,12 +66,13 @@ object TDFDouble:
 
     object Ops:
       given evOpArithDFDouble[
-          Op <: FuncOp.+.type | FuncOp.-.type | FuncOp.*.type | FuncOp./.type | FuncOp.max.type | FuncOp.min.type,
+          Op <: FuncOp.+.type | FuncOp.-.type | FuncOp.*.type | FuncOp./.type | FuncOp.max.type |
+            FuncOp.min.type,
           LPA,
-          L <: DFValTP[DFDouble, LPA] | Double,
+          L <: DFValTP[DFDouble, LPA] | Double | IfWrapper[?, ?, ?],
           LP,
           RPA,
-          R <: DFValTP[DFDouble, RPA] | Double,
+          R <: DFValTP[DFDouble, RPA] | Double | IfWrapper[?, ?, ?],
           RP
       ](using
           icL: Candidate.Aux[L, LP],

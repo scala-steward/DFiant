@@ -545,7 +545,7 @@ class Counter(val width: Int <> CONST = 8) extends RTDesign:
   val cnt = UInt(width) <> OUT.REG init 0
 ```
 
-- `Int <> CONST` for integer parameters (used for widths, lengths, counts)
+- `Int <> CONST` for integer parameters (used for widths, lengths, counts). Accepts any Scala `Int` value (-2^31^ to 2^31^-1).
 - Typed constants like `Bits[8] <> CONST` and `UInt[8] <> CONST` are also possible
 - Default values are optional
 
@@ -1039,7 +1039,7 @@ sd"8'255" // Error: width too small to represent value with sign bit
 // Basic declarations
 val u8 = UInt(8) <> VAR      // 8-bit unsigned
 val s8 = SInt(8) <> VAR      // 8-bit signed
-val param: Int <> CONST = 42  // Constant parameter
+val param: Int <> CONST = -3  // Constant parameter
 
 // Arithmetic
 val sum = u8 + s8.uint       // Addition with casting

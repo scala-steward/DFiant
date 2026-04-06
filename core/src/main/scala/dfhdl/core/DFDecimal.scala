@@ -789,6 +789,29 @@ object DFXInt:
         compiletime.error(
           "Cannot apply an enum entry value to a DFHDL decimal variable."
         )
+      given fromIf[
+          C <: DFValOf[DFBoolOrBit],
+          T,
+          F,
+          TS <: Boolean,
+          TW <: IntP,
+          TN <: NativeType,
+          TP,
+          FP,
+          R <: IfWrapper[C, T, F]
+      ](using
+          tTC: Candidate[T] { type OutS = TS; type OutW = TW; type OutN = TN; type OutP = TP },
+          fTC: DFVal.TC[DFXInt[TS, TW, TN], F] { type OutP = FP }
+      ): Candidate[R] with
+        type OutS = TS
+        type OutW = TW
+        type OutN = TN
+        type OutP = TP | FP
+        type OutSMask = TS
+        type OutWMask = TW
+        type IsScalaInt = false
+        def apply(value: R)(using DFC): Out = value.unwrap
+      end fromIf
     end Candidate
 
     extension [S <: Boolean, W <: IntP, N <: NativeType](dfVal: DFValOf[DFXInt[S, W, N]])

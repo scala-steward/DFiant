@@ -14,6 +14,28 @@ protected[core] def analyzeControlRet(ret: Any)(using DFC): DFTypeAny = Exact.st
   case _ =>
     DFUnit
 
+extension [
+    C <: DFValOf[DFBoolOrBit],
+    T,
+    F,
+    TT <: DFTypeAny,
+    TP,
+    FT <: DFTypeAny,
+    FP
+](ifWrapper: IfWrapper[C, T, F])(using
+    tcT: Exact0.TC[T, DFC] { type Out = DFValTP[TT, TP] },
+    tcF: DFVal.TC[TT, F] { type OutP = FP }
+)
+  def unwrap(using dfc: DFC): DFValTP[TT, TP | FP] =
+    val dfcAnon = dfc.anonymize
+    lazy val onTrue = tcT.conv(ifWrapper.onTrue())(using dfcAnon)
+    def onFalse = tcF(onTrue.dfType, ifWrapper.onFalse())(using dfcAnon).asValTP[TT, FP]
+    DFIf.fromBranches[DFValTP[TT, TP | FP]](
+      List((ifWrapper.cond, () => onTrue)),
+      Some(() => onFalse)
+    )(using dfcAnon)
+end extension
+
 object DFIf:
   def singleBranch[R](
       condOption: Option[DFValOf[DFBoolOrBit]],

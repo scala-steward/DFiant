@@ -11,6 +11,11 @@ class DFStringSpec extends DFSpec:
          |val t2: String <> CONST = s1 + (" World")
          |val t4: Boolean <> CONST = s1 == s2
          |val t5: Boolean <> CONST = s1 != "Hello"
+         |val ifTest =
+         |  s1 + ((
+         |    if (t4) s2
+         |    else " Everyone"
+         |  ): String <> VAL)
          |""".stripMargin
     ) {
       val s1: String <> CONST = "Hello"
@@ -24,6 +29,7 @@ class DFStringSpec extends DFSpec:
       assert(t1.toScalaString == "HelloWorld")
       assert(t4.toScalaBoolean == false)
       assert(t5.toScalaBoolean == false)
+      val ifTest = s1 + (if (t4) s2 else " Everyone")
     }
   }
 end DFStringSpec

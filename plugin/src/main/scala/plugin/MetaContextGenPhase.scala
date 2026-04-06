@@ -363,6 +363,15 @@ class MetaContextGenPhase(setting: Setting) extends CommonPhase:
             }
             named
         end match
+      case Block(stats, _)
+          if stats.exists {
+            case vd: ValDef => vd.name.toString == "skipContextHack"
+            case _          => false
+          } =>
+        stats.collectFirst {
+          case vd: ValDef if vd.name.toString.startsWith("$scrutinee") =>
+            nameValOrDef(vd.rhs, ownerTree, typeFocus, inlinedSrcPos)
+        }.getOrElse(false)
       case block: Block =>
         // debug("Block expr")
         nameValOrDef(block.expr, ownerTree, typeFocus, inlinedSrcPos)

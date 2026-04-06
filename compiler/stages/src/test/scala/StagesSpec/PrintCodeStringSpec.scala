@@ -1733,4 +1733,78 @@ class PrintCodeStringSpec extends StageSpec:
          |end Foo""".stripMargin
     )
   }
+
+  test("empty deduplicated designs") {
+    class Mid() extends EDDesign
+    class Foo extends EDDesign:
+      val inst_a = Mid()
+      val inst_b = Mid()
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|class Mid extends EDDesign
+         |
+         |class Foo extends EDDesign:
+         |  val inst_a = Mid()
+         |  val inst_b = Mid()
+         |end Foo""".stripMargin
+    )
+  }
+
+  test("default design parameter value leak regression") {
+    class child(
+        val A: Int <> CONST = 8,
+        val B: Int <> CONST = 0,
+        val C: Int <> CONST = 5
+    ) extends EDDesign:
+      val din  = Bits(A) <> IN
+      val dout = Bits(A) <> OUT
+      dout <> din
+
+    class Foo(
+        val W: Int <> CONST = 8
+    ) extends EDDesign:
+      val din  = Bits(W) <> IN
+      val dout = Bits(W) <> OUT
+
+      // Instance 1: all params explicit, B = 1
+      val c1 = child(A = W, B = 1, C = 7)
+      c1.din  <> din
+      c1.dout <> dout
+
+      // Instance 2: B omitted (uses default 0), C explicit
+      val c2 = child(A = W, C = 7)
+      c2.din <> din
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|class child(
+         |    val A: Int <> CONST = 8,
+         |    val B: Int <> CONST = 0,
+         |    val C: Int <> CONST = 5
+         |) extends EDDesign:
+         |  val din = Bits(A) <> IN
+         |  val dout = Bits(A) <> OUT
+         |  dout <> din
+         |end child
+         |
+         |class Foo(val W: Int <> CONST = 8) extends EDDesign:
+         |  val din = Bits(W) <> IN
+         |  val dout = Bits(W) <> OUT
+         |  val c1 = child(
+         |      A = W,
+         |      B = 1,
+         |      C = 7
+         |  )
+         |  c1.din <> din
+         |  dout <> c1.dout
+         |  val c2 = child(
+         |      A = W,
+         |      B = 0,
+         |      C = 7
+         |  )
+         |  c2.din <> din
+         |end Foo""".stripMargin
+    )
+  }
 end PrintCodeStringSpec

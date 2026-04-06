@@ -177,16 +177,25 @@ case object NamedAnonMultiref extends NamedAliases, NoCheckStage:
       else Nil
 
 //Names anonymous conditional expressions, as long as they are not referenced by an ident which indicates that
-//they are themselves inside another conditional expression
+//they are themselves inside another conditional expression, and as long as they are not directly assigned to
+//a declaration or connected to an output port
 case object NamedAnonCondExpr extends NamedAliases:
-  override def dependencies: List[Stage] = List(ExplicitCondExprAssign)
+  override def dependencies: List[Stage] = List()
   def criteria(dfVal: DFVal)(using MemberGetSet, CompilerOptions): List[DFVal] = dfVal match
     case dfVal: DFConditional.Header if dfVal.isAnonymous && dfVal.dfType != DFUnit =>
-      val isReferencedByIdent =
-        dfVal.getReadDeps.collectFirst { case Ident(_) => true }.getOrElse(false)
-      if (isReferencedByIdent) Nil
-      else List(dfVal)
+      val nameIt =
+        dfVal.getReadDeps.collectFirst {
+          // directly assigned to a declaration (variable or output port)
+          case DFNet.Assignment(toVal = _: DFVal.Dcl) => false
+          // directly connected to an output port
+          case DFNet.Connection(toVal = DclOut()) => false
+          // is referenced by an ident, which means it is used in another conditional expression
+          case Ident(_) => false
+        }.getOrElse(true)
+      if (nameIt) List(dfVal)
+      else Nil
     case dfVal => Nil
+end NamedAnonCondExpr
 
 extension [T: HasDB](t: T)
   def namedAnonMultiref(using CompilerOptions): DB =

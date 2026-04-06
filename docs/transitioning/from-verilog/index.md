@@ -49,6 +49,42 @@ end AndGate
 </div>
 ///
 
+/// admonition | `@top` Annotation
+    type: verilog
+The `@top` annotation marks a design as a compilation entry point. The compiler generates a `main` method that elaborates, compiles, and emits HDL output for that design. In a typical design flow, only the testbench or top-level wrapper carries `@top`, and sub-modules are elaborated transitively.
+
+When translating and verifying modules one at a time (bottom-up), you may need to compile each module independently. In that case, every module being compiled must have `@top` so the compiler can generate an entry point for it. `@top`-annotated designs require **all** parameters to have default values.
+
+When a `@top`-annotated design is instantiated as a child of another design, the annotation has no effect. So the question is not whether `@top` causes harm, but whether it is practical: requiring default values for all parameters is annoying for reusable internal components and is not recommended. Mark only the designs you actually need to compile standalone.
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+module lfsr #(
+  parameter LEN = 8
+)(
+  input  clk,
+  output [LEN-1:0] data
+);
+  // ...
+endmodule
+```
+
+```scala linenums="0" title="DFHDL"
+@top class lfsr(
+  val LEN: Int <> CONST = 8
+) extends EDDesign:
+  val clk  = Bit      <> IN
+  val data = Bits(LEN) <> OUT
+  // ...
+end lfsr
+```
+
+</div>
+
+Without `@top`, running the compiled output fails with `ClassNotFoundException: top_<ModuleName>`. See [Design Hierarchy][design-hierarchy] for full details on `@top` and `@top(false)`.
+///
+
 /// admonition | Parameter Declarations
     type: verilog
 <div class="grid" markdown>
@@ -101,6 +137,32 @@ end Concat
 </div>
 ///
 
+/// admonition | Unconnected Output Ports
+    type: verilog
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+child_mod child_inst(
+    .clk    (clk),
+    .din    (din),
+    .debug  (),     // unconnected
+    .dout   (dout)
+);
+```
+
+```scala linenums="0" title="DFHDL"
+val child_inst = child_mod()
+child_inst.clk   <> clk
+child_inst.din   <> din
+child_inst.debug <> OPEN  // unconnected
+child_inst.dout  <> dout
+```
+
+</div>
+
+Use `OPEN` to explicitly mark an output port as unconnected. This is equivalent to Verilog’s empty port connection (`.port()`). See [Open (Unconnected) Ports][open-ports] for more details.
+///
+
 /// admonition | logic/reg/wire
     type: verilog
 <div class="grid" markdown>
@@ -116,6 +178,20 @@ val v = Bits(8) <> VAR init b"8’1011"
 ```
 
 </div>
+///
+
+/// admonition | Choosing `UInt` vs `Bits` vs `SInt` for Verilog `logic`
+    type: verilog
+Verilog `logic` and `wire` are untyped bit vectors. When translating to DFHDL, choose the type based on how the signal is used:
+
+| Verilog usage pattern | DFHDL type |
+|---|---|
+| Signed values, subtraction below zero | `SInt` |
+| Exact bit-width required (addresses, masks, bitwise ops) | `Bits` |
+| Unsigned arithmetic (counters, addition, comparison with integers) | `UInt` |
+| FSM state encoding | `enum extends Encoded` |
+
+When a signal is used in both arithmetic and bitwise contexts, prefer `UInt` and convert with `.bits` for bitwise operations. When exact bit-width must be preserved (e.g., an address bus that is also incremented), prefer `Bits` to avoid accidental width extension.
 ///
 
 ## Types and Literals
@@ -183,7 +259,50 @@ val cnt = UInt.to(SCALE) <> VAR init 0
 If the Verilog counter resets *when it reaches* `N` (i.e., `counter == N`), the variable must be able to hold the value `N`, so use `UInt.to(N)`. If the counter only ever holds values `0..N-1`, use `UInt.until(N)`. For many values of `N`, both produce the same bit width (`clog2(N) == clog2(N+1)`), so the bug is silent until formal verification catches an out-of-range comparison.
 ///
 
-See [UInt/SInt constructors][DFDecimal] and [Bits constructors][DFBits] for details. See also the [`clog2` anti-pattern warning][int-param-ops].
+**Reusing computed types and extracting widths:**
+You can name a DFHDL type and reuse it across multiple declarations. You can also extract the `.width` from an existing DFHDL value (not from a type constructor) to derive new widths:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+module Sum#(parameter int MAX = 16)(
+  input  wire logic [A_WIDTH - 1:0] a,
+  input  wire logic [A_WIDTH - 1:0] b,
+  output      logic [IPW - 1:0]     sum
+);
+  localparam int A_WIDTH = $clog2(MAX);
+  localparam int IPW = A_WIDTH + 1;
+  assign sum = a + b;
+endmodule
+```
+
+```scala linenums="0" title="DFHDL"
+class Sum(val MAX: Int <> CONST = 16)
+    extends EDDesign:
+  // Name and reuse a type
+  val MyUInt = UInt.until(MAX)
+  val a = MyUInt <> IN
+  val b = MyUInt <> IN
+
+  // Extract width from an existing value
+  val IPW = a.width + 1
+  val sum = UInt(IPW) <> OUT
+  sum <> a + b
+```
+
+</div>
+
+`.width` works on any DFHDL value. Use it to derive widths from existing declarations:
+
+```scala
+val a = UInt.until(MAX) <> IN
+val a_width = a.width          // equivalent to clog2(MAX)
+val extended = UInt(a_width + 1) <> OUT
+```
+
+Using `UInt.to`/`UInt.until` with `.width` on values is preferred over calling `clog2` directly (see the [`clog2` anti-pattern warning][int-param-ops]).
+
+See [UInt/SInt constructors][DFDecimal] and [Bits constructors][DFBits] for details.
 ///
 
 ## Processes and Sequential Logic
@@ -220,22 +339,22 @@ process(all):
 
 
 // Sequential (clocked)
-process(clk):
-  if (clk.rising)
-    counter :== counter + 1
+process(clk.rising):
+  counter :== counter + 1
 
 // Sequential with async reset
-process(clk, rst):
+process(clk.rising, rst.rising):
   if (rst)
     q :== 0
-  else if (clk.rising)
+  else
     q :== d
 ```
 
 </div>
 
 - `always @(*)` becomes `process(all):`
-- `always @(posedge clk)` becomes `process(clk):` with `if (clk.rising)` inside
+- `always @(posedge clk)` becomes `process(clk.rising):`
+- `always @(posedge clk, negedge rst)` becomes `process(clk.rising, rst.falling):`
 - Verilog blocking `=` becomes DFHDL `:=` (use in combinational processes)
 - Verilog non-blocking `<=` becomes DFHDL `:==` (use in clocked processes)
 ///
@@ -279,9 +398,8 @@ endmodule
   val clk  = Bit <> IN
   val din  = Bit <> IN
   val dout = Bit <> OUT init 1
-  process(clk):
-    if (clk.rising)
-      dout :== din
+  process(clk.rising):
+    dout :== din
 ```
 
 </div>
@@ -314,13 +432,12 @@ enum State extends Encoded:
 import State.*
 val state = State <> VAR init Ready
 
-process(clk):
-  if (clk.rising)
-    state match
-      case Ready => if (go) state :== Aim
-      case Aim   => state :== Fire
-      case Fire  => state :== Ready
-      case _     => state :== Ready
+process(clk.rising):
+  state match
+    case Ready => if (go) state :== Aim
+    case Aim   => state :== Fire
+    case Fire  => state :== Ready
+    case _     => state :== Ready
 ```
 
 </div>
@@ -358,16 +475,15 @@ always @(posedge clk)
 ```scala linenums="0" title="DFHDL"
 val state = State <> VAR  // no init
 
-process(clk):
-  if (clk.rising)
-    if (rst)
-      state :== Ready
-    else
-      state match
-        case Ready => if (go) state :== Aim
-        case Aim   => state :== Fire
-        case Fire  => state :== Ready
-        case _     => state :== Ready
+process(clk.rising):
+  if (rst)
+    state :== Ready
+  else
+    state match
+      case Ready => if (go) state :== Aim
+      case Aim   => state :== Fire
+      case Fire  => state :== Ready
+      case _     => state :== Ready
 ```
 
 </div>
@@ -495,6 +611,37 @@ val none_set = !v.|    // Bit: NOR reduce
 See [Bit Reduction Operations][reduction-ops] for full details.
 ///
 
+/// admonition | Bit Replication (`{N{expr}}`)
+    type: verilog
+Verilog's replication operator `{N{expr}}` maps to `.repeat(N)` in DFHDL:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+parameter W = 8;
+logic [7:0]  all_ones  = {8{1'b1}};
+logic [7:0]  all_zeros = {8{1'b0}};
+logic [15:0] doubled   = {2{all_ones}};
+
+// Parametric replication
+logic [W-1:0] fill_one = {W{1'b1}};
+```
+
+```scala linenums="0" title="DFHDL"
+val W: Int <> CONST = 8
+val all_ones  = b"1".repeat(8)
+val all_zeros = b"0".repeat(8)
+val doubled   = all_ones.repeat(2)
+
+// Parametric replication
+val fill_one = b"1".repeat(W)
+```
+
+</div>
+
+`.repeat` works on any `Bits` value, including single-bit literals.
+///
+
 /// admonition | Part-Select Notation (`-:` and `+:`)
     type: verilog
 Verilog's descending and ascending part-select notation maps to DFHDL's `(hi, lo)` range slice, or use the convenience methods `.msbits(n)` and `.lsbits(n)`:
@@ -524,30 +671,108 @@ val bit5 = data(5)         // single bit
 ```
 
 </div>
+
+Bit-slicing and single-bit access work on `Bits`, `UInt`, and `SInt` values with the same syntax. You do **not** need to convert `SInt` to `Bits` before slicing:
+
+```scala
+val prod = SInt(16) <> VAR
+val top8 = prod(15, 8)  // 8-bit slice, returns Bits
+val sign = prod(15)     // single bit access
+```
 ///
 
 /// admonition | Arithmetic with Signed Values and Constants
     type: verilog
-DFHDL arithmetic requires the LHS to be at least as wide as the RHS and to have compatible sign. A plain Scala `Int` literal is unsigned, so it cannot appear on the LHS of arithmetic with `SInt`. The best practice is to use **sized signed literals** (`sd"W'value"`) with the target operation width:
+**Arithmetic operand compatibility:**
+DFHDL enforces sign and width constraints at compile time. The LHS must be at least as wide and at least as signed as the RHS. When the LHS is signed and the RHS is unsigned, the RHS is implicitly widened by 1 bit (for the sign bit), so the LHS must be wide enough to accommodate that.
 
-```scala
-// Verilog: y <= 2 * mul_val + y0;   (all signed, 16-bit)
-// ERROR: plain 2 is unsigned
-y :== 2 * mul_val + y0
-// CORRECT: use a sized signed literal
-y :== sd"16'2" * mul_val + y0
+| LHS | RHS | Result | Constraints | Valid | Invalid |
+|-----|-----|--------|-------------|-------|---------|
+| `UInt[W1]` | `UInt[W2]` | `UInt[W1]` | `W1 >= W2` | `d"8'5" + d"4'3"` | `d"4'5" + d"8'3"` |
+| `UInt[W]` | `Int` | `UInt[W]` | `Int` >= 0, fits in W bits | `d"8'5" + 3` | `d"8'5" + (-1)` |
+| `SInt[W1]` | `SInt[W2]` | `SInt[W1]` | `W1 >= W2` | `sd"8'1" + sd"4'3"` | `sd"4'5" + sd"8'3"` |
+| `SInt[W]` | `Int` | `SInt[W]` | `Int` fits in W bits | `sd"8'5" + (-3)` | |
+| `SInt[W1]` | `UInt[W2]` | `SInt[W1]` | `W1 >= W2 + 1` | `sd"8'5" + d"4'3"` | `sd"4'5" + d"4'3"` |
+| `UInt[W]` | `SInt[W2]` | **Error** | Unsigned cannot accept signed RHS | | `d"8'5" + sd"4'3"` |
+| `Int` | `Int` | `Int` | Elaboration-time arithmetic | `3 + 5` | |
+| `Int` (>= 0) | `UInt[W]` | `UInt[Int]` | `W` fits in `Int`'s width | `180 - d"4'3"` | `2 - d"8'200"` |
+| `Int` (< 0) | `SInt[W]` | `SInt[Int]` | `W` fits in `Int`'s width | `(-5) + sd"4'3"` | |
 
-// Verilog: err <= 2 - (2 * r0);    (signed, 18-bit result)
-// ERROR: sd"2" is SInt[3], narrower than RHS
-err :== sd"2" - (r0.resize(CORDW + 2) * 2)
-// CORRECT: match the LHS width to the operation width
-err :== sd"${CORDW + 2}'2" - (r0.resize(CORDW + 2) * 2)
+The constraint is on **width**, not value. A small value in a wide type is valid as LHS: `d"8'1" + d"4'15"` works because `W1=8 >= W2=4`.
+
+**Comparison operand compatibility:**
+Comparisons (`==`, `!=`, `<`, `>`, `<=`, `>=`) require both operands to have the **same signedness and width**. When comparing with an `Int`, its actual width must not exceed the DFHDL value's width.
+
+| LHS | RHS | Constraints | Valid | Invalid |
+|-----|-----|-------------|-------|---------|
+| `UInt[W]` | `UInt[W]` | Same width | `d"8'5" == d"8'3"` | `d"8'5" == d"4'3"` |
+| `UInt[W]` | `Int` | `Int` >= 0, fits in W bits | `d"8'5" == 3` | `d"4'5" == 300` |
+| `SInt[W]` | `SInt[W]` | Same width | `sd"8'5" < sd"8'3"` | `sd"8'5" < sd"4'3"` |
+| `SInt[W]` | `Int` | `Int` fits in W bits | `sd"8'5" == (-3)` | |
+| `Int` (>= 0) | `UInt[W]` | Fits in W bits | `3 == d"8'5"` | `300 == d"4'5"` |
+| `Int` (< 0) | `SInt[W]` | Fits in W bits | `(-3) == sd"8'5"` | |
+| `UInt[W]` | `SInt[W2]` | **Error** | | `d"8'5" == sd"8'3"` |
+| `SInt[W]` | `UInt[W2]` | **Error** | | `sd"8'5" == d"8'3"` |
+
+To compare values of different widths, use `.resize(W)` to match widths first. To compare values of different signedness, convert explicitly (e.g., `.bits.sint` or `.signed`).
+
+**UInt-to-SInt conversion methods:**
+
+- `.signed` -- converts `UInt[W]` to `SInt[W+1]` by adding a sign bit. The value is preserved (always non-negative).
+- `.bits.sint` -- converts `UInt[W]` to `SInt[W]` by reinterpreting the bit pattern. The width stays the same, but the value may become negative if the MSB is set.
+Use `.resize(W)` to widen a narrower operand before arithmetic.
+
+**Mixed-width signed arithmetic examples:**
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+module MixedArith #(
+  parameter W = 16
+)(
+  input  wire        clk,
+  input  wire [2:0]          idx,
+  input  wire signed [W-1:0] operand,
+  output wire signed [W-1:0] result,
+  output reg  signed [W+1:0] acc
+);
+  // Combinational: UInt expr assigned to SInt
+  assign result = 100 - 3 * idx;
+
+  // Clocked: wide accumulator, narrow operand
+  always @(posedge clk)
+    if (acc <= operand)
+      acc <= acc + 2 * operand + 1;
+endmodule
 ```
 
-The general rule: the **wider** operand must be on the LHS, and when mixing constants with signed DFHDL values, use `sd"W'value"` with the appropriate width `W`.
+```scala linenums="0" title="DFHDL"
+class MixedArith(
+  val W: Int <> CONST = 16
+) extends EDDesign:
+  val clk     = Bit         <> IN
+  val idx     = UInt(3)     <> IN
+  val operand = SInt(W)     <> IN
+  val result  = SInt(W)     <> OUT
+  val acc     = SInt(W + 2) <> OUT
+
+  // Forcing SInt arithmetic
+  result <> sd"${W}'100" - idx * 3
+
+  process(clk.rising):
+    // Resize narrow operand to match wider acc
+    if (acc <= operand.resize(W + 2))
+      // switch operand and literal multiplication
+      // order to force SInt arithmetic
+      acc :== acc + operand * 2 + 1
+end MixedArith
+```
+
+</div>
 
 See [Arithmetic Operations][arithmetic-ops] and [Carry Arithmetic][carry-ops] for full details.
 ///
+
 
 ## Parametric Constants
 
@@ -581,6 +806,41 @@ class MyDesign(
 </div>
 
 See the [Parameter Declarations](#parameter-declarations) section above for a complete inter-dependent parameters example.
+///
+
+## Generate Loops and Conditionals
+
+/// admonition | `generate for` Loops
+    type: verilog
+Verilog `generate for` loops map to Scala `for` loops at design scope. Each iteration is unrolled at elaboration time -- the generated HDL has no loop construct, only the unrolled instances.
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+genvar i;
+generate
+  for (i = 0; i < N; i = i + 1)
+  begin : BLK
+    filter #(
+      .WIDTH(BASE_W - 2*i)
+    ) u_filter (...);
+  end
+endgenerate
+```
+
+```scala linenums="0" title="DFHDL"
+for i <- 0 until N.toScalaInt do
+  val u_filter = filter(
+    WIDTH = BASE_W - 2 * i
+  )
+  // connect ports...
+```
+
+</div>
+
+Note that `N` must be convertible to a Scala `Int` at elaboration time (use `.toScalaInt` on `Int <> CONST` parameters).
+
+**Important difference from Verilog:** DFHDL type-checks **both** branches of elaboration-time `if` expressions, regardless of the parameter value. Both branches must be valid for all parameter values. See [Loops][loops] for details and workarounds.
 ///
 
 ## Common Pitfalls
@@ -628,7 +888,7 @@ class foo extends EDDesign:
 
 </div>
 
-
+Beyond Scala keywords, Verilog module names may also conflict with DFHDL built-in functions brought in by `import dfhdl.*` (e.g., `abs`, `max`, `min`) or with other class names in the same design hierarchy. See [Naming][naming] for the full list of reserved names and resolution patterns (`@targetName`, type aliases, backtick escaping).
 ///
 
 /// admonition | `Bits` Initialization or Assignment

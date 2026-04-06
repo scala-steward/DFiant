@@ -3,6 +3,14 @@ import scala.quoted.*
 import util.NotGiven
 import scala.collection.concurrent.TrieMap
 
+final class IfWrapper[C, OT, OF] private (
+    val cond: C,
+    val onTrue: () => OT,
+    val onFalse: () => OF
+)
+object IfWrapper:
+  def apply[C, OT, OF](cond: C, onTrue: => OT, onFalse: => OF): IfWrapper[C, OT, OF] =
+    new IfWrapper(cond, () => onTrue, () => onFalse)
 final class ExactInfo[Q <: Quotes & Singleton](using val quotes: Q)(val term: quotes.reflect.Term):
   import quotes.reflect.*
   val exactTpe: quotes.reflect.TypeRepr =
@@ -55,6 +63,20 @@ extension [Q <: Quotes & Singleton](using quotes: Q)(term: quotes.reflect.Term)
         val AppliedType(tycon, _) = t.tpe.runtimeChecked
         val tupleTypeArgs = tpes.map(_.asTypeTree)
         Apply(TypeApply(fun, tupleTypeArgs), terms)
+      case ifTerm @ If(Apply(Apply(Ident("BooleanHack"), List(cond)), List(_)), onTrue, onFalse) =>
+        ifTerm.tpe match
+          case OrType(_, _) =>
+            val condType = cond.tpe.asTypeOf[Any]
+            val onTrueInfo = onTrue.exactInfo
+            val onFalseInfo = onFalse.exactInfo
+            '{
+              IfWrapper[condType.Underlying, onTrueInfo.Underlying, onFalseInfo.Underlying](
+                ${ cond.asExprOf[Any] },
+                ${ onTrueInfo.exactExpr },
+                ${ onFalseInfo.exactExpr }
+              )
+            }.asTerm
+          case _ => ifTerm
       case t => t
     end match
   end exactTerm
@@ -240,6 +262,12 @@ object Exact1:
   end convMacro
 end Exact1
 
+//this scrutinee hack is needed to work around a Scala compiler bug that causes a huge type signature being generated.
+//not yet minimized as an issue (e.g., try calling `.sint` on an `SInt` value without the diagnostics plugin to pretify it)
+transparent inline def cleanTypeHack[T](inline value: T): T =
+  inline value match
+    case skipContextHack: T => skipContextHack
+
 /////////////////////////////////////////////////////////////////////////////////
 // ExactOp1
 /////////////////////////////////////////////////////////////////////////////////
@@ -249,7 +277,10 @@ trait ExactOp1[Op, Ctx, OutUB, LHS]:
 type ExactOp1Aux[Op, Ctx, OutUB, LHS, O <: OutUB] =
   ExactOp1[Op, Ctx, OutUB, LHS] { type Out = O }
 transparent inline def exactOp1[Op, Ctx, OutUB](inline lhs: Any)(using ctx: Ctx): OutUB =
-  ${ exactOp1Macro[Op, Ctx, OutUB]('lhs)('ctx) }
+  cleanTypeHack(exactOp1BeforeTypeHack[Op, Ctx, OutUB](lhs))
+transparent inline def exactOp1BeforeTypeHack[Op, Ctx, OutUB](inline lhs: Any)(using
+    ctx: Ctx
+): OutUB = ${ exactOp1Macro[Op, Ctx, OutUB]('lhs)('ctx) }
 private def exactOp1Macro[Op, Ctx, OutUB](lhs: Expr[Any])(ctx: Expr[Ctx])(using
     Quotes,
     Type[Op],
@@ -274,6 +305,13 @@ trait ExactOp2[Op, Ctx, OutUB, LHS, RHS]:
 type ExactOp2Aux[Op, Ctx, OutUB, LHS, RHS, O <: OutUB] =
   ExactOp2[Op, Ctx, OutUB, LHS, RHS] { type Out = O }
 transparent inline def exactOp2[Op, Ctx, OutUB](
+    inline lhs: Any,
+    inline rhs: Any,
+    inline bothWays: Boolean = false
+)(using
+    ctx: Ctx
+): OutUB = cleanTypeHack(exactOp2BeforeTypeHack[Op, Ctx, OutUB](lhs, rhs, bothWays))
+transparent inline def exactOp2BeforeTypeHack[Op, Ctx, OutUB](
     inline lhs: Any,
     inline rhs: Any,
     inline bothWays: Boolean = false
@@ -351,6 +389,11 @@ trait ExactOp3[Op, Ctx, OutUB, LHS, MHS, RHS]:
 type ExactOp3Aux[Op, Ctx, OutUB, LHS, MHS, RHS, O <: OutUB] =
   ExactOp3[Op, Ctx, OutUB, LHS, MHS, RHS] { type Out = O }
 transparent inline def exactOp3[Op, Ctx, OutUB](
+    inline lhs: Any,
+    inline mhs: Any,
+    inline rhs: Any
+)(using ctx: Ctx): OutUB = cleanTypeHack(exactOp3BeforeTypeHack[Op, Ctx, OutUB](lhs, mhs, rhs))
+transparent inline def exactOp3BeforeTypeHack[Op, Ctx, OutUB](
     inline lhs: Any,
     inline mhs: Any,
     inline rhs: Any

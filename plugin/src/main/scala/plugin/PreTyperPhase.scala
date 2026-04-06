@@ -23,16 +23,16 @@ import annotation.tailrec
 import reporting.*
 
 // not used, but can be potentially useful for modified the reported compiler errors
-// class CustomReporter(
-//     val orig: Reporter
-// ) extends Reporter:
-//   override def flush()(using ctx: Context): Unit = orig.flush()
-//   override def doReport(dia: Diagnostic)(using ctx: Context): Unit =
-//     val updatedMsg = dia.msg.toString
-//     val updatedDia = Diagnostic(dia.msg.mapMsg(x => updatedMsg), dia.pos, dia.level)
-//     orig.doReport(updatedDia)
-//   end doReport
-// end CustomReporter
+class CustomReporter(
+    val orig: Reporter
+) extends Reporter:
+  override def flush()(using ctx: Context): Unit = orig.flush()
+  override def doReport(dia: Diagnostic)(using ctx: Context): Unit =
+    val updatedMsg = dia.msg.toString
+    val updatedDia = Diagnostic(dia.msg.mapMsg(x => updatedMsg), dia.pos, dia.level)
+    orig.doReport(updatedDia)
+  end doReport
+end CustomReporter
 
 /** This is a pre-typer phase that does very minor things:
   *   - change infix operator precedence of type signature: `a X b <> c` to be `(a X b) <> c`
@@ -42,7 +42,7 @@ import reporting.*
   *     and `a <> b match {...}` to be `a <> (b match {...})`
   *   - change process{} to process.forever{}
   */
-class PreTyperPhase(setting: Setting) extends PluginPhase:
+class PreTyperPhase(setting: Setting) extends CommonPhase:
   import untpd.*
 
   val phaseName = "PreTyper"
@@ -54,7 +54,7 @@ class PreTyperPhase(setting: Setting) extends PluginPhase:
   // that can cause compiler errors
   override def run(using Context): Unit = {}
 
-  def debug(str: => Any*): Unit =
+  def debug2(str: => Any*): Unit =
     if (debugFlag) println(str.mkString(", "))
 
   val opSet = Set("|", "||", "&", "&&", "^", "<<", ">>", "==", "!=", "<", ">", "<=", ">=")
@@ -151,26 +151,123 @@ class PreTyperPhase(setting: Setting) extends PluginPhase:
           t
       end match
     end transform
+  object DFType:
+    def unapply(arg: Type)(using Context): Option[(String, List[Type])] =
+      arg.simple match
+        case AppliedType(dfTypeCore, List(n, argsTp))
+            if dfTypeCore.typeSymbol == requiredClass("dfhdl.core.DFType") =>
+          val nameStr = n.typeSymbol.name.toString
+          argsTp match
+            case AppliedType(_, args) => Some(nameStr, args)
+            case _                    => Some(nameStr, Nil)
+        case _ => None
+  end DFType
+  object DFBool:
+    def unapply(arg: Type)(using Context): Boolean =
+      arg match
+        case DFType("DFBool$", Nil) => true
+        case _                      => false
+  object DFBit:
+    def unapply(arg: Type)(using Context): Boolean =
+      arg match
+        case DFType("DFBit$", Nil) => true
+        case _                     => false
+  object DFBits:
+    def unapply(arg: Type)(using Context): Option[Type] =
+      arg match
+        case DFType("DFBits", w :: Nil) => Some(w)
+        case _                          => None
+  object DFDecimal:
+    def unapply(arg: Type)(using Context): Option[(Type, Type, Type)] =
+      arg match
+        // ignoring the fourth native argument, since it's not needed for matching
+        case DFType("DFDecimal", s :: w :: f :: _ :: Nil) => Some(s, w, f)
+        case _                                            => None
+  object DFXInt:
+    def unapply(arg: Type)(using Context): Option[(Boolean, Type)] =
+      arg match
+        case DFDecimal(
+              ConstantType(Constant(sign: Boolean)),
+              widthTpe,
+              ConstantType(Constant(fractionWidth: Int))
+            ) if fractionWidth == 0 =>
+          Some(sign, widthTpe)
+        case _ => None
+  object DFUInt:
+    def unapply(arg: Type)(using Context): Option[Type] =
+      arg match
+        case DFXInt(sign, widthTpe) if !sign => Some(widthTpe)
+        case _                               => None
+  object DFSInt:
+    def unapply(arg: Type)(using Context): Option[Type] =
+      arg match
+        case DFXInt(sign, widthTpe) if sign => Some(widthTpe)
+        case _                              => None
+  object DFEnum:
+    def unapply(arg: Type)(using Context): Option[Type] =
+      arg match
+        case DFType("DFEnum", e :: Nil) => Some(e)
+        case _                          => None
+  object DFStruct:
+    def unapply(arg: Type)(using Context): Option[Type] =
+      arg match
+        case DFType("DFStruct", t :: Nil) => Some(t)
+        case _                            => None
+
+  object DFVal:
+    private def stripAndType(tpeOpt: Option[Type])(using Context): Option[Type] =
+      tpeOpt.map(tpe =>
+        tpe.simple match
+          case AndType(t1, _) => t1
+          case _              => tpe
+      )
+    def unapply(arg: Type)(using Context): Option[Type] =
+      val dfValClsRef = requiredClassRef("dfhdl.core.DFVal")
+      val ret = arg.simple match
+        case AppliedType(t, List(dfType, _)) if t <:< dfValClsRef =>
+          Some(dfType)
+        case AppliedType(t, List(arg, mod))
+            if t.typeSymbol.name.toString == "<>" &&
+              (mod <:< requiredClassRef("dfhdl.VAL") || mod <:< requiredClassRef("dfhdl.DFRET")) =>
+          arg match
+            case dfType @ DFType(_, _) => Some(dfType)
+            case _                     => None
+        case _ =>
+          None
+      stripAndType(ret)
+    end unapply
+  end DFVal
 
   // not used, but can be potentially useful for modified the reported compiler errors
-  // override def initContext(ctx: FreshContext): Unit =
-  //   import dotty.tools.dotc.printing.*
-  //   import dotty.tools.dotc.printing.Texts.Text
-  //   def foo(ctx: Context): Printer =
-  //     new PlainPrinter(ctx):
-  //       override def toText(tp: Type): Text =
-  //         if (tp <:< defn.IntType)
-  //           "Int2"
-  //         else
-  //           super.toText(tp)
-  //   ctx.setPrinterFn(foo)
-  //   val typerState = ctx.typerState.setReporter(new CustomReporter(ctx.reporter))
-  //   ctx.setTyperState(typerState)
+  override def initContext(ctx: FreshContext): Unit =
+    import dotty.tools.dotc.printing.*
+    import dotty.tools.dotc.printing.Texts.Text
+    def foo(ctx: Context): Printer =
+      new RefinedPrinter(ctx):
+        override def toText(tp: Type): Text =
+          tp match
+            case DFVal(dfType) =>
+              val dfTypeText: Text = dfType match
+                case DFBool()           => "Boolean"
+                case DFBit()            => "Bit"
+                case DFBits(w)          => s"Bits[${w.show}]"
+                case DFUInt(w)          => s"UInt[${w.show}]"
+                case DFSInt(w)          => s"SInt[${w.show}]"
+                case DFDecimal(s, w, f) => s"Decimal[${s.show}, ${w.show}, ${f.show}]"
+                case DFEnum(e)          => s"Enum[${e.show}]"
+                case DFStruct(t)        => s"Struct[${t.show}]"
+                case _                  => super.toText(tp)
+              dfTypeText ~ " <> Val"
+            case _ => super.toText(tp)
+    ctx.setPrinterFn(foo)
+    val typerState = ctx.typerState.setReporter(new CustomReporter(ctx.reporter))
+    ctx.setTyperState(typerState)
+  end initContext
 
   override def runOn(units: List[CompilationUnit])(using Context): List[CompilationUnit] =
     val parsed = super.runOn(units)
     parsed.foreach { cu =>
-      // debugFlag = cu.source.file.path.contains("Playground.scala")
+      debugFlag = cu.source.file.path.contains("Playground.scala")
       cu.untpdTree = `fix<>andOpPrecedence`.transform(cu.untpdTree)
       cu.untpdTree = `fixXand<>Precedence`.transform(cu.untpdTree)
     }

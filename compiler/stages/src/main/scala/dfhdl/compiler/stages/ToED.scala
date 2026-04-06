@@ -11,8 +11,8 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 case object ToED extends Stage:
   def dependencies: List[Stage] =
-    List(DropUnreferencedAnons, ToRT, DropRTProcess, NameRegAliases, ExplicitNamedVars, AddClkRst,
-      SimpleOrderMembers)
+    List(DropUnreferencedAnons, ToRT, DropRTProcess, NameRegAliases, ExplicitNamedVars,
+      ExplicitCondExprAssign, AddClkRst, SimpleOrderMembers)
   def nullifies: Set[Stage] = Set(DropUnreferencedAnons)
   def transform(designDB: DB)(using getSet: MemberGetSet, co: CompilerOptions): DB =
     given RefGen = RefGen.fromGetSet
