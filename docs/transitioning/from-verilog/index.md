@@ -246,22 +246,22 @@ process(all):
 
 
 // Sequential (clocked)
-process(clk):
-  if (clk.rising)
-    counter :== counter + 1
+process(clk.rising):
+  counter :== counter + 1
 
 // Sequential with async reset
-process(clk, rst):
+process(clk.rising, rst.rising):
   if (rst)
     q :== 0
-  else if (clk.rising)
+  else
     q :== d
 ```
 
 </div>
 
 - `always @(*)` becomes `process(all):`
-- `always @(posedge clk)` becomes `process(clk):` with `if (clk.rising)` inside
+- `always @(posedge clk)` becomes `process(clk.rising):`
+- `always @(posedge clk, negedge rst)` becomes `process(clk.rising, rst.falling):`
 - Verilog blocking `=` becomes DFHDL `:=` (use in combinational processes)
 - Verilog non-blocking `<=` becomes DFHDL `:==` (use in clocked processes)
 ///
@@ -305,9 +305,8 @@ endmodule
   val clk  = Bit <> IN
   val din  = Bit <> IN
   val dout = Bit <> OUT init 1
-  process(clk):
-    if (clk.rising)
-      dout :== din
+  process(clk.rising):
+    dout :== din
 ```
 
 </div>
@@ -340,13 +339,12 @@ enum State extends Encoded:
 import State.*
 val state = State <> VAR init Ready
 
-process(clk):
-  if (clk.rising)
-    state match
-      case Ready => if (go) state :== Aim
-      case Aim   => state :== Fire
-      case Fire  => state :== Ready
-      case _     => state :== Ready
+process(clk.rising):
+  state match
+    case Ready => if (go) state :== Aim
+    case Aim   => state :== Fire
+    case Fire  => state :== Ready
+    case _     => state :== Ready
 ```
 
 </div>
@@ -384,16 +382,15 @@ always @(posedge clk)
 ```scala linenums="0" title="DFHDL"
 val state = State <> VAR  // no init
 
-process(clk):
-  if (clk.rising)
-    if (rst)
-      state :== Ready
-    else
-      state match
-        case Ready => if (go) state :== Aim
-        case Aim   => state :== Fire
-        case Fire  => state :== Ready
-        case _     => state :== Ready
+process(clk.rising):
+  if (rst)
+    state :== Ready
+  else
+    state match
+      case Ready => if (go) state :== Aim
+      case Aim   => state :== Fire
+      case Fire  => state :== Ready
+      case _     => state :== Ready
 ```
 
 </div>

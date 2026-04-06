@@ -101,11 +101,16 @@ class CombAndSeq extends EDDesign:
   process(x):
     y := x + 1
 
-  // Sequential logic: runs on clock (and optionally reset) events
-  val r = UInt(8) <> VAR init 0
+  // Sequential logic, Verilog style: runs on clock (and optionally reset) events
+  val r1 = UInt(8) <> VAR init 0
+  process(clk.rising):
+    r1 :== x
+
+  // Sequential logic, VHDL style: runs on clock (and optionally reset) events
+  val r2 = UInt(8) <> VAR init 0
   process(clk):
     if (clk.rising)
-      r :== x
+      r2 :== x
 ```
 
 You can list multiple signals, including edge-qualified signals (see [Edge sensitivity](#edge-sensitivity)).
