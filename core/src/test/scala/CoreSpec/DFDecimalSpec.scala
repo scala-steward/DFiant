@@ -761,4 +761,14 @@ class DFDecimalSpec extends DFSpec:
 
     assertNoWarnings()
   }
+  val sint8 = SInt(8) <> VAR
+  test("Clean type in error messages (no ExactOp2Aux leakage)") {
+    val errors = compiletime.testing.typeCheckErrors("(sint8 + sint8).sint")
+    assert(errors.nonEmpty, "Expected a compile error for .sint on SInt")
+    val allMessages = errors.map(_.message).mkString("\n")
+    assert(
+      !allMessages.contains("ExactOp2Aux"),
+      s"Error message should not contain ExactOp2Aux projection types:\n$allMessages"
+    )
+  }
 end DFDecimalSpec
