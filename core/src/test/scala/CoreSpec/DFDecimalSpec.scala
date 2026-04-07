@@ -684,4 +684,81 @@ class DFDecimalSpec extends DFSpec:
     val r9: Int <> CONST = 4
     assertEquals(t9, r9)
   }
+  test("Implicit Int Verilog-semantics warning") {
+    val warnMsg =
+      """|Implicit Scala/DFHDL Int conversion may produce different results than Verilog.
+         |In Verilog, integer literals are 32-bit, which can widen intermediate arithmetic.
+         |In DFHDL, Int literals are converted to minimum bit-accurate width.
+         |Use carry operations (+^, -^, *^) or explicit bit-accurate literals (d"W'V").""".stripMargin
+    val u8 = UInt(8) <> VAR
+    val a = UInt(8) <> VAR
+    val b = UInt(8) <> VAR
+    val c = UInt(8) <> VAR
+    val d = UInt(8) <> VAR
+
+    // Should warn: (a + b + c + d) / 4
+    assertRuntimeWarningLog(warnMsg) {
+      val t1 = (a + b + c + d) / 4
+    }
+
+    // Should warn: (a * 3 + b) / 4
+    assertRuntimeWarningLog(warnMsg) {
+      val t2 = (a * 3 + b) / 4
+    }
+
+    // Should warn: (a + b) % 3
+    assertRuntimeWarningLog(warnMsg) {
+      val t2b = (a + b) % 3
+    }
+
+    // Should warn: (a + b + 0) >> 1 — "Forcing Larger Evaluation" Verilog pattern
+    assertRuntimeWarningLog(warnMsg) {
+      val t2c = (a + b + 0) >> 1
+    }
+
+    // Should NOT warn: (a + b) >> 2 — no implicit Int in the + chain
+    val t2d = (a + b) >> 2
+
+    // Should warn: wider target with implicit Int in chain
+    val sum = UInt(10) <> VAR
+    assertRuntimeWarningLog(warnMsg) {
+      sum := a + b + c + d + 1
+    }
+
+    // Should NOT warn: wider target but explicit literal
+    sum := a + b + c + d + d"1"
+
+    // Should NOT warn: wider target but single op, carry promotion handles it
+    sum := u8 + 1
+
+    // Should warn: wider target with chain, intermediate overflow
+    assertRuntimeWarningLog(warnMsg) {
+      sum := u8 + u8 + 1
+    }
+
+    // Should NOT warn: target width == expression width
+    u8 := u8 + 1
+
+    // Should NOT warn: a / 4 (no anonymous arith chain)
+    val t3 = a / 4
+
+    // Should NOT warn: carry ops used
+    val t4 = (a +^ b +^ c +^ d) / 4
+
+    // Should NOT warn: explicit bit-accurate literal
+    val t5 = (a + b + c + d) / d"3'4"
+
+    // Should warn: DFHDL Int <> CONST used as divisor
+    val p: Int <> CONST = 4
+    assertRuntimeWarningLog(warnMsg) {
+      val t6 = (a + b + c + d) / p
+    }
+
+    // Should NOT warn: operands are 32-bit or wider
+    val w32 = UInt(32) <> VAR
+    val w32b = UInt(32) <> VAR
+    val t7 = (w32 + w32b) / 4
+
+    assertNoWarnings()
+  }
 end DFDecimalSpec

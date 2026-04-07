@@ -773,6 +773,37 @@ end MixedArith
 See [Arithmetic Operations][arithmetic-ops] and [Carry Arithmetic][carry-ops] for full details.
 ///
 
+/// admonition | Integer Literal Width and Silent Overflow
+    type: verilog
+In Verilog, unsized integer literals are 32-bit. When combined with narrower signals, the wider literal causes the entire expression to evaluate at 32-bit width via context-dependent propagation. This prevents intermediate overflow in expressions like `(a + b + c + d) / 4`.
+
+In DFHDL, Scala `Int` literals are implicitly converted to minimum-width bit-accurate types (e.g., `4` becomes `UInt[3]`). Each arithmetic operation independently uses the LHS width, so intermediate results can overflow before reaching a division or shift.
+
+DFHDL detects this pattern at elaboration and issues a warning. See [Implicit Scala `Int` and Verilog-semantics mismatch][arithmetic-ops] for the full list of warning triggers.
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+input  logic [7:0] a, b, c, d;
+output logic [7:0] result;
+
+// 4 is 32-bit, so (a+b+c+d) evaluates
+// at 32-bit width — no overflow
+assign result = (a + b + c + d) / 4;
+```
+
+```scala linenums="0" title="DFHDL (with carry ops)"
+val a, b, c, d = UInt(8) <> IN
+val result     = UInt(8) <> OUT
+
+// Use carry ops to match Verilog's
+// overflow-free semantics
+result <> ((a +^ b +^ c +^ d) / 4).truncate
+```
+
+</div>
+///
+
 
 ## Parametric Constants
 

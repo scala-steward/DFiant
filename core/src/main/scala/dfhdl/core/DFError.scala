@@ -83,6 +83,7 @@ class Logger:
   private[Logger] var events: List[LogEvent] = Nil
   def logEvent(event: LogEvent): Unit = events = event :: events
   def injectEvents(fromLogger: Logger): Unit = events = fromLogger.events ++ events
+  def injectEvents(newEvents: List[LogEvent]): Unit = events = events ++ newEvents
   def getErrors: List[DFError] = events.reverse.collect { case e: DFError => e }
   def getWarnings: List[DFWarning] = events.reverse.collect { case w: DFWarning => w }
   def getEvents: List[LogEvent] = events.reverse

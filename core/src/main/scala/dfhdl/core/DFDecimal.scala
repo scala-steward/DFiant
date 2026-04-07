@@ -760,7 +760,9 @@ object DFXInt:
         type IsScalaInt = true
         def apply(arg: R)(using dfc: DFC): Out =
           val dfType = DFXInt(info.signed(arg), info.width(arg), BitAccurate)
-          DFVal.Const(dfType, Some(BigInt(arg)), named = true)
+          DFVal.Const(dfType, Some(BigInt(arg)), named = true)(using
+            dfc.tag(ir.ImplicitlyFromIntTag)
+          )
       // when the candidate is a DFInt32 we remove the signed and width tags
       // from the type to allow for elaboration (runtime) check where values
       // are constant and known.
@@ -1011,6 +1013,24 @@ object DFXInt:
                         op = op @ (FuncOp.+ | FuncOp.- | FuncOp.*)
                       )
                       if func.isAnonymous && !dt.isDFInt32 && dfType.widthInt > func.width =>
+                    // Check B: warn if sub-expressions contain implicit Int with
+                    // narrow non-carry arith. Check args (not func itself, since
+                    // the func is about to be carry-promoted).
+                    if (func.args.exists(ref =>
+                        hasImplicitlyFromIntTag(ref.get)
+                      ) && func.args.exists(ref =>
+                        containsNarrowNonCarryArith(ref.get)
+                      )) ||
+                      func.args.exists(ref =>
+                        containsNarrowNonCarryArithWithTaggedOperand(ref.get)
+                      )
+                    then
+                      dfc.logEvent(
+                        DFWarning(
+                          op.toString,
+                          verilogSemanticsWarnMsg
+                        )
+                      )
                     val cw: IntParam[Int] = func.op.runtimeChecked match
                       case FuncOp.+ | FuncOp.- => funcWidth + 1
                       case FuncOp.*            => funcWidth + funcWidth
@@ -1025,7 +1045,7 @@ object DFXInt:
                   case Int32 =>
                     lhsCarryPromo.toInt.asIR
                   case BitAccurate =>
-                    DFVal.Alias.AsIs(dfType, lhsCarryPromo).asIR
+                    DFVal.Alias.AsIs(dfType, lhsCarryPromo)(using dfc.tag(ir.ImplicitlyFromIntTag)).asIR
               else if (
                 !dfType.asIR.widthParamRef.isSimilarTo(
                   lhsCarryPromo.dfType.asIR.widthParamRef
@@ -1067,6 +1087,58 @@ object DFXInt:
         end resize
       end extension
 
+      private[core] val verilogSemanticsWarnMsg =
+        """|Implicit Scala/DFHDL Int conversion may produce different results than Verilog.
+           |In Verilog, integer literals are 32-bit, which can widen intermediate arithmetic.
+           |In DFHDL, Int literals are converted to minimum bit-accurate width.
+           |Use carry operations (+^, -^, *^) or explicit bit-accurate literals (d"W'V").""".stripMargin
+
+      // Check if a value is tagged with ImplicitlyFromIntTag
+      private[core] def hasImplicitlyFromIntTag(dfVal: ir.DFVal): Boolean =
+        dfVal.tags.hasTagOf[ir.ImplicitlyFromIntTag]
+
+      // Check if an anonymous sub-tree contains non-carry +/-/* with width < 32.
+      // Carry ops have func.width > max(arg widths) and are excluded.
+      private[core] def containsNarrowNonCarryArith(
+          dfVal: ir.DFVal
+      )(using ir.MemberGetSet): Boolean =
+        dfVal match
+          case func: ir.DFVal.Func if func.isAnonymous =>
+            func.op match
+              case FuncOp.+ | FuncOp.- | FuncOp.* =>
+                val maxArgWidth = func.args.map(_.get.width).max
+                val isNonCarry = func.width <= maxArgWidth
+                (isNonCarry && func.width < 32) ||
+                func.args.exists(ref => containsNarrowNonCarryArith(ref.get))
+              case _ =>
+                func.args.exists(ref => containsNarrowNonCarryArith(ref.get))
+          case _ => false
+
+      // Check if an anonymous sub-tree contains narrow non-carry arith that
+      // also has an ImplicitlyFromIntTag operand (Verilog "Forcing Larger
+      // Evaluation" pattern, or implicit Int in a chain assigned to wider target).
+      // Carry ops (func.width > max arg width) are excluded.
+      private[core] def containsNarrowNonCarryArithWithTaggedOperand(
+          dfVal: ir.DFVal
+      )(using ir.MemberGetSet): Boolean =
+        dfVal match
+          case func: ir.DFVal.Func if func.isAnonymous =>
+            func.op match
+              case FuncOp.+ | FuncOp.- | FuncOp.* =>
+                val maxArgWidth = func.args.map(_.get.width).max
+                val isNonCarry = func.width <= maxArgWidth
+                val isNarrowNonCarry = isNonCarry && func.width < 32
+                (isNarrowNonCarry &&
+                  func.args.exists(ref => hasImplicitlyFromIntTag(ref.get))) ||
+                func.args.exists(ref =>
+                  containsNarrowNonCarryArithWithTaggedOperand(ref.get)
+                )
+              case _ =>
+                func.args.exists(ref =>
+                  containsNarrowNonCarryArithWithTaggedOperand(ref.get)
+                )
+          case _ => false
+
       private def arithOp[
           OS <: Boolean,
           OW <: IntP,
@@ -1086,6 +1158,17 @@ object DFXInt:
           rhs: DFValTP[DFXInt[RS, RW, RN], RP]
       )(using dfc: DFC): DFValTP[DFXInt[OS, OW, ON], LP | RP] =
         val rhsFix = rhs.toDFXIntOf(lhs.dfType)(using dfc.anonymize)
+        import dfc.getSet
+        // Check A: / and % — both operands are context-determined in Verilog
+        val shouldWarn = op match
+          case FuncOp./ | FuncOp.% =>
+            (hasImplicitlyFromIntTag(rhsFix.asIR) &&
+              containsNarrowNonCarryArith(lhs.asIR)) ||
+            (hasImplicitlyFromIntTag(lhs.asIR) &&
+              containsNarrowNonCarryArith(rhsFix.asIR))
+          case _ => false
+        if shouldWarn then
+          dfc.logEvent(DFWarning(op.toString, verilogSemanticsWarnMsg))
         DFVal.Func(dfType, op, List(lhs, rhsFix))
       end arithOp
 

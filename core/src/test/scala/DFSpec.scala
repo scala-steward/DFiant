@@ -38,10 +38,12 @@ abstract class DFSpec extends NoDFCSpec, HasTypeName, HasDFC:
   private val noErrMsg = "No error found"
 
   inline def assertRuntimeErrorLog(expectedErr: String)(runTimeCode: => Unit): Unit =
+    val currentEvents = dfc.getEvents
     dfc.clearEvents()
     runTimeCode
     val err = dfc.getErrors.headOption.map(_.dfMsg).getOrElse(noErrMsg)
     dfc.clearEvents()
+    dfc.injectEvents(currentEvents)
     assertNoDiff(err, expectedErr)
 
   def assertEquals[T <: DFType, L <: DFConstOf[T], R <: DFConstOf[T]](l: L, r: R)(using DFC): Unit =
@@ -54,18 +56,27 @@ abstract class DFSpec extends NoDFCSpec, HasTypeName, HasDFC:
       inline if (compileTimeCode != "")
         assertCompileError(expectedErr)(compileTimeCode)
       else ()
+    val currentEvents = dfc.getEvents
     dfc.clearEvents()
     runTimeCode
     val err = dfc.getErrors.headOption.map(_.dfMsg).getOrElse(noErrMsg)
     dfc.clearEvents()
+    dfc.injectEvents(currentEvents)
     assertNoDiff(err, expectedErr)
 
   inline def assertRuntimeWarningLog(expectedWarn: String)(runTimeCode: => Unit): Unit =
+    val currentEvents = dfc.getEvents
     dfc.clearEvents()
     runTimeCode
     val warn = dfc.getWarnings.headOption.map(_.dfMsg).getOrElse(noErrMsg)
     dfc.clearEvents()
+    dfc.injectEvents(currentEvents)
     assertNoDiff(warn, expectedWarn)
+
+  def assertNoWarnings(): Unit =
+    val warns = dfc.getWarnings
+    if (warns.nonEmpty)
+      assert(false, s"Expected no warnings, but found:\n${warns.mkString("\n")}")
 
   def getCodeStringFrom(block: => Unit): String =
     import dfc.getSet
@@ -85,9 +96,9 @@ abstract class DFSpec extends NoDFCSpec, HasTypeName, HasDFC:
     dfc.clearEvents()
     val cs = getCodeStringFrom(block)
     assertNoDiff(cs, expectedCS)
-    val errors = dfc.getErrors
-    if (errors.nonEmpty)
-      assert(false, errors.mkString("\n"))
+    val events = dfc.getEvents
+    if (events.nonEmpty)
+      assert(false, events.mkString("\n"))
 
   def assertLatestDesignDclPosition(
       lineOffset: Int,
