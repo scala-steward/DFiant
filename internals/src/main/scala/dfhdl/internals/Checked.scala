@@ -206,7 +206,7 @@ object Check1:
   object CheckOK extends Check[Any, Any, Nothing, Nothing, Boolean, String, Boolean]:
     def apply(arg: Any): Unit = {}
 
-  transparent inline given [
+  inline given [
       Wide,
       T <: Wide,
       Cond[T <: Wide] <: Boolean,
@@ -344,7 +344,7 @@ object Check2:
   object CheckOK extends Check[Any, Any, Any, Any, Nothing, Nothing, Boolean, String, Boolean]:
     def apply(arg1: Any, arg2: Any): Unit = {}
 
-  transparent inline given [
+  inline given [
       Wide1,
       Wide2,
       T1 <: Wide1,
