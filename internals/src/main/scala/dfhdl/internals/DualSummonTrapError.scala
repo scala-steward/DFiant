@@ -10,7 +10,7 @@ object DualSummonTrapError:
       val valueL: Option[L] = valueL0
       val valueR: Option[R] = valueR0
   end apply
-  transparent inline given [L, R]: DualSummonTrapError[L, R] = ${ fromMacroImpl[L, R] }
+  inline given [L, R]: DualSummonTrapError[L, R] = ${ fromMacroImpl[L, R] }
   def fromMacroImpl[L, R](using Quotes, Type[L], Type[R]): Expr[DualSummonTrapError[L, R]] =
     import quotes.reflect.*
     ControlledMacroError.activate()

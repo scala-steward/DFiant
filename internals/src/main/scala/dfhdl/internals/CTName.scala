@@ -6,7 +6,7 @@ trait CTName:
   type Out <: String
   val value: Out
 object CTName:
-  transparent inline given CTName = ${ getName }
+  inline given CTName = ${ getName }
   def apply[N <: String](name: N): CTName { type Out = N } = new CTName:
     type Out = N
     val value: Out = name
