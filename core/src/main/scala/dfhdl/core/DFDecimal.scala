@@ -230,7 +230,7 @@ object DFDecimal:
           rhs: DFValOf[DFXInt[RS, RW, RN]]
       )(using DFC): Unit
     end ArithCheck
-    inline given [
+    given [
         LS <: Boolean,
         LW <: IntP,
         LN <: NativeType,
