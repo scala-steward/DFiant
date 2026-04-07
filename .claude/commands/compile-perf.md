@@ -28,6 +28,13 @@ Always use `sbtn.bat` (sbt client), never `sbt`.
 5. To force recompile without changing code, add/change a comment (e.g., `// v2`)
 6. Compare `Total time` or `posttyper` phase timing with `-Yprofile-enabled`
 
+When running the full test suite, always separate compilation from execution:
+```bash
+sbtn.bat Test/compile    # compile all tests first — measure compile workload
+sbtn.bat test            # then run tests — measure runtime workload
+```
+This avoids conflating compile time with test runtime in measurements.
+
 ### When to Run `clean`
 
 - **After modifying `internals/` or `plugin/`** — the incremental compiler doesn't always detect changes in macro code or plugin classes. A stale compiled macro will produce the OLD tree even though the source changed. Always `clean` after touching:

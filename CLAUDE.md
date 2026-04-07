@@ -20,6 +20,7 @@ Outputs: Verilog, SystemVerilog, VHDL.
 
 ```bash
 sbtn compile          # compile all subprojects
+sbtn Test/compile     # compile all tests (separate from running them)
 sbtn test             # run all unit tests
 sbtn testApps         # run simulation/app tests (requires OSS CAD tools)
 sbtn corePlayground   # limit test scope to core/Playground.scala only (fast iteration)
