@@ -112,7 +112,7 @@ case object NamedVerilogSelection extends NamedAliases:
       case alias: DFVal.Alias.ApplyIdx =>
         List(alias.relValRef.get)
       case func @ DFVal.Func(op = op, args = DFRef(lhs) :: _ :: Nil)
-          if !lhs.hasVerilogName && carryOps.contains(op) && func.width > lhs.width =>
+          if isBasicVerilog && !lhs.hasVerilogName && carryOps.contains(op) && func.width > lhs.width =>
         List(lhs)
       case func: DFVal.Func =>
         func.getReadDeps.headOption match
