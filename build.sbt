@@ -1,4 +1,5 @@
-commands += DFHDLCommands.quickTestSetup
+commands += DFHDLCommands.libPlayground
+commands += DFHDLCommands.corePlayground
 commands += DFHDLCommands.clearSandbox
 commands += DFHDLCommands.testApps
 commands += DFHDLCommands.docExamplesRefUpdate
