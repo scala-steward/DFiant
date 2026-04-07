@@ -16,16 +16,19 @@ Outputs: Verilog, SystemVerilog, VHDL.
 
 ## Build System
 
-**Tool**: SBT 1.12.2 — **Scala**: 3.8.1 (nightly resolver enabled)
+**Tool**: SBT 1.12.9 — **Scala**: 3.8.3 (nightly resolver enabled)
 
 ```bash
-sbt compile          # compile all subprojects
-sbt test             # run all unit tests
-sbt testApps         # run simulation/app tests (requires OSS CAD tools)
-sbt quickTestSetup   # limit test scope to lib/Playground.scala only (fast iteration)
-sbt clearSandbox     # delete sandbox/ directory
-sbt docExamplesRefUpdate  # copy generated HDL from sandbox/ to lib/src/test/resources/ref/
+sbtn compile          # compile all subprojects
+sbtn test             # run all unit tests
+sbtn testApps         # run simulation/app tests (requires OSS CAD tools)
+sbtn corePlayground   # limit test scope to core/Playground.scala only (fast iteration)
+sbtn libPlayground    # limit test scope to lib/Playground.scala only (fast iteration)
+sbtn clearSandbox     # delete sandbox/ directory
+sbtn docExamplesRefUpdate  # copy generated HDL from sandbox/ to lib/src/test/resources/ref/
 ```
+
+Always use `sbtn` (sbt client) instead of `sbt` for faster startup. On Windows use `sbtn.bat`.
 
 ## Subproject Structure
 
@@ -109,6 +112,7 @@ CI installs these via OSS CAD Suite:
 ## Claude Instructions
 
 - When asked to **create a new compiler stage** or **modify an existing compiler stage**, always invoke the `/new-stage` skill before doing any work.
+- When working on **compile time performance**, invoke the `/compile-perf` skill to review the methodology, known bottlenecks, and what has already been tried.
 
 ## Licenses
 
