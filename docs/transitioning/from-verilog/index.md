@@ -292,7 +292,7 @@ class Sum(val MAX: Int <> CONST = 16)
 
 </div>
 
-`.width` works on any DFHDL value. Use it to derive widths from existing declarations:
+`.width` works on any DFHDL value (a port, variable, or constant — anything declared with `<>`; see [logic/reg/wire](#logicregwire) above). Use it to derive widths from existing declarations:
 
 ```scala
 val a = UInt.until(MAX) <> IN
@@ -642,6 +642,39 @@ val fill_one = b"1".repeat(W)
 `.repeat` works on any `Bits` value, including single-bit literals.
 ///
 
+/// admonition | Bit Concatenation (`{a, b, ...}`)
+    type: verilog
+Verilog's concatenation operator `{a, b}` maps to the `++` operator or tuple `.toBits` in DFHDL:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+logic [7:0] a, b;
+logic [15:0] concat = {a, b};
+
+// Parametric: {1'b1, {(N-1){1'b0}}}
+parameter N = 8;
+logic [N-1:0] half = {1'b1, {(N-1){1'b0}}};
+```
+
+```scala linenums="0" title="DFHDL"
+val a, b = Bits(8) <> VAR
+val concat = a ++ b  // Bits[16]
+
+// Parametric: MSB=1, rest zeros
+val N: Int <> CONST = 8
+val half = b"1" ++ b"0".repeat(N - 1)
+```
+
+</div>
+
+Alternative: use tuple `.toBits` syntax for multi-value concatenation:
+
+```scala
+val concat = (a, b, c).toBits  // equivalent to a ++ b ++ c
+```
+///
+
 /// admonition | Part-Select Notation (`-:` and `+:`)
     type: verilog
 Verilog's descending and ascending part-select notation maps to DFHDL's `(hi, lo)` range slice, or use the convenience methods `.msbits(n)` and `.lsbits(n)`:
@@ -672,11 +705,19 @@ val bit5 = data(5)         // single bit
 
 </div>
 
-Bit-slicing and single-bit access work on `Bits`, `UInt`, and `SInt` values with the same syntax. You do **not** need to convert `SInt` to `Bits` before slicing:
+Bit-slicing and single-bit access work on `Bits`, `UInt`, and `SInt` values with the same syntax. Slicing preserves the source type:
+
+| Source type | Slice result |
+|---|---|
+| `Bits[N]` | `Bits` |
+| `UInt[N]` | `UInt` |
+| `SInt[N]` | `SInt` |
+
+You do **not** need to convert `SInt` to `Bits` before slicing — the result is already `SInt`:
 
 ```scala
 val prod = SInt(16) <> VAR
-val top8 = prod(15, 8)  // 8-bit slice, returns Bits
+val top8 = prod(15, 8)  // 8-bit SInt slice
 val sign = prod(15)     // single bit access
 ```
 ///
