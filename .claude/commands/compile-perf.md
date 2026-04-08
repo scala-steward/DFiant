@@ -83,6 +83,22 @@ override def transformUnit(tree: Tree)(using Context): Tree =
 
 Use `System.err.println` for debug output that needs to bypass sbt's output buffering.
 
+### Upstream Scala 3 Bug
+
+The root cause is a performance bug in `PostTyper.scala` (line ~568 in current nightly):
+```scala
+case tree @ Inlined(call, bindings, expansion) if !tree.inlinedFromOuterScope =>
+  ...
+  withMode(Mode.NoInline)(transform(call))  // expensive, result DISCARDED
+  val callTrace = Inlines.inlineCallTrace(call.symbol, pos)(...)
+  cpy.Inlined(tree)(callTrace, ...)          // callTrace replaces call entirely
+```
+`transform(call)` re-transforms the full call tree (running `checkBounds`, `normalizeTypeArgs`, etc. on any TypeApply inside it), but the result is thrown away — the next line computes `callTrace` (a minimal `Ident`) and uses that instead. With N chained transparent inlines producing O(N) Inlined nodes with increasingly complex call trees, this causes O(N²) or worse behavior.
+
+**Fix**: Either remove `withMode(Mode.NoInline)(transform(call))` entirely, or replace it with just the side-effecting checks needed (which `CrossVersionChecks.checkRef` already covers on the line above). See https://github.com/scala/scala3/blob/main/CONTRIBUTING.md for contribution guide.
+
+A Scala 3 clone is available at `C:\Users\OronPort\IdeaProjects\forclaude\scala3` for building a minimal reproducer and preparing the upstream PR.
+
 ## Root Cause: Transparent Inline Expansion
 
 The primary compile time bottleneck comes from Scala 3's `transparent inline` mechanism used extensively in DFHDL for type-level computation. The key file is `internals/src/main/scala/dfhdl/internals/Exact.scala`.
@@ -117,7 +133,7 @@ When chaining operations like `a + b + c + d`, each `+` is `transparent inline`,
 
 4. **Non-transparent Check/CTName/DualSummonTrapError givens** — Removed unnecessary `transparent` from `inline given` instances that don't need type narrowing.
 
-5. **`FlattenInlinedPhase` compiler plugin** — Flattens nested `Inlined` trees between `typer` and `posttyper` phases.
+5. **`FlattenInlinedPhase` compiler plugin** — Runs between `typer` and `posttyper`. Flattens nested `Inlined` trees and pre-minimizes the `call` field of `Inlined` nodes to a simple `Ident` pointing to the top-level class. This prevents PostTyper from re-transforming complex call trees (which contain TypeApply with heavy type arguments) for every `Inlined` node. This is the single biggest compile time fix — it reduced 8-addition chains from 33s to 2s and eliminated the exponential growth entirely (20 additions: previously impossible, now 7s).
 
 ## Key Files
 
@@ -148,13 +164,15 @@ PostTyper performs post-typing checks on inline-expanded code:
 
 ### What Drives PostTyper Time
 
+**The `call` field of `Inlined` nodes** — PostTyper's `Inlined` handler calls `withMode(Mode.NoInline)(transform(call))` on every Inlined node. The result is then immediately discarded and replaced by `inlineCallTrace(call.symbol, pos)`, which is just an `Ident` to the top-level class. With chained inlines producing 100+ Inlined nodes, each with a complex call tree containing TypeApply, PostTyper re-transforms all of these call trees for nothing. Pre-minimizing the call to the same Ident that PostTyper would produce eliminates this entirely.
+
 **NOT type lambda complexity** — replacing complex `[LS, RS] =>> LS || !RS` with trivial `[LS, RS] =>> Boolean` had zero impact on posttyper time.
 
 **NOT node count alone** — removing 200 nodes from a 2300-node tree gave marginal improvement.
 
-**Tree nesting depth of Inlined nodes** — flattening nested Inlined structures helps significantly.
+**NOT InferredTypeTree spans** — PostTyper's `checkInferredWellFormed` gates on `span.isZeroExtent` for TypeTree nodes. Marking all 457 zero-extent TypeTrees with non-zero spans had zero impact — this check is not the bottleneck.
 
-**TypeApply nodes** — when ALL TypeApply nodes were stripped (nuclear experiment), posttyper dropped to near-zero (2s). This means posttyper spends most of its time processing type applications. However, most TypeApply nodes carry type information needed for correctness.
+**NOT TypeApply type arg dealiasing** — dealiasing all TypeApply type arguments had negligible impact. The types are already small individually; the issue was the call-tree re-transformation, not type complexity.
 
 ### What We Tried That Didn't Work
 
@@ -170,12 +188,9 @@ PostTyper performs post-typing checks on inline-expanded code:
 
 6. **Removing Check type signatures from trees** — User confirmed no performance impact. The Check types are not the bottleneck.
 
-### Open Investigation
+### Resolved
 
-The biggest remaining opportunity is reducing TypeApply nodes that posttyper processes. The nuclear experiment (stripping ALL TypeApply) showed posttyper can be near-zero. The challenge is identifying which TypeApply patterns are safe to simplify without breaking:
-- Method dispatch (needs type args for overload resolution after erasure)
-- Constant propagation (changing `asInstanceOf` types can affect how constants are inlined)
-- Given resolution in `lib` code (CheckNUBLP fallback needs real type lambdas)
+The compile time issue is resolved. The `minimizeCall` optimization in `FlattenInlinedPhase` eliminates the exponential growth in PostTyper. This is also a general Scala 3 compiler bug — PostTyper's `Inlined` handler re-transforms call trees whose results are immediately discarded. A minimal reproducer and upstream patch should be filed against the Scala 3 compiler.
 
 ## Checked.scala Architecture
 
