@@ -1828,4 +1828,25 @@ class PrintCodeStringSpec extends StageSpec:
     )
   }
 
+  // Regression test for exponential compile time with chained transparent inline operations.
+  // Before the FlattenInlinedPhase.minimizeCall optimization, 9 additions took 130s and
+  // 20 additions were impossible (hours/OOM). If this test causes compilation to hang or
+  // OOM, the optimization in FlattenInlinedPhase has regressed.
+  test("long chain of chained transparent inline operations compiles successfully") {
+    class LongChain extends DFDesign:
+      val a = UInt(8) <> IN
+      val o = UInt(8) <> OUT
+      o <> (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
+    end LongChain
+    val top = (new LongChain).getCodeString
+    assertNoDiff(
+      top,
+      """|class LongChain extends DFDesign:
+         |  val a = UInt(8) <> IN
+         |  val o = UInt(8) <> OUT
+         |  o <> ((((((((((((((((((((a + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a)
+         |end LongChain""".stripMargin
+    )
+  }
+
 end PrintCodeStringSpec
