@@ -313,6 +313,17 @@ class MetaContextGenPhase(setting: Setting) extends CommonPhase:
             apply match
               case ContextArg(_) =>
                 addToTreeOwnerMap(apply, ownerTree, inlinedSrcPos)
+                // When inside an inlined context, also traverse non-context args
+                // for nested context-arg applies. This is needed when macros
+                // (e.g., flattenInlined in Exact) strip Inlined wrappers that
+                // prepareForInlined relied on for correct srcPos propagation.
+                if (inlinedSrcPos.isDefined)
+                  val ApplyFunArgs(_, argss) = apply.runtimeChecked
+                  for
+                    args <- argss
+                    arg <- args
+                    if !arg.tpe.isMetaContext
+                  do nameValOrDef(arg, EmptyValDef, arg.tpe.simple, inlinedSrcPos)
                 true
               case _ => false
         else false
@@ -363,15 +374,6 @@ class MetaContextGenPhase(setting: Setting) extends CommonPhase:
             }
             named
         end match
-      case Block(stats, _)
-          if stats.exists {
-            case vd: ValDef => vd.name.toString == "skipContextHack"
-            case _          => false
-          } =>
-        stats.collectFirst {
-          case vd: ValDef if vd.name.toString.startsWith("$scrutinee") =>
-            nameValOrDef(vd.rhs, ownerTree, typeFocus, inlinedSrcPos)
-        }.getOrElse(false)
       case block: Block =>
         // debug("Block expr")
         nameValOrDef(block.expr, ownerTree, typeFocus, inlinedSrcPos)

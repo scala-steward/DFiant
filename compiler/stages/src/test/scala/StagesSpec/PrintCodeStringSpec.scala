@@ -1807,4 +1807,25 @@ class PrintCodeStringSpec extends StageSpec:
          |end Foo""".stripMargin
     )
   }
+
+  test("assigned design def name regression") {
+    def bar(lhs: Bits[8] <> VAL): Bits[8] <> DFRET = lhs ^ h"1b"
+    class Foo extends DFDesign:
+      val x = Bits(8) <> IN
+      val o = bar(x)
+    end Foo
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|def bar(lhs: Bits[8] <> VAL): Bits[8] <> DFRET =
+         |  lhs ^ h"1b"
+         |end bar
+         |
+         |class Foo extends DFDesign:
+         |  val x = Bits(8) <> IN
+         |  val o = bar(x)
+         |end Foo""".stripMargin
+    )
+  }
+
 end PrintCodeStringSpec
