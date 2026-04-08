@@ -797,17 +797,71 @@ object DFVal extends DFValLP:
       (dfType.asIR.dropUnreachableRefs, op, args.map(_.getReachableMember)) match
         case SimplifyFunc(func) => func.asValTP[T, P]
         case (dfType, op, args) =>
+          import dfc.getSet
+          // Merge consecutive same-op anonymous Funcs for associative operations.
+          // E.g., `a + b + c` becomes Func(+, [a, b, c]) instead of nested binary Funcs.
+          // Only merge args that appear once (multi-referenced Funcs must stay as-is).
+          var mergedPositionStart: Option[Position] = None
+          val mergedArgs =
+            if (ir.DFVal.Func.Op.associativeSet.contains(op))
+              // Count how many times each arg appears to avoid merging multi-referenced nodes
+              val argCounts = args.groupBy(identity).view.mapValues(_.length)
+              args.flatMap {
+                case prevFunc: ir.DFVal.Func
+                    if prevFunc.op == op
+                    && prevFunc.isAnonymous
+                    && argCounts(prevFunc) == 1
+                    && canMergeFunc(dfType, op, prevFunc) =>
+                  // Track the earliest start position from absorbed Funcs
+                  val prevPos = prevFunc.meta.position
+                  mergedPositionStart = Some(
+                    mergedPositionStart.fold(prevPos)(existing =>
+                      if prevPos.lineStart < existing.lineStart ||
+                        (prevPos.lineStart == existing.lineStart &&
+                          prevPos.columnStart < existing.columnStart)
+                      then prevPos
+                      else existing
+                    )
+                  )
+                  // Don't remove prevFunc here — it becomes unreferenced and
+                  // DropUnreferencedAnons will clean it up with proper ref cleanup.
+                  prevFunc.args.map(_.get)
+                case arg => List(arg)
+              }
+            else args
+          // Merge position: start from absorbed LHS, end from current (RHS)
+          val meta = mergedPositionStart match
+            case Some(lhsPos) =>
+              val currentMeta = dfc.getMeta
+              val currentPos = currentMeta.position
+              val merged = Position(
+                lhsPos.file, lhsPos.lineStart, lhsPos.columnStart,
+                currentPos.lineEnd, currentPos.columnEnd
+              )
+              currentMeta.copy(position = merged)
+            case None => dfc.getMeta
           val func: ir.DFVal = ir.DFVal.Func(
             dfType,
             op,
-            args.map(_.refTW[ir.DFVal](knownReachable = true)),
+            mergedArgs.map(_.refTW[ir.DFVal](knownReachable = true)),
             dfc.ownerOrEmptyRef,
-            dfc.getMeta,
+            meta,
             dfc.tags
           )
           func.addMember.asValTP[T, P]
       end match
     end apply
+    // Checks if an intermediate Func can be merged into the current one.
+    // +, -, * are excluded because carry promotion assumes binary (2-arg) Funcs.
+    // ++ is only merged for flat bits concatenation, not struct/vector/string.
+    private def canMergeFunc(
+        resultType: ir.DFType, op: FuncOp, prevFunc: ir.DFVal.Func
+    )(using ir.MemberGetSet): Boolean =
+      op match
+        case FuncOp.++ =>
+          resultType.isInstanceOf[ir.DFBits] && prevFunc.dfType.isInstanceOf[ir.DFBits]
+        case FuncOp.+ | FuncOp.- | FuncOp.`*` => false
+        case _ => true // &, |, ^, max, min — no carry concept
   end Func
 
   object Alias:
@@ -1793,6 +1847,19 @@ object ConnectOps:
   )(using dfc: DFC): Unit = trydf {
     (dualSummon.valueL, dualSummon.valueR) match
       case (Some(tcL), Some(tcR)) =>
+        import dfc.getSet
+        import dfhdl.compiler.analysis.*
+        val currentDesign = dfc.owner.asIR.getThisOrOwnerDesign
+        enum Write:
+          case Left, Right
+        val writeDir = (lhs.asIR, rhs.asIR) match
+          case (lhs @ DclOut(), rhs @ DclIn()) =>
+            if (lhs.isSameOwnerDesignAs(rhs)) Write.Left
+            else Write.Right
+          case (lhs @ DclIn(), rhs @ DclOut()) =>
+            if (rhs.isSameOwnerDesignAs(lhs)) Write.Right
+            else Write.Left
+          case _ => Write.Left
         try tcL.connect(lhs, rhs)
         catch
           case eL: Throwable =>

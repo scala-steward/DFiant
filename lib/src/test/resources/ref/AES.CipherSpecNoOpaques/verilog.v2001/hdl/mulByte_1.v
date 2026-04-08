@@ -15,5 +15,5 @@ module mulByte_1#(parameter [7:0] lhs = 8'h03)(
     .o   /*-->*/ (a_o)
   );
   assign a_lhs = rhs;
-  assign o     = (8'h00 ^ rhs) ^ a_o;
+  assign o     = 8'h00 ^ rhs ^ a_o;
 endmodule

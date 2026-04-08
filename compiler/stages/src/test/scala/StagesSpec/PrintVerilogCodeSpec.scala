@@ -250,7 +250,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |);
          |  `include "dfhdl_defs.svh"
          |  localparam logic lp = 1'b1;
-         |  assign y = ((x | gp) | dp) | lp;
+         |  assign y = x | gp | dp | lp;
          |endmodule
          |""".stripMargin
     )

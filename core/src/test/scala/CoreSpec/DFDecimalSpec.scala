@@ -604,6 +604,16 @@ class DFDecimalSpec extends DFSpec:
       """u8 % d"9'22""""
     )
   }
+  test("Arithmetic position") {
+    val u8 = UInt(8) <> VAR
+    val b8 = Bits(8) <> VAR
+    // single binary op: position spans the full expression
+    val t1 = u8 + u8; t1.assertPosition(0, 1, 14, 21)
+    // chained +: NOT merged (carry promotion requires binary), position is the last op
+    val t2 = u8 + u8 + u8; t2.assertPosition(0, 1, 14, 26)
+    // chained ^: merged into multi-arg, position spans from first to last operand
+    val t3 = b8 ^ b8 ^ b8; t3.assertPosition(0, 1, 14, 26)
+  }
   test("Arithmetic auto-carry promotion") {
     val u8 = UInt(8) <> VAR
     val u5 = UInt(5) <> VAR

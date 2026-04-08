@@ -9,6 +9,6 @@ module FullAdder1(
   output wire c_out
 );
   `include "dfhdl_defs.vh"
-  assign sum   = (a ^ b) ^ c_in;
-  assign c_out = ((a & b) | (b & c_in)) | (c_in & a);
+  assign sum   = a ^ b ^ c_in;
+  assign c_out = (a & b) | (b & c_in) | (c_in & a);
 endmodule
