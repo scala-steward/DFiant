@@ -955,7 +955,7 @@ DFHDL provides three decimal numeric types:
 
 - `UInt` - Unsigned bit-accurate integer values
 - `SInt` - Signed bit-accurate integer values  
-- `Int` - 32-bit integer values (used mainly for parameters)
+- `Int` - 32-bit integer values (used mainly for parameters). In operations with `UInt` or `SInt`, both Scala `Int` and DFHDL `Int` act as [wildcards][wildcard-ops] that adapt to the counter-part's sign and width.
 
 #### DFType Constructors
 
@@ -983,30 +983,32 @@ DFHDL provides three decimal numeric types:
 
 #### Constant Generation
 
-##### Decimal String-Interpolator {#d-interp}
+##### Unsigned Decimal String-Interpolator {#d-interp}
 
-The decimal string interpolator `d` creates unsigned/signed integer constants (`UInt`) from decimal values.
+The unsigned decimal string interpolator `d` creates unsigned integer constants (`UInt`) from decimal values. For negative values, use the [signed decimal string-interpolator][sd-interp].
 
-```scala linenums="0" title="Decimal string-interpolation syntax"
+```scala linenums="0" title="Unsigned decimal string-interpolation syntax"
 d"width'dec"
 ```
 
-- __dec__ is a sequence of decimal characters ('0'-'9') with an optional prefix `-` for negative values
+- __dec__ is a sequence of decimal characters ('0'-'9'). Negative values are not allowed.
 - __width__ followed by a `'` is optional and specifies the exact width of the integer's bit representation
 - Separators `_` (underscore) and `,` (comma) within `dec` are ignored
 - If width is omitted, it is inferred from the value's size
-- If specified, the output is padded with zeros or extended for signed numbers using two's complement
-- Returns an unsigned `UInt[W]` for natural numbers and signed `SInt[W]` for negative numbers, where `W` is the width in bits
+- If specified, the output is padded with zeros
+- Returns `UInt[W]`, where `W` is the width in bits
 - An error occurs if the specified width is less than required to represent the value
+- When used with a DFHDL `Int` parameter, the interpolation binds it as unsigned
 
-Examples:
 ```scala
-d"0"      // UInt[1], value = 0
-d"-1"     // SInt[2], value = -1 
-d"8'-1"   // SInt[8], value = -1
-d"255"    // UInt[8], value = 255
-d"1,023"  // UInt[10], value = 1023
-d"1_000"  // UInt[10], value = 1000
+d"0"           // UInt[1], value = 0
+d"255"         // UInt[8], value = 255
+d"8'42"        // UInt[8], value = 42
+d"1,023"       // UInt[10], value = 1023
+d"1_000"       // UInt[10], value = 1000
+d"$param"      // UInt[Int], unsigned binding of Int parameter
+d"8'$param"    // UInt[8], unsigned binding with explicit width
+d"${w}'$param" // UInt[w.type], unsigned binding with parametric width
 ```
 
 ##### Signed Decimal String-Interpolator {#sd-interp}
@@ -1023,14 +1025,17 @@ sd"width'dec"
 - Output is always a signed integer type `SInt[W]`, regardless of whether the value is negative or natural
 - Width is always at least 2 bits to accommodate the sign bit
 - An error occurs if the specified width is less than required to represent the value including the sign bit
+- When used with a DFHDL `Int` parameter, the interpolation binds it as signed
 
-Examples:
 ```scala
-sd"0"     // SInt[2], value = 0 (natural number represented as signed)
-sd"-1"    // SInt[2], value = -1
-sd"255"   // SInt[9], value = 255 (natural number represented as signed)
-sd"8'42"  // SInt[8], value = 42
-sd"8'255" // Error: width too small to represent value with sign bit
+sd"0"           // SInt[2], value = 0 (natural number represented as signed)
+sd"-1"          // SInt[2], value = -1
+sd"255"         // SInt[9], value = 255 (natural number represented as signed)
+sd"8'42"        // SInt[8], value = 42
+sd"8'255"       // Error: width too small to represent value with sign bit
+sd"$param"      // SInt[Int], signed binding of Int parameter
+sd"8'$param"    // SInt[8], signed binding with explicit width
+sd"${w}'$param" // SInt[w.type], signed binding with parametric width
 ```
 
 #### Examples
@@ -1504,6 +1509,20 @@ class Example extends EDDesign:
 ```
 ## Operations
 
+### Constant Propagation
+
+When all operands of an expression are constants (`CONST`), the result is also a constant. This includes Scala `Int` literals, DFHDL `Int` parameters, and bit-accurate constants created with `d""` or `sd""`.
+
+```scala
+val param: Int <> CONST = 10
+val c1: UInt[8] <> CONST = d"8'5" + 3       // constant + literal = constant
+val c2: UInt[8] <> CONST = d"8'5" + param   // constant + param = constant
+
+val u8 = UInt(8) <> VAR
+val v1 = u8 + 3        // VAR + literal = not constant
+val v2 = u8 + param    // VAR + param = not constant
+```
+
 ### Conversions and Casts {#type-conversion}
 The diagram below shows the conversion/cast paths between DFHDL types. Solid arrows are simple casts that preserve width; dashed arrows involve width changes.
 
@@ -1870,18 +1889,37 @@ VHDL has no equivalent to Verilog's ternary expression. The DFHDL-generated VHDL
 Applies to: `UInt`, `SInt`, `Bits` (via implicit conversion to `UInt`), `Int`, `Double` (`%` not available for `Double`)
 
 /// html | div.decimal_arithmetic
-| Operation    | Description    | Returns          |
-| ------------ | -------------- | ---------------- |
-| `lhs + rhs`  | Addition       | Same type as LHS |
-| `lhs - rhs`  | Subtraction    | Same type as LHS |
-| `lhs * rhs`  | Multiplication | Same type as LHS |
-| `lhs / rhs`  | Division       | Same type as LHS |
-| `lhs % rhs`  | Modulo         | Same type as LHS |
+| Operation    | Description    | Returns                             |
+| ------------ | -------------- | ----------------------------------- |
+| `lhs + rhs`  | Addition       | Commutative: widest, most signed    |
+| `lhs - rhs`  | Subtraction    | Same type as LHS                    |
+| `lhs * rhs`  | Multiplication | Commutative: widest, most signed    |
+| `lhs / rhs`  | Division       | Same type as LHS                    |
+| `lhs % rhs`  | Modulo         | Same type as LHS                    |
+| `lhs max rhs` | Maximum       | Commutative: widest, most signed    |
+| `lhs min rhs` | Minimum       | Commutative: widest, most signed    |
 ///
 
 #### Bit-Accurate Type Constraints (`UInt`, `SInt`)
 
-The result of a standard arithmetic operation on bit-accurate types always has the **same type as the LHS** operand. The RHS is resized to match the LHS before the operation is applied.
+**Commutative operations** (`+`, `*`, `max`, `min`) produce a result that is **as wide and as signed as possible** given both operands. The narrower operand is resized to match. Operand order does not affect the result type.
+
+**Non-commutative operations** (`-`, `/`, `%`) use the **LHS type** as the result. The RHS is resized to match the LHS before the operation is applied. The LHS must be at least as wide and at least as signed as the RHS.
+
+##### Commutative result type rules (`+`, `*`, `max`, `min`)
+
+The result is signed if either operand is signed. When mixing signed and unsigned, the unsigned operand is implicitly sign-extended by 1 bit (gaining a `0` sign bit).
+
+/// html | div.operations
+| LHS Type | RHS Type | Result Type |
+| -------- | -------- | ----------- |
+| `UInt[LW]` | `UInt[RW]` | `UInt[Max[LW, RW]]` |
+| `SInt[LW]` | `SInt[RW]` | `SInt[Max[LW, RW]]` |
+| `SInt[LW]` | `UInt[RW]` | `SInt[Max[LW, RW + 1]]` |
+| `UInt[LW]` | `SInt[RW]` | `SInt[Max[LW + 1, RW]]` |
+///
+
+##### Non-commutative result type rules (`-`, `/`, `%`)
 
 **Sign rule** -- The LHS sign must be greater than or equal to the RHS sign (`signed >= unsigned`):
 
@@ -1896,7 +1934,36 @@ The result of a standard arithmetic operation on bit-accurate types always has t
 
 **Width rule** -- The LHS width must be greater than or equal to the (effective) RHS width. When applying `SInt op UInt`, the effective RHS width is `RHS width + 1` because the unsigned value gains an implicit sign bit.
 
-**Scala `Int` literals** are auto-promoted to a matching DFHDL type with the minimum required bit width. A negative `Int` literal on the RHS of a `UInt` operation is a compile error (unsigned LHS cannot accept a signed RHS).
+### Wildcard `Int` Operands {#wildcard-ops}
+
+Both Scala `Int` values and DFHDL `Int` parameters (`Int <> CONST`) act as **wildcards** when used in operations with `UInt` or `SInt` values. The wildcard adapts to the counter-part's sign and width. If the wildcard value does not fit in the counter-part's range or has incompatible sign, an error is generated.
+
+```scala
+val u8 = UInt(8) <> VAR
+val s8 = SInt(8) <> VAR
+val param: Int <> CONST = 10
+
+// Wildcard adapts to counter-part in commutative ops
+u8 + 5              // UInt[8] (5 adapts to UInt[8])
+u8 + param          // UInt[8] (param adapts to UInt[8])
+s8 + param          // SInt[8] (param adapts to SInt[8])
+param + u8          // UInt[8] (commutative, same result)
+
+// Wildcard adapts to counter-part in non-commutative ops
+u8 - 3              // UInt[8] (3 adapts to UInt[8])
+u8 / param          // UInt[8] (param adapts to UInt[8])
+
+// Wildcard adapts in comparisons
+u8 == 200           // OK (200 fits in UInt[8])
+s8 < (-5)           // OK (-5 fits in SInt[8])
+
+// ERROR: wildcard value does not fit counter-part
+u8 + 1000           // ERROR: 1000 exceeds UInt[8] range (0..255)
+u8 + (-1)           // ERROR: -1 is negative for unsigned counter-part
+s8 + 1000           // ERROR: 1000 exceeds SInt[8] range (-128..127)
+```
+
+See [Wildcard Arithmetic Value Checking][wildcard-check] for details on when these checks occur (compile-time, elaboration-time, or synthesis-time).
 
 /// admonition | `Bits` values in arithmetic
     type: tip
@@ -1917,39 +1984,36 @@ val u8 = UInt(8) <> VAR
 val u4 = UInt(4) <> VAR
 val s8 = SInt(8) <> VAR
 
-// UInt + UInt (same width)
-val r1 = u8 + u8          // UInt[8]
-// SInt + SInt
-val r2 = s8 + s8          // SInt[8]
-// SInt + UInt: RHS widened to 5 bits (4+1); 8 >= 5, OK
-val r3 = s8 + u4          // SInt[8]
-// UInt + Scala Int literal (200 fits in 8 bits)
-val r4 = u8 + 200         // UInt[8]
-// Scala Int literal on LHS (200 is promoted to UInt[8])
-val r5 = 200 - u8         // UInt[8]
+// Commutative: result is widest, most signed
+val r1 = u8 + u8          // UInt[8]  (max(8,8) = 8)
+val r2 = u8 + u4          // UInt[8]  (max(8,4) = 8)
+val r3 = u4 + u8          // UInt[8]  (commutative, same as above)
+val r4 = s8 + u4          // SInt[8]  (max(8, 4+1) = 8, signed)
+val r5 = u8 + s8          // SInt[9]  (max(8+1, 8) = 9, signed)
+val r6 = u8 + 200         // UInt[8]  (literal adapts)
+val r7 = (-5) + u8        // SInt[8]  (negative literal, signed result)
 
-// error: Cannot apply this operation between an unsigned
-// value (LHS) and a signed value (RHS).
-// An explicit conversion must be applied.
-val e1 = u8 + s8
+// Non-commutative: LHS-dominant
+val r8 = 200 - u8         // UInt[8]
 // error: The applied RHS value width (8) is larger than
 // the LHS variable width (4).
-val e2 = u4 + u8
+val e1 = u4 - u8
 // error: Cannot apply this operation between an unsigned
 // value (LHS) and a signed value (RHS).
-// An explicit conversion must be applied.
-val e3 = u8 + (-22)
+val e2 = u8 - s8
 
-// Int arithmetic
+// Int parameter as wildcard in commutative ops
 val param: Int <> CONST = 10
-val r6 = param * 2        // Int <> CONST = 20
-val r7 = param % 3        // Int <> CONST = 1
+val r9  = u8 + param      // UInt[8]  (param adapts to UInt[8])
+val r10 = param + u8      // UInt[8]  (commutative, same result)
+val r11 = s8 + param      // SInt[8]  (param adapts to SInt[8])
+val r12 = param * 2       // Int <> CONST = 20
 
 // Double arithmetic
 val d1 = Double <> VAR
 val d2 = Double <> VAR
-val r8 = d1 + d2          // Double
-val r9 = d1 / d2          // Double
+val r13 = d1 + d2         // Double
+val r14 = d1 / d2         // Double
 ```
 
 /// admonition | Overflow and automatic carry promotion
@@ -2035,14 +2099,28 @@ result <> (a + b + c + d) / d"3'4"
 
 Applies to: `UInt`, `SInt`
 
-Carry operations widen the result to prevent overflow. Unlike standard arithmetic, carry operations require both operands to have the **same sign**.
+Carry operations widen the result to prevent overflow. Mixed signedness is allowed -- the result is signed if either operand is signed. When mixing signs, the unsigned operand is sign-extended by 1 bit.
+
+**Carry addition and subtraction (`+^`, `-^`):**
 
 /// html | div.operations
-| Operation     | Description          | Result Width       | Result Sign          |
-| ------------- | -------------------- | ------------------ | -------------------- |
-| `lhs +^ rhs`  | Carry Addition       | max(LW, RW) + 1   | Same sign as operands |
-| `lhs -^ rhs`  | Carry Subtraction    | max(LW, RW) + 1   | Same sign as operands |
-| `lhs *^ rhs`  | Carry Multiplication | LW + RW            | Same sign as operands |
+| LHS Type | RHS Type | Result Type |
+| -------- | -------- | ----------- |
+| `UInt[LW]` | `UInt[RW]` | `UInt[Max[LW, RW] + 1]` |
+| `SInt[LW]` | `SInt[RW]` | `SInt[Max[LW, RW] + 1]` |
+| `SInt[LW]` | `UInt[RW]` | `SInt[Max[LW, RW + 1] + 1]` |
+| `UInt[LW]` | `SInt[RW]` | `SInt[Max[LW + 1, RW] + 1]` |
+///
+
+**Carry multiplication (`*^`):**
+
+/// html | div.operations
+| LHS Type | RHS Type | Result Type |
+| -------- | -------- | ----------- |
+| `UInt[LW]` | `UInt[RW]` | `UInt[LW + RW]` |
+| `SInt[LW]` | `SInt[RW]` | `SInt[LW + RW]` |
+| `SInt[LW]` | `UInt[RW]` | `SInt[LW + RW + 1]` |
+| `UInt[LW]` | `SInt[RW]` | `SInt[LW + 1 + RW]` |
 ///
 
 ```scala
@@ -2067,10 +2145,6 @@ val r5 = s8 +^ s8           // SInt[9]
 val r6 = s8 *^ s8           // SInt[16]
 ```
 
-/// admonition | Carry vs standard sign rules
-    type: tip
-Unlike standard arithmetic where `SInt op UInt` is allowed (the unsigned RHS is implicitly widened), carry operations require both operands to have the **same sign**. This is because carry operations produce a wider result, and mixed-sign widening semantics would be ambiguous. Scala `Int` literals are still accepted when the literal's sign matches the DFHDL value's sign.
-///
 
 ### Comparison Operations (`==`, `!=`, `<`, `>`, `<=`, `>=`) {#comparison-ops}
 

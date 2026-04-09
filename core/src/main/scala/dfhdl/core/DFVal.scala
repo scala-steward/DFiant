@@ -289,7 +289,7 @@ sealed protected trait DFValLP:
       import dfc.getSet
       x.asIR.getConstData.get.asInstanceOf[ir.RateNumber]
   // lower priority than other evidence because this is more generic
-  export DFXInt.Val.Ops.evOpArithDFXInt
+  export DFXInt.Val.Ops.{evOpCommutativeArithDFXInt, evOpNonCommutativeArithDFXInt}
   export DFOpaque.Val.Ops.{evOpAsDFOpaqueTFE, evOpAsDFOpaqueComp}
   export DFBits.Val.Ops.{evLogicOpDFBits, evConcatOpDFBits}
 end DFValLP

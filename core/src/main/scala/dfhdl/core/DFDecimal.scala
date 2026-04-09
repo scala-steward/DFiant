@@ -112,6 +112,25 @@ object DFDecimal:
             ITE[RS, "a signed", "an unsigned"] +
             " value (RHS).\nAn explicit conversion must be applied."
         ]
+    object `CpS >= WcS`
+        extends Check2[
+          Boolean,
+          Boolean,
+          [CpS <: Boolean, WcS <: Boolean] =>> CpS || ![WcS],
+          [CpS <: Boolean, WcS <: Boolean] =>>
+            "Cannot apply a signed wildcard `Int` operand to " +
+              ITE[CpS, "a signed", "an unsigned"] +
+              " counter-part.\nUse an explicit conversion or `sd\"\"` interpolation."
+        ]
+    object `CpW >= WcW`
+        extends Check2[
+          Int,
+          Int,
+          [CpW <: Int, WcW <: Int] =>> CpW >= WcW,
+          [CpW <: Int, WcW <: Int] =>>
+            "The wildcard `Int` operand width (" + WcW +
+              ") is larger than the counter-part width (" + CpW + ")."
+        ]
     type SignStr[S <: Boolean] = ITE[S, "a signed", "an unsigned"]
     object `LS == RS`
         extends Check2[
@@ -253,11 +272,11 @@ object DFDecimal:
         // the RHS width is increased by 1 if the LHS is signed and the RHS is unsigned,
         // because the RHS will be converted to signed for the arithmetic operation
         signedRW: Id[ITE[LSM && ![RSM], RWI + 1, RWI]]
-        // skip sign checks if the RHS is a Scala Int and the LHS is unsigned
-        // skipSignChecks: Id[RI && (RS || ![LS])]
     )(using
-        checkS: `LS >= RS`.Check[LSM, RSM],
-        checkW: `LW >= RW`.Check[LWI, signedRW.Out],
+        // When LHS is a wildcard (LI=true), bypass sign/width checks by comparing
+        // the value against itself (always passes). Wildcards adapt at runtime.
+        checkS: `LS >= RS`.Check[ITE[LI, LSM, LSM], ITE[LI, LSM, RSM]],
+        checkW: `LW >= RW`.Check[ITE[LI, LWI, LWI], ITE[LI, LWI, signedRW.Out]],
         isIntL: ValueOf[LI],
         isIntR: ValueOf[RI]
     ): ArithCheck[LS, LW, LN, LSM, LWM, LI, RS, RW, RN, RSM, RWM, RI] with
@@ -379,7 +398,11 @@ object DFDecimal:
           fullTerm match
             case Literal(StringConstant(t)) =>
               fromDecString(t, signedForced) match
-                case Right((signed, width, fractionWidth, _)) =>
+                case Right((signed, width, fractionWidth, value)) =>
+                  if (!signedForced && value < 0)
+                    report.errorAndAbort(
+                      s"Negative value in unsigned `d\"\"` interpolation. Use `sd\"\"` for signed values."
+                    )
                   explicitWidthTpeOption match
                     case Some(ConstantType(IntConstant(explicitWidth))) =>
                       val actualWidth = fromIntDecString(t, signedForced)._2
@@ -763,9 +786,9 @@ object DFXInt:
           DFVal.Const(dfType, Some(BigInt(arg)), named = true)(using
             dfc.tag(ir.ImplicitlyFromIntTag)
           )
-      // when the candidate is a DFInt32 we remove the signed and width tags
-      // from the type to allow for elaboration (runtime) check where values
-      // are constant and known.
+      // DFInt32 acts as a wildcard in commutative operations: it adapts to the
+      // counter-part's sign and width. We set IsScalaInt = true so the type-level
+      // formulas treat it as a wildcard (same as Scala Int).
       given fromDFConstInt32[P, R <: DFValTP[DFInt32, P]]: Candidate[R] with
         type OutS = true
         type OutW = 32
@@ -773,7 +796,7 @@ object DFXInt:
         type OutP = P
         type OutSMask = Boolean
         type OutWMask = Int
-        type IsScalaInt = false
+        type IsScalaInt = true
         def apply(arg: R)(using DFC): Out = arg
       given fromDFXIntVal[S <: Boolean, W <: IntP, N <: NativeType, P, R <: DFValTP[
         DFXInt[S, W, N],
@@ -1139,6 +1162,37 @@ object DFXInt:
                 )
           case _ => false
 
+      // Check that a wildcard operand's value fits in the counter-part's type.
+      // Produces an elaboration error if it doesn't.
+      private def checkWildcardFit(
+          wildcard: DFValOf[DFXInt[Boolean, Int, NativeType]],
+          counterPartType: DFTypeAny
+      )(using dfc: DFC): Unit =
+        import dfc.getSet
+        import DFXInt.Val.getActualSignedWidth
+        val cpSigned = counterPartType.asIR match
+          case d: ir.DFDecimal => d.signed
+          case _               => return
+        val cpWidth = counterPartType.asIR match
+          case d: ir.DFDecimal => d.width
+          case _               => return
+        if (wildcard.dfType.asIR.isDFInt32)
+          val (wSigned, wWidth) = wildcard.getActualSignedWidth
+          val cpTypeName =
+            if (cpSigned) s"SInt[$cpWidth]" else s"UInt[$cpWidth]"
+          // Unsigned wildcard adapting to signed counter-part needs an extra bit
+          val effectiveWidth =
+            if (cpSigned && !wSigned) wWidth + 1 else wWidth
+          if (!cpSigned && wSigned)
+            throw new IllegalArgumentException(
+              s"Wildcard value is negative and cannot adapt to unsigned $cpTypeName."
+            )
+          else if (effectiveWidth > cpWidth)
+            throw new IllegalArgumentException(
+              s"Wildcard value requires $effectiveWidth bits but the counter-part $cpTypeName has only $cpWidth bits."
+            )
+      end checkWildcardFit
+
       private def arithOp[
           OS <: Boolean,
           OW <: IntP,
@@ -1172,9 +1226,11 @@ object DFXInt:
         DFVal.Func(dfType, op, List(lhs, rhsFix))
       end arithOp
 
-      type ArithOp =
-        FuncOp.+.type | FuncOp.-.type | FuncOp.*.type | FuncOp./.type | FuncOp.%.type |
-          FuncOp.max.type | FuncOp.min.type
+      type CommutativeArithOp =
+        FuncOp.+.type | FuncOp.*.type | FuncOp.max.type | FuncOp.min.type
+      type NonCommutativeArithOp =
+        FuncOp.-.type | FuncOp./.type | FuncOp.%.type
+      type ArithOp = CommutativeArithOp | NonCommutativeArithOp
       given evOpArithIntDFInt32[
           Op <: ArithOp,
           L <: Int,
@@ -1190,8 +1246,8 @@ object DFXInt:
             DFVal.Func(DFInt32, op, List(lhsVal, rhs)).asValTP[DFInt32, RP]
           }(using dfc, CTName(op.value.toString))
       end evOpArithIntDFInt32
-      given evOpArithDFXInt[
-          Op <: ArithOp,
+      given evOpCommutativeArithDFXInt[
+          Op <: CommutativeArithOp,
           L,
           LS <: Boolean,
           LW <: IntP,
@@ -1211,20 +1267,172 @@ object DFXInt:
       ](using
           icL: Candidate.AuxMI[L, LS, LW, LN, LP, LSM, LWM, LI],
           icR: Candidate.AuxMI[R, RS, RW, RN, RP, RSM, RWM, RI],
-          op: ValueOf[Op]
-      )(using
-          check: ArithCheck[LS, LW, LN, LSM, LWM, LI, RS, RW, RN, RSM, RWM, RI]
-      ): ExactOp2Aux[Op, DFC, DFValAny, L, R, DFValTP[DFXInt[LS, LW, LN], LP | RP]] =
+          op: ValueOf[Op],
+          isIntL: ValueOf[LI],
+          isIntR: ValueOf[RI],
+          // Type-level wildcard detection: when exactly one operand is a wildcard
+          // (IsScalaInt or DFInt32), adapt to the counter-part's sign and width.
+          // When both are wildcards, use LS || RS and Max (both-wildcard = DFInt32-like).
+          resultSign: Id[ITE[LI && ![RI], RS, ITE[RI && ![LI], LS, ITE[LI && RI, LS, LS || RS]]]],
+          resultWidth: Id[ITE[LI && ![RI], RW, ITE[RI && ![LI], LW,
+            ITE[LI && RI, LW,
+              IntP.Max[
+                ITE[![LS] && RS, LW + 1, LW],
+                ITE[![RS] && LS, RW + 1, RW]
+              ]
+            ]
+          ]]],
+          resultNative: Id[ITE[LI && ![RI], RN, LN]],
+          // Compile-time wildcard fit: when one operand is a literal wildcard,
+          // verify its sign and width fit in the counter-part's type.
+          ubLWM: UBound.Aux[Int, LWM, ? <: Int],
+          ubRWM: UBound.Aux[Int, RWM, ? <: Int],
+          checkWS: `CpS >= WcS`.Check[
+            ITE[RI && ![LI], LSM, ITE[LI && ![RI], RSM, LSM]],
+            ITE[RI && ![LI], RSM, ITE[LI && ![RI], LSM, LSM]]
+          ],
+          checkWW: `CpW >= WcW`.Check[
+            ITE[RI && ![LI], ubLWM.Out, ITE[LI && ![RI], ubRWM.Out, ubLWM.Out]],
+            ITE[RI && ![LI],
+              ITE[LSM && ![RSM], ubRWM.Out + 1, ubRWM.Out],
+              ITE[LI && ![RI],
+                ITE[RSM && ![LSM], ubLWM.Out + 1, ubLWM.Out],
+                ubLWM.Out
+              ]
+            ]
+          ]
+      ): ExactOp2Aux[Op, DFC, DFValAny, L, R, DFValTP[
+        DFXInt[resultSign.Out, resultWidth.Out, resultNative.Out],
+        LP | RP
+      ]] =
         new ExactOp2[Op, DFC, DFValAny, L, R]:
-          type Out = DFValTP[DFXInt[LS, LW, LN], LP | RP]
+          type Out = DFValTP[DFXInt[resultSign.Out, resultWidth.Out, resultNative.Out], LP | RP]
           def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
             val dfcAnon = dfc.anonymize
             val lhsVal = icL(lhs)(using dfcAnon)
             val rhsVal = icR(rhs)(using dfcAnon)
-            check(lhsVal, rhsVal)
-            arithOp(lhsVal.dfType, op.value, lhsVal, rhsVal)
+            import IntParam.{+, max}
+            val lhsIsWildcard = lhsVal.dfType.asIR.isDFInt32 || isIntL
+            val rhsIsWildcard = rhsVal.dfType.asIR.isDFInt32 || isIntR
+            if (lhsIsWildcard && !rhsIsWildcard)
+              // LHS is wildcard: adapt to RHS type
+              checkWildcardFit(
+                lhsVal.asValOf[DFXInt[Boolean, Int, NativeType]],
+                rhsVal.dfType
+              )
+              arithOp(rhsVal.dfType, op.value, rhsVal, lhsVal)
+                .asInstanceOf[Out]
+            else if (rhsIsWildcard && !lhsIsWildcard)
+              // RHS is wildcard: adapt to LHS type
+              checkWildcardFit(
+                rhsVal.asValOf[DFXInt[Boolean, Int, NativeType]],
+                lhsVal.dfType
+              )
+              arithOp(lhsVal.dfType, op.value, lhsVal, rhsVal)
+                .asInstanceOf[Out]
+            else
+              // Both concrete (or both wildcards): use max width, max signed
+              val resultSigned = lhsVal.dfType.signed || rhsVal.dfType.signed
+              val lhsEffWidth: Int =
+                if (resultSigned && !lhsVal.dfType.signed) lhsVal.dfType.widthInt + 1
+                else lhsVal.dfType.widthInt
+              val rhsEffWidth: Int =
+                if (resultSigned && !rhsVal.dfType.signed) rhsVal.dfType.widthInt + 1
+                else rhsVal.dfType.widthInt
+              if (lhsEffWidth >= rhsEffWidth)
+                if (resultSigned && !lhsVal.dfType.signed)
+                  val lhsSigned = lhsVal.asValOf[DFUInt[Int]].signed(using dfcAnon)
+                  val rhsAdj = rhsVal.toDFXIntOf(lhsSigned.dfType)(using dfcAnon)
+                  DFVal.Func(lhsSigned.dfType, op.value, List(lhsSigned, rhsAdj))
+                    .asInstanceOf[Out]
+                else
+                  arithOp(lhsVal.dfType, op.value, lhsVal, rhsVal)
+                    .asInstanceOf[Out]
+              else
+                if (resultSigned && !rhsVal.dfType.signed)
+                  val rhsSigned = rhsVal.asValOf[DFUInt[Int]].signed(using dfcAnon)
+                  val lhsAdj = lhsVal.toDFXIntOf(rhsSigned.dfType)(using dfcAnon)
+                  DFVal.Func(rhsSigned.dfType, op.value, List(rhsSigned, lhsAdj))
+                    .asInstanceOf[Out]
+                else
+                  arithOp(rhsVal.dfType, op.value, rhsVal, lhsVal)
+                    .asInstanceOf[Out]
           }(using dfc, CTName(op.value.toString))
-      end evOpArithDFXInt
+      end evOpCommutativeArithDFXInt
+
+      given evOpNonCommutativeArithDFXInt[
+          Op <: NonCommutativeArithOp,
+          L,
+          LS <: Boolean,
+          LW <: IntP,
+          LN <: NativeType,
+          LP,
+          LSM <: Boolean,
+          LWM <: IntP,
+          LI <: Boolean,
+          R,
+          RS <: Boolean,
+          RW <: IntP,
+          RN <: NativeType,
+          RP,
+          RSM <: Boolean,
+          RWM <: IntP,
+          RI <: Boolean
+      ](using
+          icL: Candidate.AuxMI[L, LS, LW, LN, LP, LSM, LWM, LI],
+          icR: Candidate.AuxMI[R, RS, RW, RN, RP, RSM, RWM, RI],
+          op: ValueOf[Op],
+          isIntL: ValueOf[LI],
+          isIntR: ValueOf[RI]
+      )(using
+          check: ArithCheck[LS, LW, LN, LSM, LWM, LI, RS, RW, RN, RSM, RWM, RI],
+          // Wildcard LHS adapts to RHS type; otherwise LHS-dominant
+          resultSign: Id[ITE[LI && ![RI], RS, LS]],
+          resultWidth: Id[ITE[LI && ![RI], RW, LW]],
+          resultNative: Id[ITE[LI && ![RI], RN, LN]],
+          // Compile-time wildcard fit: when LHS is a literal wildcard,
+          // verify its sign and width fit in the RHS (counter-part) type.
+          ubLWM: UBound.Aux[Int, LWM, ? <: Int],
+          ubRWM: UBound.Aux[Int, RWM, ? <: Int],
+          checkWS: `CpS >= WcS`.Check[
+            ITE[LI && ![RI], RSM, LSM],
+            ITE[LI && ![RI], LSM, LSM]
+          ],
+          checkWW: `CpW >= WcW`.Check[
+            ITE[LI && ![RI], ubRWM.Out, ubLWM.Out],
+            ITE[LI && ![RI],
+              ITE[RSM && ![LSM], ubLWM.Out + 1, ubLWM.Out],
+              ubLWM.Out
+            ]
+          ]
+      ): ExactOp2Aux[Op, DFC, DFValAny, L, R, DFValTP[
+        DFXInt[resultSign.Out, resultWidth.Out, resultNative.Out],
+        LP | RP
+      ]] =
+        new ExactOp2[Op, DFC, DFValAny, L, R]:
+          type Out = DFValTP[DFXInt[resultSign.Out, resultWidth.Out, resultNative.Out], LP | RP]
+          def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
+            val dfcAnon = dfc.anonymize
+            val lhsVal = icL(lhs)(using dfcAnon)
+            val rhsVal = icR(rhs)(using dfcAnon)
+            val lhsIsWildcard = lhsVal.dfType.asIR.isDFInt32 || isIntL
+            val rhsIsWildcard = rhsVal.dfType.asIR.isDFInt32 || isIntR
+            if (lhsIsWildcard && !rhsIsWildcard)
+              // LHS is wildcard, RHS is concrete: adapt LHS to RHS type, keep operand order
+              checkWildcardFit(
+                lhsVal.asValOf[DFXInt[Boolean, Int, NativeType]],
+                rhsVal.dfType
+              )
+              val lhsAdj = lhsVal.toDFXIntOf(rhsVal.dfType)(using dfcAnon)
+              DFVal.Func(rhsVal.dfType, op.value, List(lhsAdj, rhsVal))
+                .asInstanceOf[Out]
+            else
+              // Both concrete, both wildcards, or only RHS is wildcard: LHS-dominant
+              check(lhsVal, rhsVal)
+              arithOp(lhsVal.dfType, op.value, lhsVal, rhsVal)
+                .asInstanceOf[Out]
+          }(using dfc, CTName(op.value.toString))
+      end evOpNonCommutativeArithDFXInt
 
       import DFVal.Ops.CarryOp
       given evOpCarryAddSubDFXInt[
@@ -1249,22 +1457,26 @@ object DFXInt:
           icL: Candidate.AuxMI[L, LS, LW, LN, LP, LSM, LWM, LI],
           icR: Candidate.AuxMI[R, RS, RW, RN, RP, RSM, RWM, RI],
           op: ValueOf[Op]
-      )(using
-          check: SignCheck[LS, RS, RI, false]
       ): ExactOp2Aux[CarryOp[Op], DFC, DFValAny, L, R, DFValTP[
-        DFXInt[LS, IntP.+[IntP.Max[LW, RW], 1], BitAccurate],
+        DFXInt[LS || RS, IntP.+[IntP.Max[LW, RW], 1], BitAccurate],
         LP | RP
       ]] = new ExactOp2[CarryOp[Op], DFC, DFValAny, L, R]:
-        type Out = DFValTP[DFXInt[LS, IntP.+[IntP.Max[LW, RW], 1], BitAccurate], LP | RP]
+        type Out = DFValTP[DFXInt[LS || RS, IntP.+[IntP.Max[LW, RW], 1], BitAccurate], LP | RP]
         def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
           val dfcAnon = dfc.anonymize
           val lhsVal = icL(lhs)(using dfcAnon)
           val rhsVal = icR(rhs)(using dfcAnon)
-          check(lhsVal.dfType.signed, rhsVal.dfType.signed)
+          val resultSigned = lhsVal.dfType.signed || rhsVal.dfType.signed
           import IntParam.{+, max}
-          val width = lhsVal.widthIntParam.max(rhsVal.widthIntParam) + 1
-          val dfType = DFXInt(lhsVal.dfType.signed, width, BitAccurate)
-          arithOp(dfType, op.value, lhsVal, rhsVal)
+          val commonWidth = lhsVal.widthIntParam.max(rhsVal.widthIntParam)
+          val width = commonWidth + 1
+          val dfType = DFXInt(resultSigned, width, BitAccurate)
+          // Resize both operands to common width, converting to signed if needed
+          val commonType = DFXInt(resultSigned, commonWidth, BitAccurate)
+          val lhsFix = lhsVal.toDFXIntOf(commonType)(using dfcAnon)
+          val rhsFix = rhsVal.toDFXIntOf(commonType)(using dfcAnon)
+          DFVal.Func(dfType, op.value, List(lhsFix, rhsFix))
+            .asInstanceOf[Out]
         }(using dfc, CTName(op.value.toString + "^"))
       end evOpCarryAddSubDFXInt
 
@@ -1289,22 +1501,30 @@ object DFXInt:
       ](using
           icL: Candidate.AuxMI[L, LS, LW, LN, LP, LSM, LWM, LI],
           icR: Candidate.AuxMI[R, RS, RW, RN, RP, RSM, RWM, RI]
-      )(using
-          check: SignCheck[LS, RS, RI, false]
       ): ExactOp2Aux[CarryOp[Op], DFC, DFValAny, L, R, DFValTP[
-        DFXInt[LS, IntP.+[LW, RW], BitAccurate],
+        DFXInt[LS || RS, IntP.+[LW, RW], BitAccurate],
         LP | RP
       ]] = new ExactOp2[CarryOp[Op], DFC, DFValAny, L, R]:
-        type Out = DFValTP[DFXInt[LS, IntP.+[LW, RW], BitAccurate], LP | RP]
+        type Out = DFValTP[DFXInt[LS || RS, IntP.+[LW, RW], BitAccurate], LP | RP]
         def apply(lhs: L, rhs: R)(using DFC): Out = trydf {
           val dfcAnon = dfc.anonymize
           val lhsVal = icL(lhs)(using dfcAnon)
           val rhsVal = icR(rhs)(using dfcAnon)
-          check(lhsVal.dfType.signed, rhsVal.dfType.signed)
+          val resultSigned = lhsVal.dfType.signed || rhsVal.dfType.signed
           import IntParam.+
           val width = lhsVal.widthIntParam + rhsVal.widthIntParam
-          val dfType = DFXInt(lhsVal.dfType.signed, width, BitAccurate)
-          DFVal.Func(dfType, FuncOp.`*`, List(lhsVal, rhsVal))
+          val dfType = DFXInt(resultSigned, width, BitAccurate)
+          // Convert unsigned operand to signed if needed
+          val lhsFix =
+            if (resultSigned && !lhsVal.dfType.signed)
+              lhsVal.toDFXIntOf(DFXInt(true, lhsVal.widthIntParam + 1, BitAccurate))(using dfcAnon)
+            else lhsVal
+          val rhsFix =
+            if (resultSigned && !rhsVal.dfType.signed)
+              rhsVal.toDFXIntOf(DFXInt(true, rhsVal.widthIntParam + 1, BitAccurate))(using dfcAnon)
+            else rhsVal
+          DFVal.Func(dfType, FuncOp.`*`, List(lhsFix, rhsFix))
+            .asInstanceOf[Out]
         }(using dfc, CTName("*^"))
       end evOpCarryMulDFXInt
 

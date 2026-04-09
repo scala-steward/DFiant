@@ -1,5 +1,6 @@
 package CoreSpec
 import dfhdl.*
+import dfhdl.core.DFInt32
 import munit.*
 
 class DFDecimalSpec extends DFSpec:
@@ -417,58 +418,22 @@ class DFDecimalSpec extends DFSpec:
     assertEquals(sd"9'255" +^ sd"8'1", sd"10'256")
     assertEquals(200 + d"8'1", d"8'201")
     assertEquals(200 +^ d"8'1", d"9'201")
-    assertEquals(-200 + sd"8'1", sd"9'-199")
-    assertCompileError(
-      "The applied RHS value width (9) is larger than the LHS variable width (8)."
-    )(
-      """sd"8'22" + d"8'22""""
-    )
-    assertCompileError(
-      """|Cannot apply this operation between an unsigned value (LHS) and a signed value (RHS).
-         |An explicit conversion must be applied.
-         |""".stripMargin
-    )(
-      """d"8'22" + sd"8'22""""
-    )
-    assertCompileError(
-      """|Cannot apply this operation between an unsigned value (LHS) and a signed value (RHS).
-         |An explicit conversion must be applied.
-         |""".stripMargin
-    )(
-      """h"8'22" + sd"8'22""""
-    )
-    assertCompileError(
-      """|Cannot apply this operation between an unsigned value (LHS) and a signed value (RHS).
-         |An explicit conversion must be applied.
-         |""".stripMargin
-    )(
-      """d"8'22" + (-22)"""
-    )
-    assertCompileError(
-      "The applied RHS value width (9) is larger than the LHS variable width (8)."
-    )(
-      """d"8'22" + d"9'22""""
-    )
+    // -200 is a wildcard that adapts to SInt[8], but -200 doesn't fit → error
+    // assertEquals(-200 + sd"8'1", sd"9'-199") // now an error with wildcard rules
+    assertEquals(-100 + sd"8'1", sd"8'-99")
+    // Commutative + allows mixed width and signedness (DFVal + DFVal)
+    assertEquals(sd"8'22" + d"8'22", sd"9'44")
+    assertEquals(d"8'22" + sd"8'22", sd"9'44")
+    assertEquals(h"8'22" + sd"8'22", sd"9'56")
+    assertEquals(d"8'22" + d"9'22", d"9'44")
+    // Wildcard Int literals adapt to counter-part
     assertEquals(d"8'22" + 200, d"8'222")
     assertEquals(sd"8'-1" + 1, sd"8'0")
-    assertDSLErrorLog(
-      "The applied RHS value width (9) is larger than the LHS variable width (8)."
-    )(
-      """sd"8'22" + 200"""
-    ) {
-      val value = 200
-      sd"8'22" + value
-    }
-    assertDSLErrorLog(
-      """|Cannot apply this operation between an unsigned value (LHS) and a signed value (RHS).
-         |An explicit conversion must be applied.
-         |""".stripMargin
-    )(
-      """22 + sd"8'22""""
-    ) {
-      val value = 22
-      value + sd"8'22"
-    }
+    assertEquals(22 + sd"8'22", sd"8'44")
+    assertEquals(sd"8'22" + 100, sd"8'122")
+    // These are now errors with wildcard rules (literal doesn't fit counter-part):
+    // assertEquals(d"8'22" + (-22), sd"9'0")   // -22 negative for UInt
+    // assertEquals(sd"8'22" + 200, sd"9'222")  // 200 exceeds SInt[8]
     assertEquals(d"8'22" - d"8'22", d"8'0")
     assertEquals(sd"8'22" - sd"8'22", sd"8'0")
     assertEquals(sd"8'22" - 22, sd"8'0")
@@ -514,23 +479,16 @@ class DFDecimalSpec extends DFSpec:
       val value = 200
       sd"8'22" - value
     }
-    assertDSLErrorLog(
-      """|Cannot apply this operation between an unsigned value (LHS) and a signed value (RHS).
-         |An explicit conversion must be applied.
-         |""".stripMargin
-    )(
-      """22 - sd"8'22""""
-    ) {
-      val value = 22
-      value - sd"8'22"
-    }
+    // Wildcard adapts: 22 adapts to SInt[8] counter-part
+    val subWild = 22 - sd"8'22"
 
     assertEquals(d"8'22" * d"8'2", d"8'44")
     assertEquals(d"8'22" / d"8'2", d"8'11")
     assertEquals(d"8'22" % d"8'2", d"8'0")
     assertEquals(100 * d"7'2", d"7'72")
     assertEquals(100 / d"7'2", d"7'50")
-    assertEquals(17 % d"3'2", d"5'1")
+    // 5 % d"3'2": wildcard 5 adapts to UInt[3], 5 % 2 = 1
+    assertEquals(5 % d"3'2", d"3'1")
     assertEquals(d"8'22" *^ d"8'2", d"16'44")
     assertEquals(100 *^ d"7'2", d"14'200")
 
@@ -572,24 +530,16 @@ class DFDecimalSpec extends DFSpec:
       val t10 = 100 *^ u8
       t10.verifyValOf[UInt[15]]
     }
-    assertCompileError(
-      "The applied RHS value width (9) is larger than the LHS variable width (8)."
-    )(
-      """s8 + d"8'22""""
-    )
+    // Commutative + and * allow mixed width/signedness
+    val t11 = s8 + d"8'22"
+    val t12 = b8 * s8
+    // Non-commutative -, /, % keep strict constraints
     assertCompileError(
       """|Cannot apply this operation between an unsigned value (LHS) and a signed value (RHS).
          |An explicit conversion must be applied.
          |""".stripMargin
     )(
       """u8 - sd"8'22""""
-    )
-    assertCompileError(
-      """|Cannot apply this operation between an unsigned value (LHS) and a signed value (RHS).
-         |An explicit conversion must be applied.
-         |""".stripMargin
-    )(
-      """b8 * s8"""
     )
     assertCompileError(
       """|Cannot apply this operation between an unsigned value (LHS) and a signed value (RHS).
@@ -603,6 +553,215 @@ class DFDecimalSpec extends DFSpec:
     )(
       """u8 % d"9'22""""
     )
+  }
+  test("Wildcard Int operands") {
+    val u8 = UInt(8) <> VAR
+    val s8 = SInt(8) <> VAR
+    val b8 = Bits(8) <> VAR
+    val param: Int <> CONST = 10
+    val i42: Int = 42
+
+    // === Commutative + with Scala Int literals ===
+    val t1 = u8 + 5;       t1.verifyValOf[UInt[8]]
+    val t2 = 5 + u8;       t2.verifyValOf[UInt[8]]
+    val t3 = s8 + 5;       t3.verifyValOf[SInt[8]]
+    val t4 = 5 + s8;       t4.verifyValOf[SInt[8]]
+    val t5 = (-5) + s8;    t5.verifyValOf[SInt[8]]
+    val t6 = s8 + (-5);    t6.verifyValOf[SInt[8]]
+
+    // === Commutative * with Scala Int literals ===
+    val t7 = u8 * 3;       t7.verifyValOf[UInt[8]]
+    val t8 = 3 * u8;       t8.verifyValOf[UInt[8]]
+    val t9 = s8 * 3;       t9.verifyValOf[SInt[8]]
+    val t10 = 3 * s8;      t10.verifyValOf[SInt[8]]
+
+    // === Commutative + with Scala non-literal Int ===
+    val t11 = u8 + i42;    t11.verifyValOf[UInt[8]]
+    val t12 = i42 + u8;    t12.verifyValOf[UInt[8]]
+    val t13 = s8 + i42;    t13.verifyValOf[SInt[8]]
+    val t14 = i42 + s8;    t14.verifyValOf[SInt[8]]
+
+    // === Commutative * with Scala non-literal Int ===
+    val t15 = u8 * i42;    t15.verifyValOf[UInt[8]]
+    val t16 = i42 * u8;    t16.verifyValOf[UInt[8]]
+    val t17 = s8 * i42;    t17.verifyValOf[SInt[8]]
+    val t18 = i42 * s8;    t18.verifyValOf[SInt[8]]
+
+    // === Commutative + with DFHDL Int param ===
+    val t19 = u8 + param;  t19.verifyValOf[UInt[8]]
+    val t20 = param + u8;  t20.verifyValOf[UInt[8]]
+    val t21 = s8 + param;  t21.verifyValOf[SInt[8]]
+    val t22 = param + s8;  t22.verifyValOf[SInt[8]]
+
+    // === Commutative * with DFHDL Int param ===
+    val t23 = u8 * param;  t23.verifyValOf[UInt[8]]
+    val t24 = param * u8;  t24.verifyValOf[UInt[8]]
+    val t25 = s8 * param;  t25.verifyValOf[SInt[8]]
+    val t26 = param * s8;  t26.verifyValOf[SInt[8]]
+
+    // === Bits (implicit UInt) with wildcards ===
+    val t27 = b8 + 5
+    val t28 = 5 + b8
+    val t29 = b8 + param
+    val t30 = param + b8
+
+    // === Commutative max/min with wildcards ===
+    val t27b = u8 max 5;       t27b.verifyValOf[UInt[8]]
+    val t27c = 5 max u8;       t27c.verifyValOf[UInt[8]]
+    val t27d = s8 max (-5);    t27d.verifyValOf[SInt[8]]
+    val t27e = (-5) max s8;    t27e.verifyValOf[SInt[8]]
+    val t27f = u8 min i42;     t27f.verifyValOf[UInt[8]]
+    val t27g = i42 min u8;     t27g.verifyValOf[UInt[8]]
+    val t27h = s8 min i42;     t27h.verifyValOf[SInt[8]]
+    val t27i = i42 min s8;     t27i.verifyValOf[SInt[8]]
+    val t27j = u8 max param;   t27j.verifyValOf[UInt[8]]
+    val t27k = param max u8;   t27k.verifyValOf[UInt[8]]
+    val t27l = s8 min param;   t27l.verifyValOf[SInt[8]]
+    val t27m = param min s8;   t27m.verifyValOf[SInt[8]]
+
+    // === Param + Param: stays Int (DFInt32) ===
+    val param2: Int <> CONST = 20
+    val t31 = param + param2;  t31.verifyValOf[DFInt32]
+    val t32 = param * param2;  t32.verifyValOf[DFInt32]
+    val t33b = param max param2; t33b.verifyValOf[DFInt32]
+    val t33c = param min param2; t33c.verifyValOf[DFInt32]
+
+    // === Non-commutative ops: wildcard adapts to LHS ===
+    val t33 = u8 - 3;      t33.verifyValOf[UInt[8]]
+    val t34 = u8 - i42;    t34.verifyValOf[UInt[8]]
+    val t35 = u8 - param;  t35.verifyValOf[UInt[8]]
+    val t36 = u8 / 3;      t36.verifyValOf[UInt[8]]
+    val t37 = u8 / i42;    t37.verifyValOf[UInt[8]]
+    val t38 = u8 / param;  t38.verifyValOf[UInt[8]]
+    val t39 = s8 - 3;      t39.verifyValOf[SInt[8]]
+    val t40 = s8 - i42;    t40.verifyValOf[SInt[8]]
+    val t41 = s8 - param;  t41.verifyValOf[SInt[8]]
+    val t42 = s8 % 3;      t42.verifyValOf[SInt[8]]
+    val t43 = s8 % i42;    t43.verifyValOf[SInt[8]]
+    val t44 = s8 % param;  t44.verifyValOf[SInt[8]]
+
+    // === Non-commutative with wildcard LHS ===
+    // Wildcard always adapts, even in non-commutative ops
+    val t45 = 200 - u8;    t45.verifyValOf[UInt[8]]
+    val t46 = i42 - u8;    t46.verifyValOf[UInt[8]]
+    val t47 = param - u8;  t47.verifyValOf[UInt[8]]
+    val t48 = param / u8;  t48.verifyValOf[UInt[8]]
+
+    // === Constant propagation ===
+    // All-constant expressions produce CONST results
+    val c1: UInt[8] <> CONST = d"8'22" + 5
+    val c2: UInt[8] <> CONST = 5 + d"8'22"
+    val c3: SInt[8] <> CONST = sd"8'22" + (-5)
+    val c4: UInt[8] <> CONST = d"8'22" * d"8'2"
+    val c5: UInt[8] <> CONST = 3 * d"8'22"
+    // Param + literal is also CONST (both are CONST)
+    val c6: UInt[8] <> CONST = d"8'5" + param
+    val c7: SInt[8] <> CONST = sd"8'5" + param
+    // Param + VAR is NOT const (verified by type — no CONST annotation)
+    val nc1 = u8 + param  // result is not CONST
+    val nc2 = param + u8  // result is not CONST
+
+    // === Comparisons: wildcard adapts ===
+    val cmp1 = u8 == 200
+    // 200 == u8 not supported (Scala primitive LHS with ==)
+    val cmp3 = s8 < (-5)
+    val cmp4 = (-5) < s8
+    val cmp5 = u8 == param
+    val cmp6 = param == u8
+    val cmp7 = s8 < param
+    val cmp8 = param < s8
+    val cmp9 = u8 == i42
+    // i42 == u8 not supported (Scala primitive LHS with ==)
+    val cmp11 = s8 < i42
+    val cmp12 = i42 < s8
+
+    // Compile-time errors for literal value-fit checking
+    assertCompileError(
+      "The wildcard `Int` operand width (10) is larger than the counter-part width (8)."
+    )("""u8 + 1000""")
+    assertCompileError(
+      "Cannot apply a signed wildcard `Int` operand to an unsigned counter-part.\nUse an explicit conversion or `sd\"\"` interpolation."
+    )("""u8 + (-1)""")
+    assertCompileError(
+      "The wildcard `Int` operand width (11) is larger than the counter-part width (8)."
+    )("""s8 + 1000""")
+    // Non-commutative: literal wildcard LHS that doesn't fit
+    assertCompileError(
+      "The wildcard `Int` operand width (10) is larger than the counter-part width (8)."
+    )("""1000 - u8""")
+    assertCompileError(
+      "Cannot apply a signed wildcard `Int` operand to an unsigned counter-part.\nUse an explicit conversion or `sd\"\"` interpolation."
+    )("""(-1) - u8""")
+    // Unsigned wildcard adapting to signed counter-part needs extra bit
+    assertCompileError(
+      "The wildcard `Int` operand width (9) is larger than the counter-part width (8)."
+    )("""255 + s8""")
+    assertCompileError(
+      "The wildcard `Int` operand width (9) is larger than the counter-part width (8)."
+    )("""s8 + 255""")
+    assertCompileError(
+      "The wildcard `Int` operand width (9) is larger than the counter-part width (8)."
+    )("""255 - s8""")
+
+    // Elaboration-time errors for non-literal value-fit checking
+    assertDSLErrorLog(
+      "Wildcard value requires 10 bits but the counter-part UInt[8] has only 8 bits."
+    )(
+      ""
+    ) {
+      val bigVal: Int <> CONST = 1000
+      u8 + bigVal
+    }
+    assertDSLErrorLog(
+      "Wildcard value is negative and cannot adapt to unsigned UInt[8]."
+    )(
+      ""
+    ) {
+      val negVal: Int <> CONST = -1
+      u8 + negVal
+    }
+    // Unsigned wildcard adapting to signed counter-part at elaboration time
+    assertDSLErrorLog(
+      "Wildcard value requires 9 bits but the counter-part SInt[8] has only 8 bits."
+    )(
+      ""
+    ) {
+      val bigUnsigned: Int <> CONST = 255
+      s8 + bigUnsigned
+    }
+  }
+  test("d\"\" unsigned-only interpolation") {
+    // d"" produces unsigned UInt constants
+    assertEquals(d"0", d"1'0")
+    assertEquals(d"255", d"8'255")
+    assertEquals(d"8'42", d"8'42")
+
+    // d"" rejects negative values at compile time
+    assertCompileError(
+      """Negative value in unsigned `d""` interpolation. Use `sd""` for signed values."""
+    )(
+      """d"-1""""
+    )
+    assertCompileError(
+      """Negative value in unsigned `d""` interpolation. Use `sd""` for signed values."""
+    )(
+      """d"8'-1""""
+    )
+
+    // sd"" produces signed SInt constants (positive and negative)
+    assertEquals(sd"0", sd"2'0")
+    assertEquals(sd"-1", sd"2'-1")
+    assertEquals(sd"8'42", sd"8'42")
+    assertEquals(sd"8'-1", sd"8'-1")
+
+    // d"" with runtime negative value is a runtime error
+    assertRuntimeErrorLog(
+      """|Unexpected negative value found for unsigned decimal string interpolation: -5
+         |To Fix: Use the signed decimal string interpolator `sd` instead.""".stripMargin
+    ) {
+      val negVal = -5
+      d"$negVal"
+    }
   }
   test("Arithmetic position") {
     val u8 = UInt(8) <> VAR
