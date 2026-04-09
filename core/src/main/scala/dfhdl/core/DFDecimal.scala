@@ -93,15 +93,6 @@ object DFDecimal:
             " bits width (LHS) to a value of " + RW +
             " bits width (RHS).\nAn explicit conversion must be applied."
         ]
-    object `ValW >= ArgW`
-        extends Check2[
-          Int,
-          Int,
-          [ValW <: Int, ArgW <: Int] =>> ValW >= ArgW,
-          [ValW <: Int, ArgW <: Int] =>> "Cannot compare a DFHDL value (width = " + ValW +
-            ") with a Scala `Int` argument that is wider (width = " + ArgW +
-            ").\nAn explicit conversion must be applied."
-        ]
     object `LS >= RS`
         extends Check2[
           Boolean,
@@ -112,24 +103,24 @@ object DFDecimal:
             ITE[RS, "a signed", "an unsigned"] +
             " value (RHS).\nAn explicit conversion must be applied."
         ]
-    object `CpS >= WcS`
+    object `BaS >= WcS`
         extends Check2[
           Boolean,
           Boolean,
-          [CpS <: Boolean, WcS <: Boolean] =>> CpS || ![WcS],
-          [CpS <: Boolean, WcS <: Boolean] =>>
-            "Cannot apply a signed wildcard `Int` operand to " +
-              ITE[CpS, "a signed", "an unsigned"] +
-              " counter-part.\nUse an explicit conversion or `sd\"\"` interpolation."
+          [BaS <: Boolean, WcS <: Boolean] =>> BaS || ![WcS],
+          [BaS <: Boolean, WcS <: Boolean] =>>
+            "Cannot apply a signed wildcard `Int` value to " +
+              ITE[BaS, "a signed", "an unsigned"] +
+              " bit-accurate value.\nUse an explicit conversion or `sd\"\"` interpolation."
         ]
-    object `CpW >= WcW`
+    object `BaW >= WcW`
         extends Check2[
           Int,
           Int,
-          [CpW <: Int, WcW <: Int] =>> CpW >= WcW,
-          [CpW <: Int, WcW <: Int] =>>
-            "The wildcard `Int` operand width (" + WcW +
-              ") is larger than the counter-part width (" + CpW + ")."
+          [BaW <: Int, WcW <: Int] =>> BaW >= WcW,
+          [BaW <: Int, WcW <: Int] =>>
+            "The wildcard `Int` value width (" + WcW +
+              ") is larger than the bit-accurate value width (" + BaW + ")."
         ]
     type SignStr[S <: Boolean] = ITE[S, "a signed", "an unsigned"]
     object `LS == RS`
@@ -204,7 +195,7 @@ object DFDecimal:
     )(using
         checkS: `LS == RS`.Check[ls.Out, rs.Out],
         checkW: `LW == RW`.Check[lw.Out, rw.Out],
-        checkVAW: `ValW >= ArgW`.Check[ValWI, ITE[ArgIsInt, argWFix.Out, 0]],
+        checkVAW: `BaW >= WcW`.Check[ValWI, ITE[ArgIsInt, argWFix.Out, 0]],
         argIsInt: ValueOf[ArgIsInt],
         castle: ValueOf[Castle]
     ): CompareCheck[ValS, ValW, ArgS, ArgW, ArgIsInt, Castle] with
@@ -748,7 +739,7 @@ object DFXInt:
             dfc.tag(ir.ImplicitlyFromIntTag)
           ).asInstanceOf[Out]
       // DFInt32 acts as a wildcard in operations: it adapts to the
-      // counter-part's sign and width. OutN = Int32 (true) signals wildcard status.
+      // bit-accurate value's sign and width. OutN = Int32 (true) signals wildcard status.
       given fromDFConstInt32[P, R <: DFValTP[DFInt32, P]]: Candidate[R] with
         type OutS = Boolean
         type OutW = Int
@@ -1111,34 +1102,31 @@ object DFXInt:
                 )
           case _ => false
 
-      // Check that a wildcard operand's value fits in the counter-part's type.
+      // Check that a wildcard `Int` value fits in the bit-accurate value's type.
       // Produces an elaboration error if it doesn't.
       private def checkWildcardFit(
           wildcard: DFValOf[DFXInt[Boolean, Int, NativeType]],
           counterPartType: DFTypeAny
       )(using dfc: DFC): Unit =
-        import dfc.getSet
-        import DFXInt.Val.getActualSignedWidth
-        val cpSigned = counterPartType.asIR match
-          case d: ir.DFDecimal => d.signed
-          case _               => return
-        val cpWidth = counterPartType.asIR match
-          case d: ir.DFDecimal => d.width
-          case _               => return
-        val (wSigned, wWidth) = wildcard.getActualSignedWidth
-        val cpTypeName =
-          if (cpSigned) s"SInt[$cpWidth]" else s"UInt[$cpWidth]"
-        // Unsigned wildcard adapting to signed counter-part needs an extra bit
-        val effectiveWidth =
-          if (cpSigned && !wSigned) wWidth + 1 else wWidth
-        if (!cpSigned && wSigned)
-          throw new IllegalArgumentException(
-            s"Wildcard value is negative and cannot adapt to unsigned $cpTypeName."
-          )
-        else if (effectiveWidth > cpWidth)
-          throw new IllegalArgumentException(
-            s"Wildcard value requires $effectiveWidth bits but the counter-part $cpTypeName has only $cpWidth bits."
-          )
+        counterPartType.asIR match
+          case d: ir.DFDecimal =>
+            import dfc.getSet
+            import DFXInt.Val.getActualSignedWidth
+            val (wSigned, wWidth) = wildcard.getActualSignedWidth
+            val baTypeName =
+              if (d.signed) s"SInt[${d.width}]" else s"UInt[${d.width}]"
+            // Unsigned wildcard adapting to signed bit-accurate value needs an extra bit
+            val effectiveWidth =
+              if (d.signed && !wSigned) wWidth + 1 else wWidth
+            if (!d.signed && wSigned)
+              throw new IllegalArgumentException(
+                s"Wildcard `Int` value is negative and cannot adapt to unsigned bit-accurate value $baTypeName."
+              )
+            else if (effectiveWidth > d.width)
+              throw new IllegalArgumentException(
+                s"Wildcard `Int` value width ($effectiveWidth) is larger than the bit-accurate value width (${d.width})."
+              )
+          case _ =>
       end checkWildcardFit
 
       private def arithOp[
@@ -1213,7 +1201,7 @@ object DFXInt:
           isWildcardL: ValueOf[LN],
           isWildcardR: ValueOf[RN],
           // Type-level wildcard detection: when exactly one operand is a wildcard
-          // (Int32 NativeType), adapt to the counter-part's sign and width.
+          // (Int32 NativeType), adapt to the bit-accurate value's sign and width.
           // When both are wildcards, use LS || RS and Max (both-wildcard = DFInt32-like).
           resultSign: Id[ITE[LN && ![RN], RS, ITE[RN && ![LN], LS, ITE[LN && RN, LS, LS || RS]]]],
           resultWidth: Id[ITE[LN && ![RN], RW, ITE[RN && ![LN], LW,
@@ -1226,14 +1214,14 @@ object DFXInt:
           ]]],
           resultNative: Id[ITE[LN && ![RN], RN, LN]],
           // Compile-time wildcard fit: when one operand is a literal wildcard,
-          // verify its sign and width fit in the counter-part's type.
+          // verify its sign and width fit in the bit-accurate value's type.
           ubLW: UBound.Aux[Int, LW, ? <: Int],
           ubRW: UBound.Aux[Int, RW, ? <: Int],
-          checkWS: `CpS >= WcS`.Check[
+          checkWS: `BaS >= WcS`.Check[
             ITE[RN && ![LN], LS, ITE[LN && ![RN], RS, LS]],
             ITE[RN && ![LN], RS, ITE[LN && ![RN], LS, LS]]
           ],
-          checkWW: `CpW >= WcW`.Check[
+          checkWW: `BaW >= WcW`.Check[
             ITE[RN && ![LN], ubLW.Out, ITE[LN && ![RN], ubRW.Out, ubLW.Out]],
             ITE[RN && ![LN],
               ITE[LS && ![RS], ubRW.Out + 1, ubRW.Out],
@@ -1327,14 +1315,14 @@ object DFXInt:
           resultWidth: Id[ITE[LN && ![RN], RW, LW]],
           resultNative: Id[ITE[LN && ![RN], RN, LN]],
           // Compile-time wildcard fit: when LHS is a literal wildcard,
-          // verify its sign and width fit in the RHS (counter-part) type.
+          // verify its sign and width fit in the RHS (bit-accurate value) type.
           ubLW: UBound.Aux[Int, LW, ? <: Int],
           ubRW: UBound.Aux[Int, RW, ? <: Int],
-          checkWS: `CpS >= WcS`.Check[
+          checkWS: `BaS >= WcS`.Check[
             ITE[LN && ![RN], RS, LS],
             ITE[LN && ![RN], LS, LS]
           ],
-          checkWW: `CpW >= WcW`.Check[
+          checkWW: `BaW >= WcW`.Check[
             ITE[LN && ![RN], ubRW.Out, ubLW.Out],
             ITE[LN && ![RN],
               ITE[RS && ![LS], ubLW.Out + 1, ubLW.Out],

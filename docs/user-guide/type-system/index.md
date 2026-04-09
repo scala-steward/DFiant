@@ -955,7 +955,7 @@ DFHDL provides three decimal numeric types:
 
 - `UInt` - Unsigned bit-accurate integer values
 - `SInt` - Signed bit-accurate integer values  
-- `Int` - 32-bit integer values (used mainly for parameters). In operations with `UInt` or `SInt`, both Scala `Int` and DFHDL `Int` act as [wildcards][wildcard-ops] that adapt to the counter-part's sign and width.
+- `Int` - 32-bit integer values (used mainly for parameters). In operations with `UInt` or `SInt`, both Scala `Int` and DFHDL `Int` act as [wildcards][wildcard-ops] that adapt to the bit-accurate value's sign and width.
 
 #### DFType Constructors
 
@@ -1934,32 +1934,32 @@ The result is signed if either operand is signed. When mixing signed and unsigne
 
 **Width rule** -- The LHS width must be greater than or equal to the (effective) RHS width. When applying `SInt op UInt`, the effective RHS width is `RHS width + 1` because the unsigned value gains an implicit sign bit.
 
-### Wildcard `Int` Operands {#wildcard-ops}
+### Wildcard `Int` Values {#wildcard-ops}
 
-Both Scala `Int` values and DFHDL `Int` parameters (`Int <> CONST`) act as **wildcards** when used in operations with `UInt` or `SInt` values. The wildcard adapts to the counter-part's sign and width. If the wildcard value does not fit in the counter-part's range or has incompatible sign, an error is generated.
+Both Scala `Int` values and DFHDL `Int` parameters (`Int <> CONST`) act as **wildcards** when used in operations with bit-accurate `UInt` or `SInt` values. The wildcard `Int` value adapts to the bit-accurate value's sign and width. If the wildcard `Int` value does not fit in the bit-accurate value's range or has incompatible sign, an error is generated.
 
 ```scala
 val u8 = UInt(8) <> VAR
 val s8 = SInt(8) <> VAR
 val param: Int <> CONST = 10
 
-// Wildcard adapts to counter-part in commutative ops
+// Wildcard `Int` value adapts to bit-accurate value in commutative ops
 u8 + 5              // UInt[8] (5 adapts to UInt[8])
 u8 + param          // UInt[8] (param adapts to UInt[8])
 s8 + param          // SInt[8] (param adapts to SInt[8])
 param + u8          // UInt[8] (commutative, same result)
 
-// Wildcard adapts to counter-part in non-commutative ops
+// Wildcard `Int` value adapts to bit-accurate value in non-commutative ops
 u8 - 3              // UInt[8] (3 adapts to UInt[8])
 u8 / param          // UInt[8] (param adapts to UInt[8])
 
-// Wildcard adapts in comparisons
+// Wildcard `Int` value adapts in comparisons
 u8 == 200           // OK (200 fits in UInt[8])
 s8 < (-5)           // OK (-5 fits in SInt[8])
 
-// ERROR: wildcard value does not fit counter-part
+// ERROR: wildcard `Int` value does not fit bit-accurate value
 u8 + 1000           // ERROR: 1000 exceeds UInt[8] range (0..255)
-u8 + (-1)           // ERROR: -1 is negative for unsigned counter-part
+u8 + (-1)           // ERROR: -1 is negative for unsigned bit-accurate value
 s8 + 1000           // ERROR: 1000 exceeds SInt[8] range (-128..127)
 ```
 

@@ -373,9 +373,7 @@ class DFDecimalSpec extends DFSpec:
       value <= u8
     }
     assertDSLErrorLog(
-      """Cannot compare a DFHDL value (width = 8) with a Scala `Int` argument that is wider (width = 10).
-        |An explicit conversion must be applied.
-        |""".stripMargin
+      "The wildcard `Int` value width (10) is larger than the bit-accurate value width (8)."
     )(
       """u8 > 1000"""
     ) {
@@ -390,16 +388,12 @@ class DFDecimalSpec extends DFSpec:
       u8 == negOne
     }
     assertRuntimeErrorLog(
-      """|Cannot compare a DFHDL value (width = 8) with a Scala `Int` argument that is wider (width = 10).
-         |An explicit conversion must be applied.
-         |""".stripMargin
+      "The wildcard `Int` value width (10) is larger than the bit-accurate value width (8)."
     ) {
       u8 == big
     }
     assertRuntimeErrorLog(
-      """|Cannot compare a DFHDL value (width = 8) with a Scala `Int` argument that is wider (width = 11).
-         |An explicit conversion must be applied.
-         |""".stripMargin
+      "The wildcard `Int` value width (11) is larger than the bit-accurate value width (8)."
     ) {
       s8 == big
     }
@@ -426,12 +420,12 @@ class DFDecimalSpec extends DFSpec:
     assertEquals(d"8'22" + sd"8'22", sd"9'44")
     assertEquals(h"8'22" + sd"8'22", sd"9'56")
     assertEquals(d"8'22" + d"9'22", d"9'44")
-    // Wildcard Int literals adapt to counter-part
+    // Wildcard Int literals adapt to bit-accurate value
     assertEquals(d"8'22" + 200, d"8'222")
     assertEquals(sd"8'-1" + 1, sd"8'0")
     assertEquals(22 + sd"8'22", sd"8'44")
     assertEquals(sd"8'22" + 100, sd"8'122")
-    // These are now errors with wildcard rules (literal doesn't fit counter-part):
+    // These are now errors with wildcard rules (literal doesn't fit bit-accurate value):
     // assertEquals(d"8'22" + (-22), sd"9'0")   // -22 negative for UInt
     // assertEquals(sd"8'22" + 200, sd"9'222")  // 200 exceeds SInt[8]
     assertEquals(d"8'22" - d"8'22", d"8'0")
@@ -479,7 +473,7 @@ class DFDecimalSpec extends DFSpec:
       val value = 200
       sd"8'22" - value
     }
-    // Wildcard adapts: 22 adapts to SInt[8] counter-part
+    // Wildcard adapts: 22 adapts to SInt[8] bit-accurate value
     val subWild = 22 - sd"8'22"
 
     assertEquals(d"8'22" * d"8'2", d"8'44")
@@ -677,35 +671,35 @@ class DFDecimalSpec extends DFSpec:
 
     // Compile-time errors for literal value-fit checking
     assertCompileError(
-      "The wildcard `Int` operand width (10) is larger than the counter-part width (8)."
+      "The wildcard `Int` value width (10) is larger than the bit-accurate value width (8)."
     )("""u8 + 1000""")
     assertCompileError(
-      "Cannot apply a signed wildcard `Int` operand to an unsigned counter-part.\nUse an explicit conversion or `sd\"\"` interpolation."
+      "Cannot apply a signed wildcard `Int` value to an unsigned bit-accurate value.\nUse an explicit conversion or `sd\"\"` interpolation."
     )("""u8 + (-1)""")
     assertCompileError(
-      "The wildcard `Int` operand width (11) is larger than the counter-part width (8)."
+      "The wildcard `Int` value width (11) is larger than the bit-accurate value width (8)."
     )("""s8 + 1000""")
     // Non-commutative: literal wildcard LHS that doesn't fit
     assertCompileError(
-      "The wildcard `Int` operand width (10) is larger than the counter-part width (8)."
+      "The wildcard `Int` value width (10) is larger than the bit-accurate value width (8)."
     )("""1000 - u8""")
     assertCompileError(
-      "Cannot apply a signed wildcard `Int` operand to an unsigned counter-part.\nUse an explicit conversion or `sd\"\"` interpolation."
+      "Cannot apply a signed wildcard `Int` value to an unsigned bit-accurate value.\nUse an explicit conversion or `sd\"\"` interpolation."
     )("""(-1) - u8""")
-    // Unsigned wildcard adapting to signed counter-part needs extra bit
+    // Unsigned wildcard adapting to signed bit-accurate value needs extra bit
     assertCompileError(
-      "The wildcard `Int` operand width (9) is larger than the counter-part width (8)."
+      "The wildcard `Int` value width (9) is larger than the bit-accurate value width (8)."
     )("""255 + s8""")
     assertCompileError(
-      "The wildcard `Int` operand width (9) is larger than the counter-part width (8)."
+      "The wildcard `Int` value width (9) is larger than the bit-accurate value width (8)."
     )("""s8 + 255""")
     assertCompileError(
-      "The wildcard `Int` operand width (9) is larger than the counter-part width (8)."
+      "The wildcard `Int` value width (9) is larger than the bit-accurate value width (8)."
     )("""255 - s8""")
 
     // Elaboration-time errors for non-literal value-fit checking
     assertDSLErrorLog(
-      "Wildcard value requires 10 bits but the counter-part UInt[8] has only 8 bits."
+      "Wildcard `Int` value width (10) is larger than the bit-accurate value width (8)."
     )(
       ""
     ) {
@@ -713,16 +707,16 @@ class DFDecimalSpec extends DFSpec:
       u8 + bigVal
     }
     assertDSLErrorLog(
-      "Wildcard value is negative and cannot adapt to unsigned UInt[8]."
+      "Wildcard `Int` value is negative and cannot adapt to unsigned bit-accurate value UInt[8]."
     )(
       ""
     ) {
       val negVal: Int <> CONST = -1
       u8 + negVal
     }
-    // Unsigned wildcard adapting to signed counter-part at elaboration time
+    // Unsigned wildcard adapting to signed bit-accurate value at elaboration time
     assertDSLErrorLog(
-      "Wildcard value requires 9 bits but the counter-part SInt[8] has only 8 bits."
+      "Wildcard `Int` value width (9) is larger than the bit-accurate value width (8)."
     )(
       ""
     ) {

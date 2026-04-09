@@ -686,7 +686,7 @@ val sign = prod(15)     // single bit access
 **Arithmetic operand compatibility:**
 DFHDL enforces sign and width constraints at compile time. **Commutative operations** (`+`, `*`, `max`, `min`) produce the widest, most signed result -- operand order does not matter. **Non-commutative operations** (`-`, `/`, `%`) require the LHS to be at least as wide and signed as the RHS. When mixing signed and unsigned, the unsigned operand is implicitly sign-extended by 1 bit.
 
-Both Scala `Int` values and DFHDL `Int` parameters act as [wildcards][wildcard-ops] -- they adapt to the counter-part's sign and width. If the value does not fit, an error is generated.
+Both Scala `Int` values and DFHDL `Int` parameters act as [wildcards][wildcard-ops] -- the wildcard `Int` value adapts to the bit-accurate value's sign and width. If the wildcard `Int` value does not fit, an error is generated.
 
 ```scala
 // Commutative: result is widest, most signed
@@ -696,14 +696,14 @@ sd"8'5" + d"4'3"   // SInt[8] (max(8, 4+1) = 8, signed)
 d"8'5" + sd"4'3"   // SInt[9] (max(8+1, 4) = 9, signed)
 d"4'5" + d"8'200"  // UInt[8] (larger operand widens the result)
 
-// Int wildcards adapt to counter-part
+// Wildcard `Int` values adapt to bit-accurate values
 d"8'5" + 3         // UInt[8] (3 adapts to UInt[8])
 sd"8'5" + (-3)     // SInt[8] (-3 adapts to SInt[8])
 val param: Int <> CONST = 10
 d"8'5" + param     // UInt[8] (param adapts to UInt[8])
 sd"8'5" + param    // SInt[8] (param adapts to SInt[8])
 d"8'5" + 1000      // ERROR: 1000 exceeds UInt[8] range
-d"8'5" + (-1)      // ERROR: -1 is negative for UInt counter-part
+d"8'5" + (-1)      // ERROR: -1 is negative for UInt bit-accurate value
 
 // Non-commutative: LHS-dominant, LHS must be >= RHS
 d"8'5" - d"4'3"    // UInt[8]
