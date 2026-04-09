@@ -234,13 +234,9 @@ object DFDecimal:
         LS <: Boolean,
         LW <: IntP,
         LN <: NativeType,
-        LSM <: Boolean,
-        LWM <: IntP,
         RS <: Boolean,
         RW <: IntP,
-        RN <: NativeType,
-        RSM <: Boolean,
-        RWM <: IntP
+        RN <: NativeType
     ]:
       def apply(
           lhs: DFValOf[DFXInt[LS, LW, LN]],
@@ -251,30 +247,26 @@ object DFDecimal:
         LS <: Boolean,
         LW <: IntP,
         LN <: NativeType,
-        LSM <: Boolean,
-        LWM <: IntP,
         LWI <: Int,
         RS <: Boolean,
         RW <: IntP,
         RN <: NativeType,
-        RSM <: Boolean,
-        RWM <: IntP,
         RWI <: Int
     ](using
         // forcing Int upper-bound
-        ubL: UBound.Aux[Int, LWM, LWI],
+        ubL: UBound.Aux[Int, LW, LWI],
         // forcing Int upper-bound
-        ubR: UBound.Aux[Int, RWM, RWI],
+        ubR: UBound.Aux[Int, RW, RWI],
         // the RHS width is increased by 1 if the LHS is signed and the RHS is unsigned,
         // because the RHS will be converted to signed for the arithmetic operation
-        signedRW: Id[ITE[LSM && ![RSM], RWI + 1, RWI]]
+        signedRW: Id[ITE[LS && ![RS], RWI + 1, RWI]]
     )(using
         // When LHS is a wildcard (LN=Int32), bypass sign/width checks by comparing
         // the value against itself (always passes). Wildcards adapt at runtime.
-        checkS: `LS >= RS`.Check[ITE[LN, LSM, LSM], ITE[LN, LSM, RSM]],
+        checkS: `LS >= RS`.Check[ITE[LN, LS, LS], ITE[LN, LS, RS]],
         checkW: `LW >= RW`.Check[ITE[LN, LWI, LWI], ITE[LN, LWI, signedRW.Out]],
         isWildcardL: ValueOf[LN]
-    ): ArithCheck[LS, LW, LN, LSM, LWM, RS, RW, RN, RSM, RWM] with
+    ): ArithCheck[LS, LW, LN, RS, RW, RN] with
       def apply(
           lhs: DFValOf[DFXInt[LS, LW, LN]],
           rhs: DFValOf[DFXInt[RS, RW, RN]]
@@ -708,8 +700,6 @@ object DFXInt:
       type OutW <: IntP
       type OutN <: NativeType
       type OutP
-      type OutSMask <: Boolean
-      type OutWMask <: IntP
       type Out = DFValTP[DFXInt[OutS, OutW, OutN], OutP]
       def conv(from: R)(using DFC): Out = apply(from)
       def apply(arg: R)(using DFC): Out
@@ -721,8 +711,6 @@ object DFXInt:
         type OutW = W
         type OutN = BitAccurate
         type OutP = P
-        type OutSMask = false
-        type OutWMask = W
         def apply(arg: R)(using dfc: DFC): Out =
           import DFBits.Val.Ops.uint
           val dfVal = ic(arg)(using dfc.anonymize)
@@ -747,11 +735,6 @@ object DFXInt:
           type OutN = N
           type OutP = P
         }
-      type AuxM[R, S <: Boolean, W <: IntP, N <: NativeType, P, SMask <: Boolean, WMask <: IntP] =
-        Aux[R, S, W, N, P] {
-          type OutSMask = SMask
-          type OutWMask = WMask
-        }
       given fromInt[R <: Int, OS <: Boolean, OW <: Int](using
           info: IntInfo.Aux[R, OS, OW]
       ): Candidate[R] with
@@ -759,8 +742,6 @@ object DFXInt:
         type OutW = OW
         type OutN = Int32
         type OutP = CONST
-        type OutSMask = OS
-        type OutWMask = OW
         def apply(arg: R)(using dfc: DFC): Out =
           val dfType = DFXInt(info.signed(arg), info.width(arg), BitAccurate)
           DFVal.Const(dfType, Some(BigInt(arg)), named = true)(using
@@ -769,12 +750,10 @@ object DFXInt:
       // DFInt32 acts as a wildcard in operations: it adapts to the
       // counter-part's sign and width. OutN = Int32 (true) signals wildcard status.
       given fromDFConstInt32[P, R <: DFValTP[DFInt32, P]]: Candidate[R] with
-        type OutS = true
-        type OutW = 32
+        type OutS = Boolean
+        type OutW = Int
         type OutN = Int32
         type OutP = P
-        type OutSMask = Boolean
-        type OutWMask = Int
         def apply(arg: R)(using DFC): Out = arg
       given fromDFXIntVal[S <: Boolean, W <: IntP, N <: NativeType, P, R <: DFValTP[
         DFXInt[S, W, N],
@@ -784,8 +763,6 @@ object DFXInt:
         type OutW = W
         type OutN = N
         type OutP = P
-        type OutSMask = S
-        type OutWMask = W
         def apply(arg: R)(using DFC): Out = arg
       inline given errDFEncoding[E <: DFEncoding]: Candidate[E] =
         compiletime.error(
@@ -809,8 +786,6 @@ object DFXInt:
         type OutW = TW
         type OutN = TN
         type OutP = TP | FP
-        type OutSMask = TS
-        type OutWMask = TW
         def apply(value: R)(using DFC): Out = value.unwrap
       end fromIf
     end Candidate
@@ -842,7 +817,7 @@ object DFXInt:
       given [LS <: Boolean, LW <: IntP, LN <: NativeType, R, RP, IC <: Candidate[R]](using
           ic: IC { type OutP = RP }
       )(using
-          check: TCCheck[LS, LW, ic.OutSMask, ic.OutWMask],
+          check: TCCheck[LS, LW, ic.OutS, ic.OutW],
           nativeCheck: NativeCheck[LN, ic.OutN]
       ): DFVal.TC[DFXInt[LS, LW, LN], R] with
         type OutP = RP
@@ -861,7 +836,7 @@ object DFXInt:
       given DFXIntFromCandidateConv[LS <: Boolean, R, RP, IC <: Candidate[R]](using
           ic: IC { type OutP = RP }
       )(using
-          checkS: `LS >= RS`.Check[LS, ic.OutSMask],
+          checkS: `LS >= RS`.Check[LS, ic.OutS],
           lsigned: OptionalGiven[ValueOf[LS]]
       ): DFVal.TCConv[DFXInt[LS, Int, BitAccurate], R] with
         type OutP = RP
@@ -888,7 +863,7 @@ object DFXInt:
       ](using
           ic: IC { type OutP = RP }
       )(using
-          check: CompareCheck[LS, LW, ic.OutSMask, ic.OutWMask, ic.OutN, C],
+          check: CompareCheck[LS, LW, ic.OutS, ic.OutW, ic.OutN, C],
           nativeCheck: NativeCheck[LN, ic.OutN]
       ): Compare[DFXInt[LS, LW, LN], R, Op, C] with
         type OutP = RP
@@ -1226,18 +1201,14 @@ object DFXInt:
           LW <: IntP,
           LN <: NativeType,
           LP,
-          LSM <: Boolean,
-          LWM <: IntP,
           R,
           RS <: Boolean,
           RW <: IntP,
           RN <: NativeType,
-          RP,
-          RSM <: Boolean,
-          RWM <: IntP
+          RP
       ](using
-          icL: Candidate.AuxM[L, LS, LW, LN, LP, LSM, LWM],
-          icR: Candidate.AuxM[R, RS, RW, RN, RP, RSM, RWM],
+          icL: Candidate.Aux[L, LS, LW, LN, LP],
+          icR: Candidate.Aux[R, RS, RW, RN, RP],
           op: ValueOf[Op],
           isWildcardL: ValueOf[LN],
           isWildcardR: ValueOf[RN],
@@ -1256,19 +1227,19 @@ object DFXInt:
           resultNative: Id[ITE[LN && ![RN], RN, LN]],
           // Compile-time wildcard fit: when one operand is a literal wildcard,
           // verify its sign and width fit in the counter-part's type.
-          ubLWM: UBound.Aux[Int, LWM, ? <: Int],
-          ubRWM: UBound.Aux[Int, RWM, ? <: Int],
+          ubLW: UBound.Aux[Int, LW, ? <: Int],
+          ubRW: UBound.Aux[Int, RW, ? <: Int],
           checkWS: `CpS >= WcS`.Check[
-            ITE[RN && ![LN], LSM, ITE[LN && ![RN], RSM, LSM]],
-            ITE[RN && ![LN], RSM, ITE[LN && ![RN], LSM, LSM]]
+            ITE[RN && ![LN], LS, ITE[LN && ![RN], RS, LS]],
+            ITE[RN && ![LN], RS, ITE[LN && ![RN], LS, LS]]
           ],
           checkWW: `CpW >= WcW`.Check[
-            ITE[RN && ![LN], ubLWM.Out, ITE[LN && ![RN], ubRWM.Out, ubLWM.Out]],
+            ITE[RN && ![LN], ubLW.Out, ITE[LN && ![RN], ubRW.Out, ubLW.Out]],
             ITE[RN && ![LN],
-              ITE[LSM && ![RSM], ubRWM.Out + 1, ubRWM.Out],
+              ITE[LS && ![RS], ubRW.Out + 1, ubRW.Out],
               ITE[LN && ![RN],
-                ITE[RSM && ![LSM], ubLWM.Out + 1, ubLWM.Out],
-                ubLWM.Out
+                ITE[RS && ![LS], ubLW.Out + 1, ubLW.Out],
+                ubLW.Out
               ]
             ]
           ]
@@ -1338,40 +1309,36 @@ object DFXInt:
           LW <: IntP,
           LN <: NativeType,
           LP,
-          LSM <: Boolean,
-          LWM <: IntP,
           R,
           RS <: Boolean,
           RW <: IntP,
           RN <: NativeType,
-          RP,
-          RSM <: Boolean,
-          RWM <: IntP
+          RP
       ](using
-          icL: Candidate.AuxM[L, LS, LW, LN, LP, LSM, LWM],
-          icR: Candidate.AuxM[R, RS, RW, RN, RP, RSM, RWM],
+          icL: Candidate.Aux[L, LS, LW, LN, LP],
+          icR: Candidate.Aux[R, RS, RW, RN, RP],
           op: ValueOf[Op],
           isWildcardL: ValueOf[LN],
           isWildcardR: ValueOf[RN]
       )(using
-          check: ArithCheck[LS, LW, LN, LSM, LWM, RS, RW, RN, RSM, RWM],
+          check: ArithCheck[LS, LW, LN, RS, RW, RN],
           // Wildcard LHS adapts to RHS type; otherwise LHS-dominant
           resultSign: Id[ITE[LN && ![RN], RS, LS]],
           resultWidth: Id[ITE[LN && ![RN], RW, LW]],
           resultNative: Id[ITE[LN && ![RN], RN, LN]],
           // Compile-time wildcard fit: when LHS is a literal wildcard,
           // verify its sign and width fit in the RHS (counter-part) type.
-          ubLWM: UBound.Aux[Int, LWM, ? <: Int],
-          ubRWM: UBound.Aux[Int, RWM, ? <: Int],
+          ubLW: UBound.Aux[Int, LW, ? <: Int],
+          ubRW: UBound.Aux[Int, RW, ? <: Int],
           checkWS: `CpS >= WcS`.Check[
-            ITE[LN && ![RN], RSM, LSM],
-            ITE[LN && ![RN], LSM, LSM]
+            ITE[LN && ![RN], RS, LS],
+            ITE[LN && ![RN], LS, LS]
           ],
           checkWW: `CpW >= WcW`.Check[
-            ITE[LN && ![RN], ubRWM.Out, ubLWM.Out],
+            ITE[LN && ![RN], ubRW.Out, ubLW.Out],
             ITE[LN && ![RN],
-              ITE[RSM && ![LSM], ubLWM.Out + 1, ubLWM.Out],
-              ubLWM.Out
+              ITE[RS && ![LS], ubLW.Out + 1, ubLW.Out],
+              ubLW.Out
             ]
           ]
       ): ExactOp2Aux[Op, DFC, DFValAny, L, R, DFValTP[
@@ -1411,18 +1378,14 @@ object DFXInt:
           LW <: IntP,
           LN <: NativeType,
           LP,
-          LSM <: Boolean,
-          LWM <: IntP,
           R,
           RS <: Boolean,
           RW <: IntP,
           RN <: NativeType,
-          RP,
-          RSM <: Boolean,
-          RWM <: IntP
+          RP
       ](using
-          icL: Candidate.AuxM[L, LS, LW, LN, LP, LSM, LWM],
-          icR: Candidate.AuxM[R, RS, RW, RN, RP, RSM, RWM],
+          icL: Candidate.Aux[L, LS, LW, LN, LP],
+          icR: Candidate.Aux[R, RS, RW, RN, RP],
           op: ValueOf[Op]
       ): ExactOp2Aux[CarryOp[Op], DFC, DFValAny, L, R, DFValTP[
         DFXInt[LS || RS, IntP.+[IntP.Max[LW, RW], 1], BitAccurate],
@@ -1454,18 +1417,14 @@ object DFXInt:
           LW <: IntP,
           LN <: NativeType,
           LP,
-          LSM <: Boolean,
-          LWM <: IntP,
           R,
           RS <: Boolean,
           RW <: IntP,
           RN <: NativeType,
-          RP,
-          RSM <: Boolean,
-          RWM <: IntP
+          RP
       ](using
-          icL: Candidate.AuxM[L, LS, LW, LN, LP, LSM, LWM],
-          icR: Candidate.AuxM[R, RS, RW, RN, RP, RSM, RWM]
+          icL: Candidate.Aux[L, LS, LW, LN, LP],
+          icR: Candidate.Aux[R, RS, RW, RN, RP]
       ): ExactOp2Aux[CarryOp[Op], DFC, DFValAny, L, R, DFValTP[
         DFXInt[LS || RS, IntP.+[LW, RW], BitAccurate],
         LP | RP
@@ -1628,14 +1587,12 @@ object DFUInt:
           S <: Boolean,
           W <: IntP,
           N <: NativeType,
-          P,
-          SMask <: Boolean,
-          WMask <: IntP
+          P
       ](using
-          ic: DFXInt.Val.Candidate.AuxM[R, S, W, N, P, SMask, WMask]
+          ic: DFXInt.Val.Candidate.Aux[R, S, W, N, P]
       )(using
-          unsignedCheck: Unsigned.Check[SMask],
-          widthCheck: `UBW == RW`.CheckNUB[IntP.CLog2[UB], WMask]
+          unsignedCheck: Unsigned.Check[S],
+          widthCheck: `UBW == RW`.CheckNUB[IntP.CLog2[UB], W]
       ): UBArg[UB, R] with
         type OutP = P
         def apply(ub: IntParam[UB], arg: R)(using DFC): Out =
@@ -1752,7 +1709,7 @@ end DFSInt
 //a native Int32 decimal has no explicit Scala compile-time width, since the
 //actual value determines its width.
 type DFInt32 =
-  DFType[ir.DFDecimal, Args4[true, 32, 0, Int32]] // This means: DFDecimal[true, 32, 0, Int32] (could not be defined this way because of type recursion)
+  DFType[ir.DFDecimal, Args4[Boolean, Int, 0, Int32]] // This means: DFDecimal[Boolean, Int, 0, Int32] (could not be defined this way because of type recursion)
 final val DFInt32 = ir.DFInt32.asFE[DFInt32]
 type DFConstInt32 = DFConstOf[DFInt32]
 object DFConstInt32:
