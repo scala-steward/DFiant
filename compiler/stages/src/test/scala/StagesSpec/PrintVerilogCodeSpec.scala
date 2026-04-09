@@ -250,7 +250,7 @@ class PrintVerilogCodeSpec extends StageSpec:
          |);
          |  `include "dfhdl_defs.svh"
          |  localparam logic lp = 1'b1;
-         |  assign y = ((x | gp) | dp) | lp;
+         |  assign y = x | gp | dp | lp;
          |endmodule
          |""".stripMargin
     )
@@ -1065,7 +1065,7 @@ class PrintVerilogCodeSpec extends StageSpec:
       val param4 = d"22"
       val param5 = h"abc123"
       val param6 = b"101010"
-      val param7 = d"-11"
+      val param7 = sd"-11"
       val param8: Bit <> CONST     = 1
       val param9: Boolean <> CONST = false
       enum MyEnum extends Encoded:

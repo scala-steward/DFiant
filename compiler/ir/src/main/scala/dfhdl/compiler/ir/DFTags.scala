@@ -21,6 +21,8 @@ case object ExtendTag extends DFTag
 type ExtendTag = ExtendTag.type
 case object TruncateTag extends DFTag
 type TruncateTag = TruncateTag.type
+case object ImplicitlyFromIntTag extends DFTag
+type ImplicitlyFromIntTag = ImplicitlyFromIntTag.type
 case class DFHDLVersionTag(version: String) extends DFTag
 
 opaque type DFTags = Map[String, DFTag]

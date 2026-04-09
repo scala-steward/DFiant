@@ -15,6 +15,6 @@ end FullAdder1;
 
 architecture FullAdder1_arch of FullAdder1 is
 begin
-  sum   <= (a xor b) xor c_in;
-  c_out <= ((a and b) or (b and c_in)) or (c_in and a);
+  sum   <= a xor b xor c_in;
+  c_out <= (a and b) or (b and c_in) or (c_in and a);
 end FullAdder1_arch;

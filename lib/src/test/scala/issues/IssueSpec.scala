@@ -84,4 +84,6 @@ class IssuesSpec extends FunSuite:
     i146.DoubleStructDecl().compile.lint
   test("i147 compiles and passes Verilog linting"):
     i147.ClockRstConnection().compile.lint
+  test("i375 compiles with no exception"):
+    i375.draw_line().compile
 end IssuesSpec

@@ -31,9 +31,14 @@ private abstract class NamedAliases extends Stage:
         .filterNot(_.isAllowedMultipleReferences)
         // tuple with the suggested name
         .map(m => (m, m.suggestName.getOrElse("anon")))
-        // group dfhdl-equivalent values, as long as they are in the same scope
+        // group dfhdl-equivalent values, as long as they are in the same scope.
+        // conditional headers are excluded from grouping because their =~ comparison
+        // does not account for block contents (conditions/branches), so structurally
+        // different conditionals could be incorrectly merged.
         .groupByCompare(
-          (l, r) => l._1 =~ r._1 && l._1.isInsideOwner(r._1.getOwner),
+          (l, r) =>
+            !l._1.isInstanceOf[DFConditional.Header] &&
+              l._1 =~ r._1 && l._1.isInsideOwner(r._1.getOwner),
           _._2.hashCode()
         )
         // split to list of aliases and list of suggested names for each group
@@ -112,7 +117,8 @@ case object NamedVerilogSelection extends NamedAliases:
       case alias: DFVal.Alias.ApplyIdx =>
         List(alias.relValRef.get)
       case func @ DFVal.Func(op = op, args = DFRef(lhs) :: _ :: Nil)
-          if !lhs.hasVerilogName && carryOps.contains(op) && func.width > lhs.width =>
+          if isBasicVerilog && !lhs.hasVerilogName && carryOps.contains(op) &&
+            func.width > lhs.width =>
         List(lhs)
       case func: DFVal.Func =>
         func.getReadDeps.headOption match

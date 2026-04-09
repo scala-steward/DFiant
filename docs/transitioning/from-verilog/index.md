@@ -292,7 +292,7 @@ class Sum(val MAX: Int <> CONST = 16)
 
 </div>
 
-`.width` works on any DFHDL value. Use it to derive widths from existing declarations:
+`.width` works on any DFHDL value (a port, variable, or constant — anything declared with `<>`; see [logic/reg/wire](#logicregwire) above). Use it to derive widths from existing declarations:
 
 ```scala
 val a = UInt.until(MAX) <> IN
@@ -642,6 +642,39 @@ val fill_one = b"1".repeat(W)
 `.repeat` works on any `Bits` value, including single-bit literals.
 ///
 
+/// admonition | Bit Concatenation (`{a, b, ...}`)
+    type: verilog
+Verilog's concatenation operator `{a, b}` maps to the `++` operator or tuple `.toBits` in DFHDL:
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+logic [7:0] a, b;
+logic [15:0] concat = {a, b};
+
+// Parametric: {1'b1, {(N-1){1'b0}}}
+parameter N = 8;
+logic [N-1:0] half = {1'b1, {(N-1){1'b0}}};
+```
+
+```scala linenums="0" title="DFHDL"
+val a, b = Bits(8) <> VAR
+val concat = a ++ b  // Bits[16]
+
+// Parametric: MSB=1, rest zeros
+val N: Int <> CONST = 8
+val half = b"1" ++ b"0".repeat(N - 1)
+```
+
+</div>
+
+Alternative: use tuple `.toBits` syntax for multi-value concatenation:
+
+```scala
+val concat = (a, b, c).toBits  // equivalent to a ++ b ++ c
+```
+///
+
 /// admonition | Part-Select Notation (`-:` and `+:`)
     type: verilog
 Verilog's descending and ascending part-select notation maps to DFHDL's `(hi, lo)` range slice, or use the convenience methods `.msbits(n)` and `.lsbits(n)`:
@@ -672,11 +705,19 @@ val bit5 = data(5)         // single bit
 
 </div>
 
-Bit-slicing and single-bit access work on `Bits`, `UInt`, and `SInt` values with the same syntax. You do **not** need to convert `SInt` to `Bits` before slicing:
+Bit-slicing and single-bit access work on `Bits`, `UInt`, and `SInt` values with the same syntax. Slicing preserves the source type:
+
+| Source type | Slice result |
+|---|---|
+| `Bits[N]` | `Bits` |
+| `UInt[N]` | `UInt` |
+| `SInt[N]` | `SInt` |
+
+You do **not** need to convert `SInt` to `Bits` before slicing — the result is already `SInt`:
 
 ```scala
 val prod = SInt(16) <> VAR
-val top8 = prod(15, 8)  // 8-bit slice, returns Bits
+val top8 = prod(15, 8)  // 8-bit SInt slice
 val sign = prod(15)     // single bit access
 ```
 ///
@@ -684,35 +725,46 @@ val sign = prod(15)     // single bit access
 /// admonition | Arithmetic with Signed Values and Constants
     type: verilog
 **Arithmetic operand compatibility:**
-DFHDL enforces sign and width constraints at compile time. The LHS must be at least as wide and at least as signed as the RHS. When the LHS is signed and the RHS is unsigned, the RHS is implicitly widened by 1 bit (for the sign bit), so the LHS must be wide enough to accommodate that.
+DFHDL enforces sign and width constraints at compile time. **Commutative operations** (`+`, `*`, `max`, `min`) produce the widest, most signed result -- operand order does not matter. **Non-commutative operations** (`-`, `/`, `%`) require the LHS to be at least as wide and signed as the RHS. When mixing signed and unsigned, the unsigned operand is implicitly sign-extended by 1 bit.
 
-| LHS | RHS | Result | Constraints | Valid | Invalid |
-|-----|-----|--------|-------------|-------|---------|
-| `UInt[W1]` | `UInt[W2]` | `UInt[W1]` | `W1 >= W2` | `d"8'5" + d"4'3"` | `d"4'5" + d"8'3"` |
-| `UInt[W]` | `Int` | `UInt[W]` | `Int` >= 0, fits in W bits | `d"8'5" + 3` | `d"8'5" + (-1)` |
-| `SInt[W1]` | `SInt[W2]` | `SInt[W1]` | `W1 >= W2` | `sd"8'1" + sd"4'3"` | `sd"4'5" + sd"8'3"` |
-| `SInt[W]` | `Int` | `SInt[W]` | `Int` fits in W bits | `sd"8'5" + (-3)` | |
-| `SInt[W1]` | `UInt[W2]` | `SInt[W1]` | `W1 >= W2 + 1` | `sd"8'5" + d"4'3"` | `sd"4'5" + d"4'3"` |
-| `UInt[W]` | `SInt[W2]` | **Error** | Unsigned cannot accept signed RHS | | `d"8'5" + sd"4'3"` |
-| `Int` | `Int` | `Int` | Elaboration-time arithmetic | `3 + 5` | |
-| `Int` (>= 0) | `UInt[W]` | `UInt[Int]` | `W` fits in `Int`'s width | `180 - d"4'3"` | `2 - d"8'200"` |
-| `Int` (< 0) | `SInt[W]` | `SInt[Int]` | `W` fits in `Int`'s width | `(-5) + sd"4'3"` | |
+Both Scala `Int` values and DFHDL `Int` parameters act as [wildcards][wildcard-ops] -- the wildcard `Int` value adapts to the bit-accurate value's sign and width. If the wildcard `Int` value does not fit, an error is generated.
 
-The constraint is on **width**, not value. A small value in a wide type is valid as LHS: `d"8'1" + d"4'15"` works because `W1=8 >= W2=4`.
+```scala
+// Commutative: result is widest, most signed
+d"8'5" + d"4'3"    // UInt[8] (max(8,4) = 8)
+d"4'5" + d"8'3"    // UInt[8] (commutative, same result)
+sd"8'5" + d"4'3"   // SInt[8] (max(8, 4+1) = 8, signed)
+d"8'5" + sd"4'3"   // SInt[9] (max(8+1, 4) = 9, signed)
+d"4'5" + d"8'200"  // UInt[8] (larger operand widens the result)
+
+// Wildcard `Int` values adapt to bit-accurate values
+d"8'5" + 3         // UInt[8] (3 adapts to UInt[8])
+sd"8'5" + (-3)     // SInt[8] (-3 adapts to SInt[8])
+val param: Int <> CONST = 10
+d"8'5" + param     // UInt[8] (param adapts to UInt[8])
+sd"8'5" + param    // SInt[8] (param adapts to SInt[8])
+d"8'5" + 1000      // ERROR: 1000 exceeds UInt[8] range
+d"8'5" + (-1)      // ERROR: -1 is negative for UInt bit-accurate value
+
+// Non-commutative: LHS-dominant, LHS must be >= RHS
+d"8'5" - d"4'3"    // UInt[8]
+sd"8'5" - d"4'3"   // SInt[8] (RHS widened to 5 bits, 8 >= 5)
+// d"4'5" - d"8'3" // ERROR: RHS width > LHS width
+// d"8'5" - sd"4'3" // ERROR: unsigned LHS, signed RHS
+```
 
 **Comparison operand compatibility:**
-Comparisons (`==`, `!=`, `<`, `>`, `<=`, `>=`) require both operands to have the **same signedness and width**. When comparing with an `Int`, its actual width must not exceed the DFHDL value's width.
+Comparisons (`==`, `!=`, `<`, `>`, `<=`, `>=`) require both operands to have the **same signedness and width**. `Int` values act as wildcards, adapting to the DFHDL value's type.
 
-| LHS | RHS | Constraints | Valid | Invalid |
-|-----|-----|-------------|-------|---------|
-| `UInt[W]` | `UInt[W]` | Same width | `d"8'5" == d"8'3"` | `d"8'5" == d"4'3"` |
-| `UInt[W]` | `Int` | `Int` >= 0, fits in W bits | `d"8'5" == 3` | `d"4'5" == 300` |
-| `SInt[W]` | `SInt[W]` | Same width | `sd"8'5" < sd"8'3"` | `sd"8'5" < sd"4'3"` |
-| `SInt[W]` | `Int` | `Int` fits in W bits | `sd"8'5" == (-3)` | |
-| `Int` (>= 0) | `UInt[W]` | Fits in W bits | `3 == d"8'5"` | `300 == d"4'5"` |
-| `Int` (< 0) | `SInt[W]` | Fits in W bits | `(-3) == sd"8'5"` | |
-| `UInt[W]` | `SInt[W2]` | **Error** | | `d"8'5" == sd"8'3"` |
-| `SInt[W]` | `UInt[W2]` | **Error** | | `sd"8'5" == d"8'3"` |
+```scala
+d"8'5" == d"8'3"    // OK (same sign, same width)
+d"8'5" == 3         // OK (3 adapts to UInt[8])
+sd"8'5" < sd"8'3"   // OK (same sign, same width)
+sd"8'5" == (-3)     // OK (-3 adapts to SInt[8])
+// d"8'5" == d"4'3" // ERROR: different widths
+// d"8'5" == sd"8'3" // ERROR: different signedness
+// d"4'5" == 300    // ERROR: 300 exceeds UInt[4] range
+```
 
 To compare values of different widths, use `.resize(W)` to match widths first. To compare values of different signedness, convert explicitly (e.g., `.bits.sint` or `.signed`).
 
@@ -771,6 +823,37 @@ end MixedArith
 </div>
 
 See [Arithmetic Operations][arithmetic-ops] and [Carry Arithmetic][carry-ops] for full details.
+///
+
+/// admonition | Integer Literal Width and Silent Overflow
+    type: verilog
+In Verilog, unsized integer literals are 32-bit. When combined with narrower signals, the wider literal causes the entire expression to evaluate at 32-bit width via context-dependent propagation. This prevents intermediate overflow in expressions like `(a + b + c + d) / 4`.
+
+In DFHDL, Scala `Int` literals are implicitly converted to minimum-width bit-accurate types (e.g., `4` becomes `UInt[3]`). Each arithmetic operation independently uses the LHS width, so intermediate results can overflow before reaching a division or shift.
+
+DFHDL detects this pattern at elaboration and issues a warning. See [Implicit Scala `Int` and Verilog-semantics mismatch][arithmetic-ops] for the full list of warning triggers.
+
+<div class="grid" markdown>
+
+```sv linenums="0" title="Verilog"
+input  logic [7:0] a, b, c, d;
+output logic [7:0] result;
+
+// 4 is 32-bit, so (a+b+c+d) evaluates
+// at 32-bit width — no overflow
+assign result = (a + b + c + d) / 4;
+```
+
+```scala linenums="0" title="DFHDL (with carry ops)"
+val a, b, c, d = UInt(8) <> IN
+val result     = UInt(8) <> OUT
+
+// Use carry ops to match Verilog's
+// overflow-free semantics
+result <> ((a +^ b +^ c +^ d) / 4).truncate
+```
+
+</div>
 ///
 
 

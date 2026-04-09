@@ -152,7 +152,7 @@ object DFIf:
                 |""".stripMargin
           )
         )
-        dfc.logError(err)
+        dfc.logEvent(err)
         err.asVal[DFTypeAny, ModifierAny].asInstanceOf[R]
       end if
     catch case e: DFError => DFVal(DFError.Derived(e)).asInstanceOf[R]

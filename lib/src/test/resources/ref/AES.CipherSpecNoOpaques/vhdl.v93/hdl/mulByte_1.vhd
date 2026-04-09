@@ -23,5 +23,5 @@ begin
     o   => a_o
   );
   a_lhs <= rhs;
-  o     <= (x"00" xor rhs) xor a_o;
+  o     <= x"00" xor rhs xor a_o;
 end mulByte_1_arch;

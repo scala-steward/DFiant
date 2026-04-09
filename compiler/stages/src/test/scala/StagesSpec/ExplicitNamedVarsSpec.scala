@@ -263,4 +263,27 @@ class ExplicitNamedVarsSpec extends StageSpec:
          |end ID""".stripMargin
     )
   }
+
+  // TODO: this causes an exception
+  // test("AES regression test") {
+  //   case class AESByte() extends Opaque(Bits(8))
+
+  //   class xtime extends DFDesign:
+  //     val lhs = AESByte  <> IN
+  //     val o   = AESByte  <> OUT
+  //     val shifted = lhs.bits << 1
+  //     val anon: Bits[8]  <> VAL =
+  //       if (lhs.bits(7))
+  //         val o: Bits[8] <> CONST = h"1b"
+  //         shifted ^ o
+  //       else shifted
+  //     o <> anon.as(AESByte)
+  //   end xtime  
+
+  //   val top = (new xtime).explicitNamedVars
+  //   assertCodeString(
+  //     top,
+  //     """|""".stripMargin
+  //   )
+  // }
 end ExplicitNamedVarsSpec

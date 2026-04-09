@@ -1,11 +1,12 @@
-commands += DFHDLCommands.quickTestSetup
+commands += DFHDLCommands.libPlayground
+commands += DFHDLCommands.corePlayground
 commands += DFHDLCommands.clearSandbox
 commands += DFHDLCommands.testApps
 commands += DFHDLCommands.docExamplesRefUpdate
 
 // format: off
 val projectName = "dfhdl"
-val compilerVersion = "3.8.1"
+val compilerVersion = "3.8.3"
 
 inThisBuild(
   List(

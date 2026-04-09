@@ -654,7 +654,7 @@ class PrintCodeStringSpec extends StageSpec:
       top,
       """|class BigXor extends DFDesign:
          |  val sum = Bits(4) <> OUT
-         |  sum := ((((((h"0" ^ h"1") ^ h"2") ^ h"3") ^ h"4") ^ h"5") ^ h"6") ^ h"7"
+         |  sum := h"0" ^ h"1" ^ h"2" ^ h"3" ^ h"4" ^ h"5" ^ h"6" ^ h"7"
          |end BigXor
          |""".stripMargin
     )
@@ -669,7 +669,7 @@ class PrintCodeStringSpec extends StageSpec:
       top,
       """|class BigXor(val c: Bits[4] <> CONST) extends DFDesign:
          |  val sum = Bits(4) <> OUT
-         |  sum := (((((((c | h"0") ^ (c | h"1")) ^ (c | h"2")) ^ (c | h"3")) ^ (c | h"4")) ^ (c | h"5")) ^ (c | h"6")) ^ (c | h"7")
+         |  sum := (c | h"0") ^ (c | h"1") ^ (c | h"2") ^ (c | h"3") ^ (c | h"4") ^ (c | h"5") ^ (c | h"6") ^ (c | h"7")
          |end BigXor
          |
          |class BigXorContainer extends DFDesign:
@@ -829,7 +829,7 @@ class PrintCodeStringSpec extends StageSpec:
          |  y1 <> (x1 | (x1 & x1))
          |  val x2 = Bits(8) <> IN
          |  val y2 = Bits(8) <> OUT
-         |  y2 <> ((x2 ^ x2) ^ x2)
+         |  y2 <> (x2 ^ x2 ^ x2)
          |  val x3 = Bit <> IN
          |  val y3 = Bit <> OUT
          |  y3 <> ((x3 && x3) || x3)
@@ -1266,7 +1266,7 @@ class PrintCodeStringSpec extends StageSpec:
       val param4                   = d"22"
       val param5                   = h"abc123"
       val param6                   = b"101010"
-      val param7                   = d"-11"
+      val param7                   = sd"-11"
       val param8: Bit <> CONST     = 1
       val param9: Boolean <> CONST = false
       enum MyEnum extends Encoded:
@@ -1807,4 +1807,46 @@ class PrintCodeStringSpec extends StageSpec:
          |end Foo""".stripMargin
     )
   }
+
+  test("assigned design def name regression") {
+    def bar(lhs: Bits[8] <> VAL): Bits[8] <> DFRET = lhs ^ h"1b"
+    class Foo extends DFDesign:
+      val x = Bits(8) <> IN
+      val o = bar(x)
+    end Foo
+    val top = (new Foo).getCodeString
+    assertNoDiff(
+      top,
+      """|def bar(lhs: Bits[8] <> VAL): Bits[8] <> DFRET =
+         |  lhs ^ h"1b"
+         |end bar
+         |
+         |class Foo extends DFDesign:
+         |  val x = Bits(8) <> IN
+         |  val o = bar(x)
+         |end Foo""".stripMargin
+    )
+  }
+
+  // Regression test for exponential compile time with chained transparent inline operations.
+  // Before the FlattenInlinedPhase.minimizeCall optimization, 9 additions took 130s and
+  // 20 additions were impossible (hours/OOM). If this test causes compilation to hang or
+  // OOM, the optimization in FlattenInlinedPhase has regressed.
+  test("long chain of chained transparent inline operations compiles successfully") {
+    class LongChain extends DFDesign:
+      val a = UInt(8) <> IN
+      val o = UInt(8) <> OUT
+      o <> (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
+    end LongChain
+    val top = (new LongChain).getCodeString
+    assertNoDiff(
+      top,
+      """|class LongChain extends DFDesign:
+         |  val a = UInt(8) <> IN
+         |  val o = UInt(8) <> OUT
+         |  o <> ((((((((((((((((((((a + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a) + a)
+         |end LongChain""".stripMargin
+    )
+  }
+
 end PrintCodeStringSpec

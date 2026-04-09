@@ -7,7 +7,20 @@ import java.nio.charset.StandardCharsets
 import java.io.IOException
 
 object DFHDLCommands {
-  val quickTestSetup = Command.command("quickTestSetup") { state =>
+  val corePlayground = Command.command("corePlayground") { state =>
+    val extracted = Project.extract(state)
+    val newState = extracted.appendWithSession(Seq(
+      (LocalProject("internals") / Test / sources) := Nil,
+      (LocalProject("core") / Test / sources) := ((LocalProject("core") / Test / sources).value.filter(_.toString.contains("Playground.scala"))),
+      (LocalProject("compiler_stages") / Test / sources) := Nil,
+      (LocalProject("platforms") / Compile / sources) := Nil,
+      (LocalProject("platforms") / Test / sources) := Nil,
+      (LocalProject("lib") / Compile / sources) := Nil,
+      (LocalProject("lib") / Test / sources) := Nil
+    ), state)
+    newState
+  }  
+  val libPlayground = Command.command("libPlayground") { state =>
     val extracted = Project.extract(state)
     val newState = extracted.appendWithSession(Seq(
       (LocalProject("internals") / Test / sources) := Nil,
